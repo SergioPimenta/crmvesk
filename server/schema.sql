@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Insert dummy admin user for testing (Password is: 123456)
 -- Consider removing or changing this in production
-INSERT IGNORE INTO users (email, name, password, role) VALUES ('admin@example.com', 'Administrator', '$2a$10$eO0gO7hY7kP5lq8RzR3K6uL3k/1q5aV4vA8d0x6X4R5zK8X8jM1R6', 'admin');
+INSERT IGNORE INTO users (email, name, password, role) VALUES ('admin@example.com', 'Administrator', '$2a$10$6OJEZJbmXIc/SORk.ESbfOeZpSJ//n4ZrmUqqEJ6il0pmT7kr5foi', 'admin');
