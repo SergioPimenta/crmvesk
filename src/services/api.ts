@@ -1,5 +1,5 @@
-// Base URL can point to relative path because Vite Proxy is setup to redirect /api
-const BASE_URL = '/api';
+// Em dev: proxy Vite (/api). Em produção (Vercel): defina VITE_API_URL no painel da Vercel.
+const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '/api';
 
 interface FetchOptions extends RequestInit {
   data?: any;

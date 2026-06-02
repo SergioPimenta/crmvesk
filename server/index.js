@@ -20,7 +20,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+const corsOrigin = process.env.FRONTEND_URL;
+app.use(
+  cors(
+    corsOrigin
+      ? {
+          origin: corsOrigin.split(',').map((o) => o.trim()),
+          credentials: true,
+        }
+      : undefined
+  )
+);
 app.use(express.json());
 
 // Routes

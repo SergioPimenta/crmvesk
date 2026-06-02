@@ -1,0 +1,28 @@
+# Deploy da API em https://render.com (plano free disponível)
+# Conecte o repo e use este Blueprint ou crie Web Service manualmente.
+services:
+  - type: web
+    name: crmvesk-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: WHATSAPP_WEBHOOK_PUBLIC_URL
+        sync: false
