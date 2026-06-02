@@ -3,13 +3,16 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
+import { CrmDataProvider } from './contexts/CrmDataContext.tsx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AuthProvider>
-        <App />
+        <CrmDataProvider>
+          <App />
+        </CrmDataProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

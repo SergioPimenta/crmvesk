@@ -34,13 +34,18 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      const isJson = response.headers.get('content-type')?.includes('application/json');
-      const data = isJson ? await response.json() : await response.text();
-
       if (!response.ok) {
-        throw new Error((data && data.message) || response.statusText);
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const errBody = isJson ? await response.json() : await response.text();
+        throw new Error((errBody && errBody.message) || response.statusText);
       }
 
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      const isJson = response.headers.get('content-type')?.includes('application/json');
+      const data = isJson ? await response.json() : await response.text();
       return data as T;
     } catch (error: any) {
       console.error('API Error:', error);

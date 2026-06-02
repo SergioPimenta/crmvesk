@@ -1,15 +1,19 @@
+import { useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const PrivateRoute = () => {
   const { user } = useAuth();
 
-  // If there's no user logged in, redirect to login page
+  useEffect(() => {
+    document.body.classList.add('vesk-app');
+    return () => document.body.classList.remove('vesk-app');
+  }, []);
+
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
-  // If user is authenticated, render the child routes (Outlet)
   return <Outlet />;
 };
 

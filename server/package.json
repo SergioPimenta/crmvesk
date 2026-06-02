@@ -1,6 +1,7 @@
 {
   "name": "template-projeto-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "API backend for the full-stack template",
   "main": "index.js",
   "scripts": {

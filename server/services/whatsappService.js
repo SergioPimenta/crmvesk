@@ -1,0 +1,406 @@
+import crypto from 'crypto';
+import pool from '../db.js';
+import {
+  connectInstance,
+  createInstance,
+  extractMessageText,
+  extractQrBase64,
+  findChats,
+  findMessages,
+  getConnectionState,
+  isConnectedState,
+  jidToPhone,
+  sendText,
+  setWebhook,
+} from './evolutionClient.js';
+
+const webhookPublicBase = () =>
+  process.env.WHATSAPP_WEBHOOK_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`;
+
+export async function getSettings(userId) {
+  const [rows] = await pool.query(
+    `SELECT user_id AS userId, provider, base_url AS baseUrl, instance_name AS instanceName,
+            api_key AS apiKey, phone, status, webhook_secret AS webhookSecret
+     FROM whatsapp_settings WHERE user_id = ?`,
+    [userId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function saveSettings(userId, { baseUrl, instanceName, apiKey, phone = '' }) {
+  if (!baseUrl || !instanceName || !apiKey) {
+    throw new Error('URL da API, instância e token são obrigatórios');
+  }
+
+  const existing = await getSettings(userId);
+  const webhookSecret = existing?.webhookSecret || crypto.randomBytes(24).toString('hex');
+
+  await pool.query(
+    `INSERT INTO whatsapp_settings (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret)
+     VALUES (?, 'evolution', ?, ?, ?, ?, 'disconnected', ?)
+     ON DUPLICATE KEY UPDATE
+       base_url = VALUES(base_url),
+       instance_name = VALUES(instance_name),
+       api_key = VALUES(api_key),
+       phone = VALUES(phone),
+       status = IF(status = 'connected', status, 'disconnected')`,
+    [userId, baseUrl.trim(), instanceName.trim(), apiKey.trim(), phone.trim(), webhookSecret]
+  );
+
+  return getSettings(userId);
+}
+
+export async function deleteSettings(userId) {
+  await pool.query('DELETE FROM whatsapp_messages WHERE user_id = ?', [userId]);
+  await pool.query('DELETE FROM whatsapp_chats WHERE user_id = ?', [userId]);
+  await pool.query('DELETE FROM whatsapp_settings WHERE user_id = ?', [userId]);
+}
+
+function webhookUrlFor(userId, webhookSecret) {
+  return `${webhookPublicBase()}/api/whatsapp/webhook/${userId}/${webhookSecret}`;
+}
+
+export async function refreshConnectionStatus(userId) {
+  const settings = await getSettings(userId);
+  if (!settings) return { configured: false, status: 'disconnected' };
+
+  try {
+    const state = await getConnectionState(settings.baseUrl, settings.apiKey, settings.instanceName);
+    const connected = isConnectedState(state);
+    const status = connected ? 'connected' : state === 'connecting' ? 'connecting' : 'disconnected';
+    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', [status, userId]);
+    return { configured: true, status, state, settings: maskSettings(settings) };
+  } catch (err) {
+    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['disconnected', userId]);
+    return { configured: true, status: 'disconnected', error: err.message, settings: maskSettings(settings) };
+  }
+}
+
+export function maskSettings(settings) {
+  if (!settings) return null;
+  return {
+    baseUrl: settings.baseUrl,
+    instanceName: settings.instanceName,
+    phone: settings.phone,
+    status: settings.status,
+    hasApiKey: Boolean(settings.apiKey),
+    apiKeyPreview: settings.apiKey ? `${settings.apiKey.slice(0, 4)}…${settings.apiKey.slice(-4)}` : '',
+  };
+}
+
+export async function startConnection(userId) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('Configure a integração antes de conectar');
+
+  const { baseUrl, apiKey, instanceName } = settings;
+
+  try {
+    await createInstance(baseUrl, apiKey, instanceName);
+  } catch (err) {
+    if (err.status !== 409 && err.status !== 403) {
+      const msg = String(err.message || '').toLowerCase();
+      if (!msg.includes('already') && !msg.includes('exists')) {
+        // instância pode já existir
+      }
+    }
+  }
+
+  const webhookUrl = webhookUrlFor(userId, settings.webhookSecret);
+  try {
+    await setWebhook(baseUrl, apiKey, instanceName, webhookUrl);
+  } catch (err) {
+    console.warn('WhatsApp webhook setup:', err.message);
+  }
+
+  const connectData = await connectInstance(baseUrl, apiKey, instanceName);
+  const qrcode = extractQrBase64(connectData);
+  await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connecting', userId]);
+
+  return {
+    status: 'connecting',
+    qrcode,
+    pairingCode: connectData?.pairingCode ?? null,
+  };
+}
+
+export async function getConnectionView(userId) {
+  const refreshed = await refreshConnectionStatus(userId);
+  if (!refreshed.configured) {
+    return { configured: false, status: 'disconnected' };
+  }
+
+  let qrcode = null;
+  if (refreshed.status === 'connecting') {
+    try {
+      const settings = await getSettings(userId);
+      const connectData = await connectInstance(settings.baseUrl, settings.apiKey, settings.instanceName);
+      qrcode = extractQrBase64(connectData);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (refreshed.status === 'connected') {
+    await syncChatsFromProvider(userId);
+  }
+
+  return { ...refreshed, qrcode };
+}
+
+export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMessageAt, incrementUnread = false }) {
+  const [existing] = await pool.query(
+    'SELECT id, unread FROM whatsapp_chats WHERE user_id = ? AND remote_jid = ?',
+    [userId, remoteJid]
+  );
+
+  if (existing.length === 0) {
+    const phone = jidToPhone(remoteJid);
+    let contactId = null;
+    if (phone) {
+      const [contacts] = await pool.query(
+        'SELECT id FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, " ", ""), "-", ""), "+", "") LIKE ? LIMIT 1',
+        [userId, `%${phone.slice(-8)}%`]
+      );
+      contactId = contacts[0]?.id ?? null;
+    }
+
+    const [ins] = await pool.query(
+      `INSERT INTO whatsapp_chats (user_id, remote_jid, contact_id, name, last_message, last_message_at, unread)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, incrementUnread ? 1 : 0]
+    );
+    return ins.insertId;
+  }
+
+  const unread = incrementUnread ? Number(existing[0].unread) + 1 : existing[0].unread;
+  await pool.query(
+    `UPDATE whatsapp_chats SET name = COALESCE(NULLIF(?, ''), name), last_message = ?, last_message_at = ?, unread = ?
+     WHERE id = ?`,
+    [name || '', lastMessage || '', lastMessageAt, unread, existing[0].id]
+  );
+  return existing[0].id;
+}
+
+export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt }) {
+  if (waMessageId) {
+    const [dup] = await pool.query(
+      'SELECT id FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
+      [userId, waMessageId]
+    );
+    if (dup.length > 0) return dup[0].id;
+  }
+
+  const [ins] = await pool.query(
+    `INSERT INTO whatsapp_messages (user_id, chat_id, wa_message_id, body, from_me, message_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [userId, chatId, waMessageId || null, body, fromMe ? 1 : 0, messageAt]
+  );
+  return ins.insertId;
+}
+
+export async function processWebhook(userId, webhookSecret, payload) {
+  const settings = await getSettings(userId);
+  if (!settings || settings.webhookSecret !== webhookSecret) {
+    throw new Error('Webhook não autorizado');
+  }
+
+  const event = String(payload?.event || payload?.type || '').toLowerCase();
+
+  if (event.includes('connection')) {
+    const state = payload?.data?.state || payload?.data?.status || payload?.state;
+    if (isConnectedState(state)) {
+      await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+      await syncChatsFromProvider(userId);
+    }
+    return { ok: true };
+  }
+
+  if (!event.includes('messages')) return { ok: true };
+
+  const items = [];
+  if (Array.isArray(payload?.data)) items.push(...payload.data);
+  else if (payload?.data) items.push(payload.data);
+  else if (payload?.message) items.push(payload);
+
+  for (const item of items) {
+    const key = item?.key || item?.data?.key;
+    const message = item?.message || item?.data?.message;
+    if (!key?.remoteJid) continue;
+
+    const remoteJid = key.remoteJid;
+    const fromMe = Boolean(key.fromMe);
+    const text = extractMessageText(message);
+    if (!text) continue;
+
+    const messageAt = item?.messageTimestamp
+      ? new Date(Number(item.messageTimestamp) * 1000)
+      : new Date();
+
+    const chatId = await upsertChat(userId, {
+      remoteJid,
+      name: item?.pushName || '',
+      lastMessage: text,
+      lastMessageAt: messageAt,
+      incrementUnread: !fromMe,
+    });
+
+    await insertMessage(userId, chatId, {
+      waMessageId: key.id,
+      body: text,
+      fromMe,
+      messageAt,
+    });
+  }
+
+  return { ok: true };
+}
+
+export async function syncChatsFromProvider(userId) {
+  const settings = await getSettings(userId);
+  if (!settings) return [];
+
+  const chats = await findChats(settings.baseUrl, settings.apiKey, settings.instanceName);
+  for (const chat of chats) {
+    const remoteJid = chat.id || chat.remoteJid || chat.jid;
+    if (!remoteJid || remoteJid.includes('@g.us')) continue;
+
+    const lastMsg =
+      chat.lastMessage?.message?.conversation ||
+      chat.lastMessage?.message?.extendedTextMessage?.text ||
+      chat.lastMessage ||
+      '';
+
+    const ts = chat.updatedAt || chat.lastMessage?.messageTimestamp;
+    const lastMessageAt = ts ? new Date(Number(ts) > 1e12 ? Number(ts) : Number(ts) * 1000) : new Date();
+
+    await upsertChat(userId, {
+      remoteJid,
+      name: chat.name || chat.pushName || jidToPhone(remoteJid),
+      lastMessage: typeof lastMsg === 'string' ? lastMsg : '',
+      lastMessageAt,
+      incrementUnread: false,
+    });
+  }
+
+  return listChats(userId);
+}
+
+export async function listChats(userId) {
+  const [rows] = await pool.query(
+    `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,
+            c.last_message_at AS lastMessageAt, c.unread,
+            ct.nome AS contactName
+     FROM whatsapp_chats c
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
+     WHERE c.user_id = ?
+     ORDER BY c.last_message_at DESC, c.id DESC`,
+    [userId]
+  );
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    remoteJid: r.remoteJid,
+    contatoId: r.contactId ? String(r.contactId) : undefined,
+    nome: r.contactName || r.name || jidToPhone(r.remoteJid),
+    phone: jidToPhone(r.remoteJid),
+    lastMessage: r.lastMessage || '',
+    when: formatWhen(r.lastMessageAt),
+    unread: Number(r.unread) || 0,
+  }));
+}
+
+export async function listMessages(userId, chatId) {
+  const [rows] = await pool.query(
+    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt
+     FROM whatsapp_messages WHERE user_id = ? AND chat_id = ? ORDER BY message_at ASC, id ASC`,
+    [userId, chatId]
+  );
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    text: r.text,
+    fromMe: Boolean(r.fromMe),
+    at: formatTime(r.messageAt),
+  }));
+}
+
+export async function loadMessagesFromProvider(userId, chatId) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('WhatsApp não configurado');
+
+  const [[chat]] = await pool.query(
+    'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
+    [chatId, userId]
+  );
+  if (!chat) throw new Error('Conversa não encontrada');
+
+  const messages = await findMessages(settings.baseUrl, settings.apiKey, settings.instanceName, chat.remoteJid);
+  for (const item of messages) {
+    const key = item?.key || item;
+    const message = item?.message || item;
+    const text = extractMessageText(message);
+    if (!text || !key?.remoteJid) continue;
+    const messageAt = item?.messageTimestamp
+      ? new Date(Number(item.messageTimestamp) * 1000)
+      : new Date();
+    await insertMessage(userId, chatId, {
+      waMessageId: key.id,
+      body: text,
+      fromMe: Boolean(key.fromMe),
+      messageAt,
+    });
+  }
+
+  return listMessages(userId, chatId);
+}
+
+export async function sendChatMessage(userId, chatId, text) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('WhatsApp não configurado');
+  if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
+
+  const [[chat]] = await pool.query(
+    'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
+    [chatId, userId]
+  );
+  if (!chat) throw new Error('Conversa não encontrada');
+
+  const number = jidToPhone(chat.remoteJid);
+  const result = await sendText(settings.baseUrl, settings.apiKey, settings.instanceName, number, text);
+  const messageAt = new Date();
+  const waMessageId = result?.key?.id || result?.messageId || null;
+
+  await insertMessage(userId, chatId, {
+    waMessageId,
+    body: text,
+    fromMe: true,
+    messageAt,
+  });
+
+  await upsertChat(userId, {
+    remoteJid: chat.remoteJid,
+    name: '',
+    lastMessage: text,
+    lastMessageAt: messageAt,
+    incrementUnread: false,
+  });
+
+  return listMessages(userId, chatId);
+}
+
+function formatWhen(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return formatTime(d);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function formatTime(date) {
+  const d = new Date(date);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
