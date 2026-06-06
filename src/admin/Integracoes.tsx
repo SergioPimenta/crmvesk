@@ -266,7 +266,7 @@ const Integracoes = () => {
                 <i className="ti ti-info-circle" aria-hidden="true" />
                 <span>
                   Configure <code>WHATSAPP_WEBHOOK_PUBLIC_URL</code> no servidor com a URL pública acessível pela Evolution
-                  (ex.: ngrok em desenvolvimento). O webhook é registrado automaticamente ao conectar.
+                  (ex.: https://crmvesk.vercel.app). O webhook é registrado automaticamente ao conectar.
                 </span>
               </div>
 

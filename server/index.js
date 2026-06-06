@@ -1,59 +1,20 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runMigrations } from './migrate.js';
+import { createApp } from './app.js';
 
-// Load routes
-import authRoutes from './routes/auth.js';
-import uploadRoutes from './routes/upload.js';
-import crmRoutes from './routes/crm.js';
-import whatsappRoutes from './routes/whatsapp.js';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-const corsOrigin = process.env.FRONTEND_URL;
-app.use(
-  cors(
-    corsOrigin
-      ? {
-          origin: corsOrigin.split(',').map((o) => o.trim()),
-          credentials: true,
-        }
-      : undefined
-  )
-);
-app.use(express.json());
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/crm', crmRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-
-// Static folders
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Root endpoint
-app.get('/api', (req, res) => {
-  res.json({ message: 'API is running...' });
-});
-
-runMigrations()
-  .then(() => {
+createApp()
+  .then((app) => {
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT} (PostgreSQL)`);
     });
   })
   .catch((err) => {
-    console.error('Migration failed:', err.message);
+    console.error('Failed to start:', err.message);
     process.exit(1);
   });

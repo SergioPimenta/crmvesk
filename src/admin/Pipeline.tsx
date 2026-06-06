@@ -80,17 +80,21 @@ const Pipeline = () => {
     setIsCreateOpen(true);
   };
 
-  const createDeal = (e: React.FormEvent) => {
+  const createDeal = async (e: React.FormEvent) => {
     e.preventDefault();
-    addDeal({
-      pipelineId: activePipelineId || undefined,
-      titulo: form.titulo.trim(),
-      empresaId: form.empresaId || undefined,
-      valor: form.valor.trim() || 'R$0',
-      prob: form.prob.trim() || '20%',
-      stageKey: form.stageKey,
-    });
-    setIsCreateOpen(false);
+    try {
+      await addDeal({
+        pipelineId: activePipelineId || undefined,
+        titulo: form.titulo.trim(),
+        empresaId: form.empresaId || undefined,
+        valor: form.valor.trim() || 'R$0',
+        prob: form.prob.trim() || '20%',
+        stageKey: form.stageKey,
+      });
+      setIsCreateOpen(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível salvar o negócio.');
+    }
   };
 
   const openEditDeal = (dealId: string) => {
@@ -149,12 +153,20 @@ const Pipeline = () => {
     setIsNewPipelineOpen(false);
   };
 
-  const createStage = (e: React.FormEvent) => {
+  const createStage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePipelineId) return;
     if (!newStage.titulo.trim()) return;
-    addStage(activePipelineId, { stageKey: newStage.titulo, titulo: newStage.titulo.trim(), cor: newStage.cor });
-    setNewStage({ titulo: '', cor: '#7a7880' });
+    try {
+      await addStage(activePipelineId, {
+        stageKey: newStage.titulo,
+        titulo: newStage.titulo.trim(),
+        cor: newStage.cor,
+      });
+      setNewStage({ titulo: '', cor: '#7a7880' });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível salvar a etapa.');
+    }
   };
 
   const moveStage = (stageId: string, dir: -1 | 1) => {

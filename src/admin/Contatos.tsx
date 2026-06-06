@@ -117,23 +117,14 @@ const Contatos = () => {
       );
 
       setFormStages(
-
         stagesData.map((s) => ({
-
           id: String(s.id),
-
-          pipelineId: String(s.pipelineId),
-
-          stageKey: String(s.stageKey),
-
+          pipelineId: String((s as { pipelineId?: number; pipelineid?: number }).pipelineId ?? (s as { pipelineid?: number }).pipelineid),
+          stageKey: String((s as { stageKey?: string; stagekey?: string }).stageKey ?? (s as { stagekey?: string }).stagekey),
           titulo: s.titulo,
-
           cor: s.cor,
-
           pos: Number(s.pos ?? 0),
-
         }))
-
       );
 
     })();
@@ -246,42 +237,28 @@ const Contatos = () => {
 
 
 
-  const createContact = (e: React.FormEvent) => {
-
+  const createContact = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const stage = formStages.find((s) => s.stageKey === form.stageKey);
-
     const etapa = stage ? stageToContactEtapa(stage.stageKey, stage.titulo) : form.etapa;
 
-
-
-    addContact({
-
-      nome: form.nome.trim(),
-
-      email: form.email.trim(),
-
-      telefone: form.telefone.trim(),
-
-      empresaId: form.empresaId || undefined,
-
-      tipo: form.tipo,
-
-      etapa,
-
-      precisaFollowUp: true,
-
-      ultimaInteracao: 'Criado agora',
-
-      pipelineId: form.pipelineId || undefined,
-
-      stageKey: form.stageKey || undefined,
-
-    });
-
-    setIsCreateOpen(false);
-
+    try {
+      await addContact({
+        nome: form.nome.trim(),
+        email: form.email.trim(),
+        telefone: form.telefone.trim(),
+        empresaId: form.empresaId || undefined,
+        tipo: form.tipo,
+        etapa,
+        precisaFollowUp: true,
+        ultimaInteracao: 'Criado agora',
+        pipelineId: form.pipelineId || undefined,
+        stageKey: form.stageKey || undefined,
+      });
+      setIsCreateOpen(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível salvar o contato.');
+    }
   };
 
 

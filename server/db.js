@@ -1,27 +1,88 @@
-import mysql from 'mysql2/promise';
+import { neon } from '@neondatabase/serverless';
 import dotenv from 'dotenv';
 
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Create connection pool
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
 
-// Test connection
-pool.getConnection()
-  .then((conn) => {
-    console.log('Database connected successfully');
-    conn.release();
-  })
-  .catch((err) => {
-    console.error('Error connecting to database:', err);
-  });
+const connectionString =
+  process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL;
 
+if (!connectionString) {
+  console.warn('POSTGRES_URL não definida — necessária para Vercel Postgres / Neon.');
+}
+
+const sql = neon(connectionString || 'postgresql://localhost:5432/placeholder');
+
+function toPgSql(text) {
+  let i = 0;
+  return text.replace(/\?/g, () => `$${++i}`);
+}
+
+function prepareSql(text) {
+  let pg = toPgSql(text);
+  if (/^\s*INSERT\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
+    pg = pg.replace(/;?\s*$/i, ' RETURNING id');
+  }
+  if (/^\s*DELETE\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
+    pg = pg.replace(/;?\s*$/i, ' RETURNING id');
+  }
+  return pg;
+}
+
+function buildMeta(text, rows) {
+  if (/^\s*INSERT\b/i.test(text)) {
+    return { insertId: rows[0]?.id, affectedRows: rows.length || 1 };
+  }
+  if (/^\s*(UPDATE|DELETE)\b/i.test(text)) {
+    return { insertId: rows[0]?.id, affectedRows: rows.length };
+  }
+  return { affectedRows: rows.length };
+}
+
+function isMutation(text) {
+  return /^\s*(INSERT|UPDATE|DELETE)\b/i.test(text);
+}
+
+async function runQuery(client, text, params = []) {
+  const pgSql = prepareSql(text);
+  const raw = await client(pgSql, params);
+  const list = Array.isArray(raw) ? raw : [];
+  const meta = buildMeta(text, list);
+  if (isMutation(text)) {
+    return [meta, list];
+  }
+  return [list, meta];
+}
+
+function createConn(client) {
+  return {
+    query: (text, params) => runQuery(client, text, params),
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {
+      throw new Error('ROLLBACK');
+    },
+    async release() {},
+  };
+}
+
+const pool = {
+  query: (text, params) => runQuery(sql, text, params),
+
+  async transaction(fn) {
+    return sql.transaction(async (tx) => {
+      const conn = createConn(tx);
+      return fn(conn);
+    });
+  },
+
+  async getConnection() {
+    return createConn(sql);
+  },
+};
+
+export { sql };
 export default pool;

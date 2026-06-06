@@ -186,7 +186,7 @@ const WhatsApp = () => {
         <div className="crm-card" style={{ padding: 24, textAlign: 'center' }}>
           <i className="ti ti-brand-whatsapp" style={{ fontSize: 40, color: '#25d36655' }} aria-hidden="true" />
           <p style={{ color: 'var(--vesk-muted)', fontSize: 13, marginTop: 12 }}>
-            Conecte sua instância da Evolution API para ver e enviar mensagens reais.
+            Conecte sua instância da Evolution API para ver e enviar mensagens.
           </p>
           <Link to="/admin/integracoes?tab=whatsapp" className="crm-btn-primary" style={{ display: 'inline-flex', marginTop: 12 }}>
             Ir para Integrações

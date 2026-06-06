@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import pool from '../db.js';
+import { normalizeRow } from '../utils/rows.js';
 import {
   connectInstance,
   createInstance,
@@ -24,7 +25,7 @@ export async function getSettings(userId) {
      FROM whatsapp_settings WHERE user_id = ?`,
     [userId]
   );
-  return rows[0] ?? null;
+  return rows[0] ? normalizeRow(rows[0]) : null;
 }
 
 export async function saveSettings(userId, { baseUrl, instanceName, apiKey, phone = '' }) {
@@ -38,12 +39,13 @@ export async function saveSettings(userId, { baseUrl, instanceName, apiKey, phon
   await pool.query(
     `INSERT INTO whatsapp_settings (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret)
      VALUES (?, 'evolution', ?, ?, ?, ?, 'disconnected', ?)
-     ON DUPLICATE KEY UPDATE
-       base_url = VALUES(base_url),
-       instance_name = VALUES(instance_name),
-       api_key = VALUES(api_key),
-       phone = VALUES(phone),
-       status = IF(status = 'connected', status, 'disconnected')`,
+     ON CONFLICT (user_id) DO UPDATE SET
+       provider = 'evolution',
+       base_url = EXCLUDED.base_url,
+       instance_name = EXCLUDED.instance_name,
+       api_key = EXCLUDED.api_key,
+       phone = EXCLUDED.phone,
+       status = CASE WHEN whatsapp_settings.status = 'connected' THEN whatsapp_settings.status ELSE 'disconnected' END`,
     [userId, baseUrl.trim(), instanceName.trim(), apiKey.trim(), phone.trim(), webhookSecret]
   );
 
@@ -100,7 +102,7 @@ export async function startConnection(userId) {
     if (err.status !== 409 && err.status !== 403) {
       const msg = String(err.message || '').toLowerCase();
       if (!msg.includes('already') && !msg.includes('exists')) {
-        // instância pode já existir
+        /* instância pode já existir */
       }
     }
   }
@@ -158,7 +160,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
     let contactId = null;
     if (phone) {
       const [contacts] = await pool.query(
-        'SELECT id FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, " ", ""), "-", ""), "+", "") LIKE ? LIMIT 1',
+        "SELECT id FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '+', '') LIKE ? LIMIT 1",
         [userId, `%${phone.slice(-8)}%`]
       );
       contactId = contacts[0]?.id ?? null;
@@ -167,7 +169,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
     const [ins] = await pool.query(
       `INSERT INTO whatsapp_chats (user_id, remote_jid, contact_id, name, last_message, last_message_at, unread)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, incrementUnread ? 1 : 0]
+      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, !!incrementUnread]
     );
     return ins.insertId;
   }
@@ -193,7 +195,7 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
   const [ins] = await pool.query(
     `INSERT INTO whatsapp_messages (user_id, chat_id, wa_message_id, body, from_me, message_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [userId, chatId, waMessageId || null, body, fromMe ? 1 : 0, messageAt]
+    [userId, chatId, waMessageId || null, body, !!fromMe, messageAt]
   );
   return ins.insertId;
 }
@@ -293,20 +295,23 @@ export async function listChats(userId) {
      FROM whatsapp_chats c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE c.user_id = ?
-     ORDER BY c.last_message_at DESC, c.id DESC`,
+     ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`,
     [userId]
   );
 
-  return rows.map((r) => ({
-    id: String(r.id),
-    remoteJid: r.remoteJid,
-    contatoId: r.contactId ? String(r.contactId) : undefined,
-    nome: r.contactName || r.name || jidToPhone(r.remoteJid),
-    phone: jidToPhone(r.remoteJid),
-    lastMessage: r.lastMessage || '',
-    when: formatWhen(r.lastMessageAt),
-    unread: Number(r.unread) || 0,
-  }));
+  return rows.map((r) => {
+    const row = normalizeRow(r);
+    return {
+      id: String(row.id),
+      remoteJid: row.remoteJid,
+      contatoId: row.contactId ? String(row.contactId) : undefined,
+      nome: row.contactName || row.name || jidToPhone(row.remoteJid),
+      phone: jidToPhone(row.remoteJid),
+      lastMessage: row.lastMessage || '',
+      when: formatWhen(row.lastMessageAt),
+      unread: Number(row.unread) || 0,
+    };
+  });
 }
 
 export async function listMessages(userId, chatId) {
@@ -316,22 +321,26 @@ export async function listMessages(userId, chatId) {
     [userId, chatId]
   );
 
-  return rows.map((r) => ({
-    id: String(r.id),
-    text: r.text,
-    fromMe: Boolean(r.fromMe),
-    at: formatTime(r.messageAt),
-  }));
+  return rows.map((r) => {
+    const row = normalizeRow(r);
+    return {
+      id: String(row.id),
+      text: row.text,
+      fromMe: Boolean(row.fromMe),
+      at: formatTime(row.messageAt),
+    };
+  });
 }
 
 export async function loadMessagesFromProvider(userId, chatId) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
 
-  const [[chat]] = await pool.query(
+  const [chatRows] = await pool.query(
     'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
     [chatId, userId]
   );
+  const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
   if (!chat) throw new Error('Conversa não encontrada');
 
   const messages = await findMessages(settings.baseUrl, settings.apiKey, settings.instanceName, chat.remoteJid);
@@ -359,10 +368,11 @@ export async function sendChatMessage(userId, chatId, text) {
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
 
-  const [[chat]] = await pool.query(
+  const [chatRows] = await pool.query(
     'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
     [chatId, userId]
   );
+  const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
   if (!chat) throw new Error('Conversa não encontrada');
 
   const number = jidToPhone(chat.remoteJid);
@@ -392,8 +402,7 @@ function formatWhen(date) {
   if (!date) return '';
   const d = new Date(date);
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return formatTime(d);
+  if (d.toDateString() === now.toDateString()) return formatTime(d);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return 'Ontem';

@@ -1,5 +1,7 @@
-// Em dev: proxy Vite (/api). Em produção (Vercel): defina VITE_API_URL no painel da Vercel.
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '/api';
+// Dev: proxy Vite (/api). Produção na Vercel: mesmo domínio (/api). Só use VITE_API_URL se a API for externa.
+const envApi = import.meta.env.VITE_API_URL as string | undefined;
+const BASE_URL =
+  envApi && !envApi.includes('localhost') ? envApi.replace(/\/$/, '') : '/api';
 
 interface FetchOptions extends RequestInit {
   data?: any;

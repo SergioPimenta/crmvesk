@@ -2099,6 +2099,134 @@ body.vesk-app {
   color: var(--vesk-muted);
 }
 
+.wa-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.wa-widget-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--vesk-muted);
+}
+
+.wa-widget-empty i {
+  font-size: 36px;
+  display: block;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.wa-widget-empty p {
+  margin: 0 0 16px;
+}
+
+.wa-widget-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wa-widget-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wa-widget-site {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--vesk-text);
+}
+
+.wa-widget-url {
+  display: block;
+  font-size: 11px;
+  color: var(--vesk-orange);
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+.pill-status.muted {
+  background: var(--vesk-surface2);
+  color: var(--vesk-muted);
+  border-color: var(--vesk-border);
+}
+
+.wa-widget-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+  background: var(--vesk-surface2);
+  border-radius: 10px;
+  border: 1px solid var(--vesk-border);
+}
+
+.wa-widget-stats strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--vesk-text);
+}
+
+.wa-widget-stats span {
+  font-size: 10px;
+  color: var(--vesk-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wa-widget-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--vesk-sub);
+  margin-bottom: 6px;
+}
+
+.wa-widget-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-widget-copy-row code {
+  flex: 1;
+  font-size: 11px;
+  padding: 8px 10px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  word-break: break-all;
+}
+
+.wa-widget-snippet {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--vesk-text);
+}
+
+.wa-widget-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--vesk-border);
+}
+
 @media (max-width: 768px) {
   .crm-sidebar {
     display: none;

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { mapDealRow } from '../utils/apiRow';
 
 export type ContactStage = 'Prospecção' | 'Qualificação' | 'Proposta' | 'Negociação' | 'Fechado';
 export type ContactType = 'Lead' | 'Cliente' | 'Prospect';
@@ -114,8 +115,8 @@ type CrmDataContextType = {
       pipelineId?: string;
       stageKey?: string;
     }
-  ) => string;
-  addDeal: (deal: Omit<Deal, 'id'> & { id?: string }) => string;
+  ) => Promise<string>;
+  addDeal: (deal: Omit<Deal, 'id'> & { id?: string }) => Promise<string>;
   updateDeal: (id: string, patch: Omit<Deal, 'id'>) => void;
   deleteDeal: (id: string) => Promise<void>;
   addActivity: (activity: Omit<Activity, 'id'> & { id?: string }) => string;
@@ -125,7 +126,7 @@ type CrmDataContextType = {
   addPipeline: (pipeline: Omit<Pipeline, 'id'> & { id?: string }) => string;
   updatePipeline: (id: string, patch: Omit<Pipeline, 'id'>) => void;
   deletePipeline: (id: string) => Promise<void>;
-  addStage: (pipelineId: string, stage: Omit<PipelineStage, 'id' | 'pipelineId' | 'pos'> & { id?: string }) => string;
+  addStage: (pipelineId: string, stage: Omit<PipelineStage, 'id' | 'pipelineId' | 'pos'> & { id?: string }) => Promise<string>;
   updateStage: (pipelineId: string, stageId: string, patch: Omit<PipelineStage, 'id' | 'pipelineId'>) => void;
   deleteStage: (pipelineId: string, stageId: string) => Promise<void>;
 
@@ -144,6 +145,17 @@ type CrmDataContextType = {
 
 const CrmDataContext = createContext<CrmDataContextType>({} as CrmDataContextType);
 
+const ACTIVE_PIPELINE_KEY = 'crm_active_pipeline_id';
+
+const mapStageRow = (s: Record<string, unknown>) => ({
+  id: String(s.id),
+  pipelineId: String(s.pipelineId ?? s.pipelineid),
+  stageKey: String(s.stageKey ?? s.stagekey),
+  titulo: String(s.titulo),
+  cor: String(s.cor),
+  pos: Number(s.pos ?? 0),
+});
+
 const genId = (prefix: string) =>
   (globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
     ? `${prefix}_${globalThis.crypto.randomUUID()}`
@@ -152,7 +164,21 @@ const genId = (prefix: string) =>
 export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
-  const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
+  const [activePipelineId, setActivePipelineIdState] = useState<string | null>(null);
+
+  const setActivePipelineId = (id: string | null | ((prev: string | null) => string | null)) => {
+    setActivePipelineIdState((prev) => {
+      const next = typeof id === 'function' ? id(prev) : id;
+      if (next) localStorage.setItem(ACTIVE_PIPELINE_KEY, next);
+      else localStorage.removeItem(ACTIVE_PIPELINE_KEY);
+      return next;
+    });
+  };
+
+  const fetchStagesForPipeline = async (pipelineId: string) => {
+    const stagesData = await api.get<Record<string, unknown>[]>(`/crm/pipelines/${pipelineId}/stages`);
+    setStages(stagesData.map(mapStageRow));
+  };
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -175,36 +201,23 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         api.get<Proposal[]>('/crm/proposals'),
       ]);
 
-      const normalizedPipelines = pipelinesData.map((p) => ({ id: String(p.id), nome: p.nome, isDefault: Boolean(p.isDefault) }));
+      const normalizedPipelines = pipelinesData.map((p) => ({
+        id: String(p.id),
+        nome: p.nome,
+        isDefault: Boolean(p.isDefault ?? p.isdefault),
+      }));
       setPipelines(normalizedPipelines);
-      const defaultId = normalizedPipelines.find((p) => p.isDefault)?.id ?? normalizedPipelines[0]?.id ?? null;
+      const savedId = localStorage.getItem(ACTIVE_PIPELINE_KEY);
+      const defaultId =
+        (savedId && normalizedPipelines.some((p) => p.id === savedId) ? savedId : null) ??
+        normalizedPipelines.find((p) => p.isDefault)?.id ??
+        normalizedPipelines[0]?.id ??
+        null;
       setActivePipelineId(defaultId);
-
-      if (defaultId) {
-        const stagesData = await api.get<any[]>(`/crm/pipelines/${defaultId}/stages`);
-        setStages(
-          stagesData.map((s) => ({
-            id: String(s.id),
-            pipelineId: String(s.pipelineId),
-            stageKey: String(s.stageKey),
-            titulo: s.titulo,
-            cor: s.cor,
-            pos: Number(s.pos ?? 0),
-          }))
-        );
-      }
 
       setCompanies(companiesData.map((c) => ({ ...c, id: String((c as any).id) })));
       setContacts(contactsData.map((c) => ({ ...c, id: String((c as any).id), empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined })));
-      setDeals(
-        (dealsData as any[]).map((d) => ({
-          ...d,
-          id: String(d.id),
-          pipelineId: d.pipelineId ? String(d.pipelineId) : undefined,
-          empresaId: d.empresaId ? String(d.empresaId) : undefined,
-          stageKey: d.stageKey ?? 'prospeccao',
-        }))
-      );
+      setDeals((dealsData as Record<string, unknown>[]).map(mapDealRow));
       setActivities(
         activitiesData.map((a) => ({
           ...a,
@@ -236,21 +249,18 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
-    if (!activePipelineId) return;
+    if (!activePipelineId) {
+      setStages([]);
+      return;
+    }
     const token = localStorage.getItem('token');
     if (!token) return;
     void (async () => {
-      const stagesData = await api.get<any[]>(`/crm/pipelines/${activePipelineId}/stages`);
-      setStages(
-        stagesData.map((s) => ({
-          id: String(s.id),
-          pipelineId: String(s.pipelineId),
-          stageKey: String(s.stageKey),
-          titulo: s.titulo,
-          cor: s.cor,
-          pos: Number(s.pos ?? 0),
-        }))
-      );
+      try {
+        await fetchStagesForPipeline(activePipelineId);
+      } catch (err) {
+        console.error('Erro ao carregar etapas:', err);
+      }
     })();
   }, [activePipelineId]);
 
@@ -272,9 +282,14 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return tempId;
   };
 
-  const addContact: CrmDataContextType['addContact'] = (contact) => {
+  const addContact: CrmDataContextType['addContact'] = async (contact) => {
     const { pipelineId, stageKey, ...contactData } = contact;
+    if (!stageKey) throw new Error('Selecione a etapa do funil.');
+
     const tempId = contact.id ?? genId('c');
+    const dealTempId = genId('d');
+    const resolvedPipeline = pipelineId || activePipelineId || undefined;
+
     const optimistic: Contact = {
       ...contactData,
       id: tempId,
@@ -282,56 +297,72 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setContacts((prev) => [optimistic, ...prev]);
 
-    const dealTempId = stageKey ? genId('d') : null;
-    if (dealTempId && pipelineId && stageKey) {
-      const optimisticDeal: Deal = {
-        id: dealTempId,
-        pipelineId,
-        stageKey,
-        empresaId: contactData.empresaId,
-        titulo: contactData.nome,
-        valor: 'R$0',
-        prob: '20%',
-      };
-      setDeals((prev) => [optimisticDeal, ...prev]);
-    }
+    const optimisticDeal: Deal = {
+      id: dealTempId,
+      pipelineId: resolvedPipeline,
+      stageKey,
+      empresaId: contactData.empresaId,
+      titulo: contactData.nome,
+      valor: 'R$0',
+      prob: '20%',
+    };
+    setDeals((prev) => [optimisticDeal, ...prev]);
 
-    void (async () => {
-      const result = await api.post<{ id: number; dealId?: number; pipelineId?: number }>('/crm/contacts', contact);
+    try {
+      const result = await api.post<{ id: number; dealId?: number; pipelineId?: number; stageKey?: string }>(
+        '/crm/contacts',
+        { ...contact, pipelineId: resolvedPipeline, stageKey }
+      );
       const id = String(result.id);
       setContacts((prev) => prev.map((c) => (c.id === tempId ? { ...c, id } : c)));
-      if (dealTempId && result.dealId) {
+
+      if (result.dealId) {
         const dealId = String(result.dealId);
-        const resolvedPipelineId =
-          result.pipelineId != null ? String(result.pipelineId) : pipelineId ?? undefined;
+        const pipeId = result.pipelineId != null ? String(result.pipelineId) : resolvedPipeline;
+        const key = result.stageKey ?? stageKey;
         setDeals((prev) =>
           prev.map((d) =>
-            d.id === dealTempId
-              ? { ...d, id: dealId, pipelineId: resolvedPipelineId ?? d.pipelineId, stageKey: stageKey ?? d.stageKey }
-              : d
+            d.id === dealTempId ? { ...d, id: dealId, pipelineId: pipeId, stageKey: key } : d
           )
         );
-        if (resolvedPipelineId) setActivePipelineId(resolvedPipelineId);
-      } else if (dealTempId) {
+        if (pipeId) setActivePipelineId(pipeId);
+      } else {
         setDeals((prev) => prev.filter((d) => d.id !== dealTempId));
+        throw new Error('Contato salvo, mas o negócio não foi criado no funil.');
       }
-    })();
-
-    return tempId;
+      return id;
+    } catch (err) {
+      setContacts((prev) => prev.filter((c) => c.id !== tempId));
+      setDeals((prev) => prev.filter((d) => d.id !== dealTempId));
+      throw err;
+    }
   };
 
-  const addDeal: CrmDataContextType['addDeal'] = (deal) => {
+  const addDeal: CrmDataContextType['addDeal'] = async (deal) => {
+    const pipelineId = deal.pipelineId || activePipelineId || undefined;
+    if (!pipelineId) throw new Error('Selecione um funil.');
+    if (!deal.stageKey) throw new Error('Selecione uma etapa.');
+
     const tempId = deal.id ?? genId('d');
-    const optimistic: Deal = { ...deal, id: tempId };
+    const optimistic: Deal = { ...deal, id: tempId, pipelineId };
     setDeals((prev) => [optimistic, ...prev]);
 
-    void (async () => {
-      const result = await api.post<{ id: number }>('/crm/deals', deal);
+    try {
+      const result = await api.post<{ id: number; pipelineId?: number; stageKey?: string }>('/crm/deals', {
+        ...deal,
+        pipelineId,
+      });
       const id = String(result.id);
-      setDeals((prev) => prev.map((d) => (d.id === tempId ? { ...d, id } : d)));
-    })();
-
-    return tempId;
+      const pipeId = result.pipelineId != null ? String(result.pipelineId) : pipelineId;
+      const key = result.stageKey ?? deal.stageKey;
+      setDeals((prev) =>
+        prev.map((d) => (d.id === tempId ? { ...d, id, pipelineId: pipeId, stageKey: key } : d))
+      );
+      return id;
+    } catch (err) {
+      setDeals((prev) => prev.filter((d) => d.id !== tempId));
+      throw err;
+    }
   };
 
   const addActivity: CrmDataContextType['addActivity'] = (activity) => {
@@ -441,19 +472,37 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDeals((prev) => prev.filter((d) => d.pipelineId !== id));
   };
 
-  const addStage: CrmDataContextType['addStage'] = (pipelineId, stage) => {
-    const tempId = stage.id ?? genId('st');
-    const optimistic: PipelineStage = { id: tempId, pipelineId, stageKey: stage.stageKey, titulo: stage.titulo, cor: stage.cor, pos: 9999 };
-    setStages((prev) => [...prev, optimistic]);
+  const addStage: CrmDataContextType['addStage'] = async (pipelineId, stage) => {
     const numericPipelineId = Number(pipelineId);
-    if (Number.isFinite(numericPipelineId)) {
-      void (async () => {
-        const result = await api.post<{ id: number; stageKey: string; pos: number }>(`/crm/pipelines/${numericPipelineId}/stages`, stage);
-        const id = String(result.id);
-        setStages((prev) => prev.map((s) => (s.id === tempId ? { ...s, id, stageKey: result.stageKey, pos: result.pos } : s)));
-      })();
+    if (!Number.isFinite(numericPipelineId)) {
+      throw new Error('Aguarde o funil ser salvo antes de adicionar etapas.');
     }
-    return tempId;
+
+    const tempId = stage.id ?? genId('st');
+    const optimistic: PipelineStage = {
+      id: tempId,
+      pipelineId,
+      stageKey: stage.stageKey,
+      titulo: stage.titulo,
+      cor: stage.cor,
+      pos: 9999,
+    };
+    setStages((prev) => [...prev, optimistic]);
+
+    try {
+      const result = await api.post<{ id: number; stageKey: string; pos: number }>(
+        `/crm/pipelines/${numericPipelineId}/stages`,
+        stage
+      );
+      const id = String(result.id);
+      setStages((prev) =>
+        prev.map((s) => (s.id === tempId ? { ...s, id, stageKey: result.stageKey, pos: result.pos } : s))
+      );
+      return id;
+    } catch (err) {
+      setStages((prev) => prev.filter((s) => s.id !== tempId));
+      throw err;
+    }
   };
 
   const updateStage: CrmDataContextType['updateStage'] = (pipelineId, stageId, patch) => {

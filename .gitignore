@@ -25,8 +25,11 @@ dist-ssr
 
 # server env
 server/.env
+server/.env.vercel
 .env
+.vercel
 
 # uploads directory (except inside dummy files if present)
 server/uploads/*
 !server/uploads/.gitkeep
+.env*

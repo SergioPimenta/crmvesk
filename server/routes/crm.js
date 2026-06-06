@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
+import { normalizeRow, normalizeRows } from '../utils/rows.js';
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ const ensureDefaultPipeline = async (userId) => {
   const [rows] = await pool.query('SELECT id, nome FROM pipelines WHERE user_id = ? ORDER BY is_default DESC, id ASC LIMIT 1', [userId]);
   if (rows.length > 0) return rows[0];
 
-  const [ins] = await pool.query('INSERT INTO pipelines (user_id, nome, is_default) VALUES (?, ?, 1)', [userId, 'Funil padrão']);
+  const [ins] = await pool.query('INSERT INTO pipelines (user_id, nome, is_default) VALUES (?, ?, TRUE)', [userId, 'Funil padrão']);
   const pipelineId = ins.insertId;
 
   const stages = [
@@ -53,13 +54,13 @@ router.get('/pipelines', async (req, res) => {
   const [rows] = await pool.query('SELECT id, nome, is_default AS isDefault FROM pipelines WHERE user_id = ? ORDER BY is_default DESC, id DESC', [
     req.userId,
   ]);
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/pipelines', async (req, res) => {
   const { nome } = req.body ?? {};
   if (!nome) return res.status(400).json({ message: 'Nome é obrigatório' });
-  const [result] = await pool.query('INSERT INTO pipelines (user_id, nome, is_default) VALUES (?, ?, 0)', [req.userId, nome]);
+  const [result] = await pool.query('INSERT INTO pipelines (user_id, nome, is_default) VALUES (?, ?, FALSE)', [req.userId, nome]);
   res.status(201).json({ id: result.insertId });
 });
 
@@ -112,7 +113,7 @@ router.get('/pipelines/:id/stages', async (req, res) => {
     'SELECT id, pipeline_id AS pipelineId, stage_key AS stageKey, titulo, cor, pos FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? ORDER BY pos ASC, id ASC',
     [req.userId, pipelineId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/pipelines/:id/stages', async (req, res) => {
@@ -120,14 +121,29 @@ router.post('/pipelines/:id/stages', async (req, res) => {
   const { titulo, cor = '#7a7880', stageKey } = req.body ?? {};
   if (!Number.isFinite(pipelineId)) return res.status(400).json({ message: 'ID inválido' });
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
-  const key = toStageKey(stageKey || titulo);
+
+  const [pipelineRows] = await pool.query('SELECT id FROM pipelines WHERE id = ? AND user_id = ? LIMIT 1', [
+    pipelineId,
+    req.userId,
+  ]);
+  if (!pipelineRows[0]) return res.status(404).json({ message: 'Funil não encontrado' });
+
+  let key = toStageKey(stageKey || titulo);
   if (!key) return res.status(400).json({ message: 'StageKey inválido' });
 
-  const [[max]] = await pool.query('SELECT COALESCE(MAX(pos), -1) AS maxPos FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ?', [
-    req.userId,
-    pipelineId,
-  ]);
-  const pos = Number(max?.maxPos ?? -1) + 1;
+  const [dupRows] = await pool.query(
+    'SELECT id FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1',
+    [req.userId, pipelineId, key]
+  );
+  if (dupRows.length > 0) {
+    key = `${key}_${Date.now()}`;
+  }
+
+  const [maxRows] = await pool.query(
+    'SELECT COALESCE(MAX(pos), -1) AS maxPos FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ?',
+    [req.userId, pipelineId]
+  );
+  const pos = Number(maxRows[0]?.maxPos ?? -1) + 1;
 
   const [result] = await pool.query(
     'INSERT INTO pipeline_stages (user_id, pipeline_id, stage_key, titulo, cor, pos) VALUES (?, ?, ?, ?, ?, ?)',
@@ -198,7 +214,7 @@ router.get('/companies', async (req, res) => {
     'SELECT id, nome, segmento, etapa, proxima_acao AS proximaAcao, prioridade FROM companies WHERE user_id = ? ORDER BY id DESC',
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/companies', async (req, res) => {
@@ -232,7 +248,7 @@ router.get('/contacts', async (req, res) => {
      FROM contacts WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/contacts', async (req, res) => {
@@ -251,51 +267,52 @@ router.post('/contacts', async (req, res) => {
   if (!nome) return res.status(400).json({ message: 'Nome é obrigatório' });
   if (!stageKey) return res.status(400).json({ message: 'Etapa do funil é obrigatória' });
 
-  const conn = await pool.getConnection();
+  let contactId;
+  let dealId = null;
+  let resolvedPipelineId = null;
+
   try {
-    await conn.beginTransaction();
-
-    const [result] = await conn.query(
-      `INSERT INTO contacts (user_id, company_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.userId, asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, precisaFollowUp ? 1 : 0]
-    );
-    const contactId = result.insertId;
-    let dealId = null;
-    let resolvedPipelineId = null;
-
-    if (stageKey) {
-      const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
-      resolvedPipelineId = pipeId;
-      const [[stageRow]] = await conn.query(
-        'SELECT id FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1',
-        [req.userId, pipeId, stageKey]
+    await pool.transaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO contacts (user_id, company_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.userId, asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, !!precisaFollowUp]
       );
-      if (!stageRow) {
-        await conn.rollback();
-        return res.status(400).json({ message: 'Etapa inválida para o funil selecionado' });
+      contactId = result.insertId;
+
+      if (stageKey) {
+        const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
+        resolvedPipelineId = pipeId;
+        const [stageRows] = await conn.query(
+          'SELECT id FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1',
+          [req.userId, pipeId, stageKey]
+        );
+        if (!stageRows[0]) {
+          const err = new Error('Etapa inválida para o funil selecionado');
+          err.statusCode = 400;
+          throw err;
+        }
+
+        const [dealResult] = await conn.query(
+          `INSERT INTO deals (user_id, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [req.userId, pipeId, asId(empresaId), nome, '', '20%', stageKey]
+        );
+        dealId = dealResult.insertId;
       }
-
-      const [dealResult] = await conn.query(
-        `INSERT INTO deals (user_id, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [req.userId, pipeId, asId(empresaId), nome, '', '20%', stageKey]
-      );
-      dealId = dealResult.insertId;
-    }
-
-    await conn.commit();
-    res.status(201).json({
-      id: contactId,
-      dealId,
-      pipelineId: resolvedPipelineId,
-      stageKey: dealId ? stageKey : null,
     });
   } catch (err) {
-    await conn.rollback();
+    if (err.statusCode === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     throw err;
-  } finally {
-    conn.release();
   }
+
+  res.status(201).json({
+    id: contactId,
+    dealId,
+    pipelineId: resolvedPipelineId,
+    stageKey: dealId ? stageKey : null,
+  });
 });
 
 router.put('/contacts/:id', async (req, res) => {
@@ -317,7 +334,7 @@ router.put('/contacts/:id', async (req, res) => {
     `UPDATE contacts
      SET company_id = ?, nome = ?, email = ?, telefone = ?, tipo = ?, etapa = ?, ultima_interacao = ?, precisa_followup = ?
      WHERE id = ? AND user_id = ?`,
-    [asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, precisaFollowUp ? 1 : 0, id, req.userId]
+    [asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, !!precisaFollowUp, id, req.userId]
   );
   res.status(204).send();
 });
@@ -340,18 +357,27 @@ router.get('/deals', async (req, res) => {
      FROM deals WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/deals', async (req, res) => {
   const { pipelineId, empresaId, titulo, valor = '', prob = '', stageKey = 'prospeccao' } = req.body ?? {};
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
-  const ensured = pipelineId ? { id: asId(pipelineId) } : await ensureDefaultPipeline(req.userId);
+
+  const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
+  const [stageRows] = await pool.query(
+    'SELECT id FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1',
+    [req.userId, pipeId, stageKey]
+  );
+  if (!stageRows[0]) {
+    return res.status(400).json({ message: 'Etapa inválida para o funil selecionado' });
+  }
+
   const [result] = await pool.query(
     `INSERT INTO deals (user_id, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, asId(ensured.id), asId(empresaId), titulo, valor, prob, stageKey]
+    [req.userId, pipeId, asId(empresaId), titulo, valor, prob, stageKey]
   );
-  res.status(201).json({ id: result.insertId });
+  res.status(201).json({ id: result.insertId, pipelineId: pipeId, stageKey });
 });
 
 router.put('/deals/:id/stage', async (req, res) => {
@@ -395,7 +421,7 @@ router.get('/activities', async (req, res) => {
      FROM activities WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/activities', async (req, res) => {
@@ -432,7 +458,7 @@ router.get('/emails', async (req, res) => {
      FROM emails WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/emails', async (req, res) => {
@@ -453,7 +479,7 @@ router.get('/proposals', async (req, res) => {
      FROM proposals WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
-  res.json(rows);
+  res.json(normalizeRows(rows));
 });
 
 router.post('/proposals', async (req, res) => {

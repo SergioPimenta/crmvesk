@@ -98,7 +98,7 @@ export async function sendText(baseUrl, apiKey, instanceName, number, text) {
   const payload = { number: digitsOnly(number), text };
   try {
     return await evolutionRequest(baseUrl, apiKey, 'POST', `/message/sendText/${instanceName}`, payload);
-  } catch (err) {
+  } catch {
     return evolutionRequest(baseUrl, apiKey, 'POST', `/message/sendText/${instanceName}`, {
       number: digitsOnly(number),
       textMessage: { text },
