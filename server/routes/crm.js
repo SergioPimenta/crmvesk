@@ -48,6 +48,46 @@ const ensureDefaultPipeline = async (userId) => {
   return { id: pipelineId, nome: 'Funil padrão' };
 };
 
+async function clearContactNovoOnDealMove(userId, dealBefore, newStageKey) {
+  if (!dealBefore || dealBefore.stageKey === newStageKey) return;
+
+  let contactId = dealBefore.contactId ?? dealBefore.contatoId;
+  if (!contactId && dealBefore.titulo) {
+    const [cRows] = await pool.query(
+      `SELECT id FROM contacts WHERE user_id = ? AND nome = ? AND precisa_followup = TRUE
+       ORDER BY id DESC LIMIT 1`,
+      [userId, dealBefore.titulo]
+    );
+    contactId = cRows[0]?.id;
+  }
+  if (!contactId) return;
+
+  const pipelineId = dealBefore.pipelineId;
+  let etapa = 'Prospecção';
+  if (pipelineId) {
+    const [stageRows] = await pool.query(
+      `SELECT titulo FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1`,
+      [userId, pipelineId, newStageKey]
+    );
+    if (stageRows[0]?.titulo) etapa = stageRows[0].titulo;
+  }
+
+  await pool.query(
+    `UPDATE contacts SET precisa_followup = FALSE, etapa = ?, updated_at = NOW()
+     WHERE id = ? AND user_id = ? AND precisa_followup = TRUE`,
+    [etapa, contactId, userId]
+  );
+}
+
+async function getDealForUser(userId, id) {
+  const [rows] = await pool.query(
+    `SELECT stage_key AS stageKey, contact_id AS contactId, titulo, pipeline_id AS pipelineId
+     FROM deals WHERE id = ? AND user_id = ? LIMIT 1`,
+    [id, userId]
+  );
+  return rows[0] ? normalizeRow(rows[0]) : null;
+}
+
 // Pipelines
 router.get('/pipelines', async (req, res) => {
   await ensureDefaultPipeline(req.userId);
@@ -294,8 +334,8 @@ router.post('/contacts', async (req, res) => {
         }
 
         const [dealResult] = await conn.query(
-          `INSERT INTO deals (user_id, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [req.userId, pipeId, asId(empresaId), nome, '', '20%', stageKey]
+          `INSERT INTO deals (user_id, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [req.userId, pipeId, asId(empresaId), contactId, nome, '', '20%', stageKey]
         );
         dealId = dealResult.insertId;
       }
@@ -353,8 +393,12 @@ router.delete('/contacts/:id', async (req, res) => {
 router.get('/deals', async (req, res) => {
   await ensureDefaultPipeline(req.userId);
   const [rows] = await pool.query(
-    `SELECT id, pipeline_id AS pipelineId, company_id AS empresaId, titulo, valor, prob, stage_key AS stageKey
-     FROM deals WHERE user_id = ? ORDER BY id DESC`,
+    `SELECT d.id, d.pipeline_id AS pipelineId, d.company_id AS empresaId, d.contact_id AS contatoId,
+            d.titulo, d.valor, d.prob, d.stage_key AS stageKey,
+            c.nome AS contatoNome, c.email AS contatoEmail, c.telefone AS contatoTelefone
+     FROM deals d
+     LEFT JOIN contacts c ON c.id = d.contact_id AND c.user_id = d.user_id
+     WHERE d.user_id = ? ORDER BY d.id DESC`,
     [req.userId]
   );
   res.json(normalizeRows(rows));
@@ -386,7 +430,12 @@ router.put('/deals/:id/stage', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   if (!stageKey) return res.status(400).json({ message: 'StageKey é obrigatório' });
 
+  const dealBefore = await getDealForUser(req.userId, id);
+  if (!dealBefore) return res.status(404).json({ message: 'Negócio não encontrado' });
+  if (dealBefore.stageKey === stageKey) return res.status(204).send();
+
   await pool.query('UPDATE deals SET stage_key = ? WHERE id = ? AND user_id = ?', [stageKey, id, req.userId]);
+  await clearContactNovoOnDealMove(req.userId, dealBefore, stageKey);
   res.status(204).send();
 });
 
@@ -396,12 +445,17 @@ router.put('/deals/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
 
+  const dealBefore = await getDealForUser(req.userId, id);
+  if (!dealBefore) return res.status(404).json({ message: 'Negócio não encontrado' });
+
   const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
   const [result] = await pool.query(
     `UPDATE deals SET pipeline_id = ?, company_id = ?, titulo = ?, valor = ?, prob = ?, stage_key = ? WHERE id = ? AND user_id = ?`,
     [pipeId, asId(empresaId), titulo, valor, prob, stageKey, id, req.userId]
   );
   if (result.affectedRows === 0) return res.status(404).json({ message: 'Negócio não encontrado' });
+
+  await clearContactNovoOnDealMove(req.userId, { ...dealBefore, pipelineId: pipeId }, stageKey);
   res.status(204).send();
 });
 

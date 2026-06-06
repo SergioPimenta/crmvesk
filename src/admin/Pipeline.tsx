@@ -3,6 +3,7 @@ import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCrmData, type StageKey } from '../contexts/CrmDataContext';
+import { countOpenDeals, groupDealsByStage } from '../utils/pipelineDeals';
 
 const Pipeline = () => {
   const navigate = useNavigate();
@@ -24,7 +25,6 @@ const Pipeline = () => {
     updateDeal,
     deleteDeal,
     updateDealStage,
-    getCompanyName,
   } = useCrmData();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -55,10 +55,23 @@ const Pipeline = () => {
   const stagesForActive = useMemo(() => stages.filter((s) => s.pipelineId === activePipelineId).sort((a, b) => a.pos - b.pos), [activePipelineId, stages]);
   const dealsForActive = useMemo(() => deals.filter((d) => (activePipelineId ? d.pipelineId === activePipelineId : true)), [activePipelineId, deals]);
 
+  const dealsByStage = useMemo(
+    () => groupDealsByStage(dealsForActive, stagesForActive),
+    [dealsForActive, stagesForActive]
+  );
+
   const totalOpen = useMemo(() => {
-    const open = dealsForActive.filter((d) => d.stageKey !== 'fechado');
-    return `${open.length} negócios em aberto`;
-  }, [dealsForActive]);
+    const open = countOpenDeals(dealsForActive, stagesForActive);
+    return `${open} negócios em aberto`;
+  }, [dealsForActive, stagesForActive]);
+
+  const formatDealPhone = (phone?: string) => {
+    if (!phone) return '—';
+    const d = phone.replace(/\D/g, '');
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return phone;
+  };
 
   const onDropStage = (stageKey: StageKey) => {
     if (!draggingId) return;
@@ -297,7 +310,7 @@ const Pipeline = () => {
 
       <div className="kanban-board" aria-label="Funil de vendas em kanban">
         {stagesForActive.map((s) => {
-          const items = dealsForActive.filter((d) => d.stageKey === s.stageKey);
+          const items = dealsByStage.get(s.stageKey) ?? [];
           return (
             <section
               key={s.stageKey}
@@ -321,10 +334,10 @@ const Pipeline = () => {
                     onDragStart={() => setDraggingId(d.id)}
                     onDragEnd={() => setDraggingId(null)}
                     role="listitem"
-                    aria-label={`${d.titulo} — ${getCompanyName(d.empresaId)}`}
+                    aria-label={`${d.contatoNome || d.titulo} — ${d.contatoEmail || 'sem e-mail'}`}
                   >
                     <div className="pipeline-deal-top">
-                      <div className="pipeline-deal-name">{d.titulo}</div>
+                      <div className="pipeline-deal-name">{d.contatoNome || d.titulo}</div>
                       <div className="pipeline-deal-actions">
                         <button
                           type="button"
@@ -354,7 +367,16 @@ const Pipeline = () => {
                         </button>
                       </div>
                     </div>
-                    <div className="pipeline-deal-co">{getCompanyName(d.empresaId)}</div>
+                    <div className="pipeline-deal-meta">
+                      <div className="pipeline-deal-meta-row">
+                        <i className="ti ti-mail" aria-hidden="true" />
+                        <span>{d.contatoEmail?.trim() || '—'}</span>
+                      </div>
+                      <div className="pipeline-deal-meta-row">
+                        <i className="ti ti-phone" aria-hidden="true" />
+                        <span>{formatDealPhone(d.contatoTelefone)}</span>
+                      </div>
+                    </div>
                     <div className="pipeline-deal-bottom">
                       <span className="pipeline-deal-val">{d.valor}</span>
                       <span className="pipeline-deal-prob">{d.prob}</span>

@@ -4,6 +4,7 @@ import Modal from '../components/crm/Modal';
 import CrmLayout from '../components/crm/CrmLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useCrmData } from '../contexts/CrmDataContext';
+import { countClosedDeals, countOpenDeals, groupDealsByStage } from '../utils/pipelineDeals';
 
 const formatDate = () => {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -56,9 +57,21 @@ const Dashboard = () => {
     return deals.filter((d) => d.pipelineId === pid);
   }, [deals, activePipelineId, activePipeline?.id]);
 
-  const openDeals = dealsForActive.filter((d) => d.stageKey !== 'fechado');
-  const closedDeals = dealsForActive.filter((d) => d.stageKey === 'fechado');
+  const dealsByStage = useMemo(
+    () => groupDealsByStage(dealsForActive, stagesForActive),
+    [dealsForActive, stagesForActive]
+  );
+  const openDealsCount = countOpenDeals(dealsForActive, stagesForActive);
+  const closedDealsCount = countClosedDeals(dealsForActive, stagesForActive);
   const pendingContacts = contacts.filter((c) => c.precisaFollowUp).length;
+
+  const formatDealPhone = (phone?: string) => {
+    if (!phone) return '—';
+    const d = phone.replace(/\D/g, '');
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return phone;
+  };
 
   return (
     <CrmLayout>
@@ -102,14 +115,14 @@ const Dashboard = () => {
           <div className="crm-metric-accent" style={{ background: '#4caf82' }} />
           <i className="ti ti-trophy crm-metric-icon" style={{ color: '#4caf82' }} aria-hidden="true" />
           <div className="crm-metric-label">Negócios fechados</div>
-          <div className="crm-metric-value">{closedDeals.length}</div>
+          <div className="crm-metric-value">{closedDealsCount}</div>
           <div className="crm-metric-delta up">No período</div>
         </div>
         <div className="crm-metric">
           <div className="crm-metric-accent" style={{ background: '#ef9f27' }} />
           <i className="ti ti-clock crm-metric-icon" style={{ color: '#ef9f27' }} aria-hidden="true" />
           <div className="crm-metric-label">Negócios em aberto</div>
-          <div className="crm-metric-value">{openDeals.length}</div>
+          <div className="crm-metric-value">{openDealsCount}</div>
           <div className="crm-metric-delta down">Acompanhar</div>
         </div>
       </div>
@@ -132,7 +145,7 @@ const Dashboard = () => {
               ))}
             </select>
           ) : null}
-          <span className="pipeline-badge">{openDeals.length} em aberto</span>
+          <span className="pipeline-badge">{openDealsCount} em aberto</span>
           <button type="button" className="crm-card-action" onClick={() => navigate('/admin/pipeline')}>
             Ver tudo →
           </button>
@@ -157,8 +170,9 @@ const Dashboard = () => {
             style={{ gridTemplateColumns: `repeat(${stagesForActive.length}, minmax(0, 1fr))` }}
           >
             {stagesForActive.map((stage) => {
-              const items = dealsForActive.filter((d) => d.stageKey === stage.stageKey).slice(0, 2);
-              const total = dealsForActive.filter((d) => d.stageKey === stage.stageKey).length;
+              const stageDeals = dealsByStage.get(stage.stageKey) ?? [];
+              const items = stageDeals.slice(0, 2);
+              const total = stageDeals.length;
               return (
                 <div key={stage.stageKey}>
                   <div className="pipeline-col-head">
@@ -168,8 +182,17 @@ const Dashboard = () => {
                   {items.length === 0 ? <div className="kanban-empty">Sem cards</div> : null}
                   {items.map((d) => (
                     <div key={d.id} className="pipeline-deal">
-                      <div className="pipeline-deal-name">{d.titulo}</div>
-                      <div className="pipeline-deal-co">{getCompanyName(d.empresaId)}</div>
+                      <div className="pipeline-deal-name">{d.contatoNome || d.titulo}</div>
+                      <div className="pipeline-deal-meta">
+                        <div className="pipeline-deal-meta-row">
+                          <i className="ti ti-mail" aria-hidden="true" />
+                          <span>{d.contatoEmail?.trim() || '—'}</span>
+                        </div>
+                        <div className="pipeline-deal-meta-row">
+                          <i className="ti ti-phone" aria-hidden="true" />
+                          <span>{formatDealPhone(d.contatoTelefone)}</span>
+                        </div>
+                      </div>
                       <div className="pipeline-deal-bottom">
                         <span className="pipeline-deal-val">{d.valor || '—'}</span>
                         <span className="pipeline-deal-prob">{d.prob || '—'}</span>

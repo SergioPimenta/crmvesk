@@ -21,17 +21,29 @@ export async function createApp() {
 
   const app = express();
 
+  // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/widget')) return next();
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    return next();
+  });
+
   const corsOrigin = process.env.FRONTEND_URL;
-  app.use(
-    cors(
-      corsOrigin
-        ? {
-            origin: corsOrigin.split(',').map((o) => o.trim()),
-            credentials: true,
-          }
-        : undefined
-    )
-  );
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/widget')) return next();
+    if (!corsOrigin) return next();
+    return cors({
+      origin: corsOrigin.split(',').map((o) => o.trim()),
+      credentials: true,
+    })(req, res, next);
+  });
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/api/auth', authRoutes);

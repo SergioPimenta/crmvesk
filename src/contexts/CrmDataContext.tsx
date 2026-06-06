@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { mapDealRow } from '../utils/apiRow';
+import { enrichDealWithContact, mapDealRow } from '../utils/apiRow';
 
 export type ContactStage = 'Prospecção' | 'Qualificação' | 'Proposta' | 'Negociação' | 'Fechado';
 export type ContactType = 'Lead' | 'Cliente' | 'Prospect';
@@ -51,6 +51,10 @@ export type Deal = {
   pipelineId?: string;
   titulo: string;
   empresaId?: string;
+  contatoId?: string;
+  contatoNome?: string;
+  contatoEmail?: string;
+  contatoTelefone?: string;
   valor: string;
   prob: string;
   stageKey: StageKey;
@@ -216,8 +220,17 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setActivePipelineId(defaultId);
 
       setCompanies(companiesData.map((c) => ({ ...c, id: String((c as any).id) })));
-      setContacts(contactsData.map((c) => ({ ...c, id: String((c as any).id), empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined })));
-      setDeals((dealsData as Record<string, unknown>[]).map(mapDealRow));
+      const normalizedContacts = contactsData.map((c) => ({
+        ...c,
+        id: String((c as any).id),
+        empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined,
+      }));
+      setContacts(normalizedContacts);
+      setDeals(
+        (dealsData as Record<string, unknown>[])
+          .map(mapDealRow)
+          .map((deal) => enrichDealWithContact(deal, normalizedContacts))
+      );
       setActivities(
         activitiesData.map((a) => ({
           ...a,
@@ -407,8 +420,25 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return tempId;
   };
 
+  const clearContactNovoForDeal = (deal: Deal) => {
+    setContacts((prev) =>
+      prev.map((c) => {
+        const linked =
+          (deal.contatoId && c.id === deal.contatoId) ||
+          (!deal.contatoId && c.precisaFollowUp && c.nome === deal.titulo);
+        return linked && c.precisaFollowUp ? { ...c, precisaFollowUp: false } : c;
+      })
+    );
+  };
+
   const updateDealStage: CrmDataContextType['updateDealStage'] = (dealId, stageKey) => {
-    setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stageKey } : d)));
+    setDeals((prev) => {
+      const deal = prev.find((d) => d.id === dealId);
+      if (deal && deal.stageKey !== stageKey) {
+        clearContactNovoForDeal(deal);
+      }
+      return prev.map((d) => (d.id === dealId ? { ...d, stageKey } : d));
+    });
     const numericId = Number(dealId);
     if (Number.isFinite(numericId)) {
       void api.put(`/crm/deals/${numericId}/stage`, { stageKey });
@@ -416,7 +446,13 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateDeal: CrmDataContextType['updateDeal'] = (id, patch) => {
-    setDeals((prev) => prev.map((d) => (d.id === id ? { ...patch, id } : d)));
+    setDeals((prev) => {
+      const current = prev.find((d) => d.id === id);
+      if (current && patch.stageKey && patch.stageKey !== current.stageKey) {
+        clearContactNovoForDeal({ ...current, ...patch });
+      }
+      return prev.map((d) => (d.id === id ? { ...patch, id } : d));
+    });
     const numericId = Number(id);
     if (Number.isFinite(numericId)) {
       void api.put(`/crm/deals/${numericId}`, {

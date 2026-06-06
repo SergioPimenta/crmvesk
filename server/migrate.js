@@ -111,6 +111,8 @@ export async function runMigrations() {
 
   await migrateWhatsappMetaColumns();
   await migrateWhatsappButtonWidgets();
+  await migrateWhatsappWidgetPipeline();
+  await migrateDealsContactId();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -155,4 +157,37 @@ async function migrateWhatsappButtonWidgets() {
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_button_user ON whatsapp_button_widgets(user_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_button_code ON whatsapp_button_widgets(monitor_code)');
+}
+
+async function migrateWhatsappWidgetPipeline() {
+  if (!(await tableExists('whatsapp_button_widgets'))) return;
+
+  await pool.query(
+    `ALTER TABLE whatsapp_button_widgets ADD COLUMN IF NOT EXISTS pipeline_id INT REFERENCES pipelines(id) ON DELETE SET NULL`
+  );
+  await pool.query(
+    `ALTER TABLE whatsapp_button_widgets ADD COLUMN IF NOT EXISTS stage_key VARCHAR(64) DEFAULT 'prospeccao'`
+  );
+}
+
+async function migrateDealsContactId() {
+  if (!(await tableExists('deals'))) return;
+
+  await pool.query(
+    `ALTER TABLE deals ADD COLUMN IF NOT EXISTS contact_id INT REFERENCES contacts(id) ON DELETE SET NULL`
+  );
+
+  try {
+    await pool.query(`
+      UPDATE deals d
+      SET contact_id = c.id
+      FROM contacts c
+      WHERE d.contact_id IS NULL
+        AND d.user_id = c.user_id
+        AND d.titulo = c.nome
+        AND c.ultima_interacao LIKE 'Lead via botão WhatsApp%'
+    `);
+  } catch {
+    /* backfill opcional */
+  }
 }

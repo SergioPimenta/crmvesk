@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
+import { useCrmData } from '../contexts/CrmDataContext';
 import { api } from '../services/api';
 
 type WaWidget = {
@@ -10,6 +11,10 @@ type WaWidget = {
   phone: string;
   monitorCode: string;
   message: string;
+  pipelineId: string | null;
+  stageKey: string;
+  pipelineName: string;
+  stageTitle: string;
   active: boolean;
   pageViews: number;
   buttonClicks: number;
@@ -23,15 +28,9 @@ type FormState = {
   siteName: string;
   phone: string;
   message: string;
+  pipelineId: string;
+  stageKey: string;
   active: boolean;
-};
-
-const emptyForm: FormState = {
-  siteUrl: '',
-  siteName: '',
-  phone: '',
-  message: 'Olá! Vim pelo site.',
-  active: true,
 };
 
 const formatDate = (value: string | null) => {
@@ -46,6 +45,7 @@ const copyText = async (text: string) => {
 };
 
 const BotaoWhatsApp = () => {
+  const { pipelines, stages, activePipelineId } = useCrmData();
   const [widgets, setWidgets] = useState<WaWidget[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +53,46 @@ const BotaoWhatsApp = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WaWidget | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>({
+    siteUrl: '',
+    siteName: '',
+    phone: '',
+    message: 'Olá, gostaria de um atendimento personalizado?',
+    pipelineId: '',
+    stageKey: 'prospeccao',
+    active: true,
+  });
+
+  const defaultPipelineId = useMemo(
+    () => activePipelineId || pipelines.find((p) => p.isDefault)?.id || pipelines[0]?.id || '',
+    [pipelines, activePipelineId]
+  );
+
+  const firstStageKey = useCallback(
+    (pipelineId: string) => {
+      const list = stages.filter((s) => s.pipelineId === pipelineId).sort((a, b) => a.pos - b.pos);
+      return list[0]?.stageKey || 'prospeccao';
+    },
+    [stages]
+  );
+
+  const stagesForForm = useMemo(
+    () => stages.filter((s) => s.pipelineId === form.pipelineId).sort((a, b) => a.pos - b.pos),
+    [stages, form.pipelineId]
+  );
+
+  const buildEmptyForm = useCallback((): FormState => {
+    const pipelineId = defaultPipelineId;
+    return {
+      siteUrl: '',
+      siteName: '',
+      phone: '',
+      message: 'Olá, gostaria de um atendimento personalizado?',
+      pipelineId,
+      stageKey: firstStageKey(pipelineId),
+      active: true,
+    };
+  }, [defaultPipelineId, firstStageKey]);
 
   const loadWidgets = useCallback(async () => {
     const data = await api.get<{ widgets: WaWidget[] }>('/whatsapp-button/widgets');
@@ -76,7 +115,7 @@ const BotaoWhatsApp = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm(buildEmptyForm());
     setError('');
     setModalOpen(true);
   };
@@ -87,7 +126,9 @@ const BotaoWhatsApp = () => {
       siteUrl: widget.siteUrl,
       siteName: widget.siteName,
       phone: widget.phone,
-      message: widget.message || 'Olá! Vim pelo site.',
+      message: widget.message || 'Olá, gostaria de um atendimento personalizado?',
+      pipelineId: widget.pipelineId || defaultPipelineId,
+      stageKey: widget.stageKey || firstStageKey(widget.pipelineId || defaultPipelineId),
       active: widget.active,
     });
     setError('');
@@ -97,11 +138,15 @@ const BotaoWhatsApp = () => {
   const closeModal = () => {
     setModalOpen(false);
     setEditing(null);
-    setForm(emptyForm);
+    setForm(buildEmptyForm());
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.pipelineId || !form.stageKey) {
+      setError('Selecione o funil e a etapa para os leads.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -169,9 +214,9 @@ const BotaoWhatsApp = () => {
             <div>
               <div className="integration-panel-title">Widget flutuante para sites</div>
               <div className="integration-panel-desc">
-                Cadastre a URL do site e o número do WhatsApp. O sistema gera um script para colar no{' '}
-                <code>&lt;head&gt;</code> do site. Quando instalado, o botão verde aparece no canto inferior
-                direito e o CRM registra visualizações e cliques.
+                Cadastre a URL do site e o número do WhatsApp. O script exibe um formulário de captura
+                (nome, telefone e e-mail) antes de abrir o WhatsApp. Cada envio cria um lead em{' '}
+                <strong>Contatos</strong> e um negócio no pipeline.
               </div>
             </div>
           </div>
@@ -233,6 +278,15 @@ const BotaoWhatsApp = () => {
                   <span>Último ping</span>
                 </div>
               </div>
+
+              {(widget.pipelineName || widget.stageTitle) && (
+                <div className="wa-widget-field">
+                  <label>Destino no CRM</label>
+                  <div className="wa-widget-funnel">
+                    {widget.pipelineName || 'Funil padrão'} · {widget.stageTitle || widget.stageKey}
+                  </div>
+                </div>
+              )}
 
               <div className="wa-widget-field">
                 <label>Código de monitoramento</label>
@@ -334,13 +388,67 @@ const BotaoWhatsApp = () => {
           </div>
 
           <div className="crm-field">
-            <label htmlFor="wa_message">Mensagem padrão (opcional)</label>
+            <label htmlFor="wa_message">Mensagem de boas-vindas (popup e WhatsApp)</label>
             <input
               id="wa_message"
               type="text"
+              placeholder="Olá, gostaria de um atendimento personalizado?"
               value={form.message}
               onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
             />
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="wa_pipeline">Funil</label>
+            <select
+              id="wa_pipeline"
+              required
+              value={form.pipelineId}
+              onChange={(e) => {
+                const pipelineId = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  pipelineId,
+                  stageKey: firstStageKey(pipelineId),
+                }));
+              }}
+            >
+              {pipelines.length === 0 ? (
+                <option value="">Nenhum funil cadastrado</option>
+              ) : (
+                pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="wa_stage">Etapa inicial</label>
+            <select
+              id="wa_stage"
+              required
+              value={form.stageKey}
+              disabled={!form.pipelineId || stagesForForm.length === 0}
+              onChange={(e) => setForm((f) => ({ ...f, stageKey: e.target.value }))}
+            >
+              {stagesForForm.length === 0 ? (
+                <option value="">Sem etapas neste funil</option>
+              ) : (
+                stagesForForm.map((s) => (
+                  <option key={s.id} value={s.stageKey}>
+                    {s.titulo}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="integration-hint" style={{ gridColumn: '1 / -1' }}>
+            <i className="ti ti-info-circle" aria-hidden="true" />
+            <span>Leads capturados por este botão entram no funil e etapa selecionados.</span>
           </div>
 
           {editing ? (

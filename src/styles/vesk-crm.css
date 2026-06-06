@@ -576,6 +576,29 @@ body.vesk-app {
   color: var(--vesk-muted);
 }
 
+.pipeline-deal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.pipeline-deal-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--vesk-muted);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.pipeline-deal-meta-row i {
+  font-size: 12px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
 .pipeline-deal-bottom {
   display: flex;
   align-items: center;
@@ -2212,6 +2235,15 @@ body.vesk-app {
   padding: 8px 12px;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.wa-widget-funnel {
+  font-size: 12px;
+  color: var(--vesk-text);
+  padding: 8px 10px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
 }
 
 .wa-widget-snippet {
