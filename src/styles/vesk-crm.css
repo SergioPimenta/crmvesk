@@ -2193,7 +2193,7 @@ body.vesk-app {
 
 .wa-widget-copy-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
 }
 
@@ -2205,6 +2205,13 @@ body.vesk-app {
   border: 1px solid var(--vesk-border);
   border-radius: 8px;
   word-break: break-all;
+}
+
+.wa-widget-btn {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .wa-widget-snippet {
@@ -2223,8 +2230,10 @@ body.vesk-app {
 .wa-widget-actions {
   display: flex;
   gap: 8px;
-  padding-top: 4px;
+  padding-top: 8px;
+  margin-top: 4px;
   border-top: 1px solid var(--vesk-border);
+  justify-content: flex-end;
 }
 
 @media (max-width: 768px) {

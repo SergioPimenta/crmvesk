@@ -145,10 +145,12 @@ const BotaoWhatsApp = () => {
             Gere um código de monitoramento para sites externos e acompanhe visualizações e cliques
           </div>
         </div>
-        <button type="button" className="crm-btn primary" onClick={openCreate}>
-          <i className="ti ti-plus" aria-hidden="true" />
-          Novo site
-        </button>
+        <div className="crm-page-actions">
+          <button type="button" className="crm-btn-primary" onClick={openCreate}>
+            <i className="ti ti-plus" aria-hidden="true" />
+            Novo site
+          </button>
+        </div>
       </div>
 
       {error && !modalOpen ? (
@@ -192,7 +194,7 @@ const BotaoWhatsApp = () => {
         <div className="crm-card wa-widget-empty" style={{ marginTop: 16 }}>
           <i className="ti ti-world-www" aria-hidden="true" />
           <p>Nenhum site cadastrado ainda.</p>
-          <button type="button" className="crm-btn primary" onClick={openCreate}>
+          <button type="button" className="crm-btn-primary" onClick={openCreate}>
             Cadastrar primeiro site
           </button>
         </div>
@@ -238,9 +240,10 @@ const BotaoWhatsApp = () => {
                   <code>{widget.monitorCode}</code>
                   <button
                     type="button"
-                    className="crm-btn ghost sm"
+                    className="crm-btn-secondary wa-widget-btn"
                     onClick={() => void handleCopy(widget, 'code')}
                   >
+                    <i className="ti ti-copy" aria-hidden="true" />
                     {copiedId === `${widget.id}-code` ? 'Copiado!' : 'Copiar'}
                   </button>
                 </div>
@@ -251,18 +254,25 @@ const BotaoWhatsApp = () => {
                 <pre className="wa-widget-snippet">{widget.embedSnippet}</pre>
                 <button
                   type="button"
-                  className="crm-btn ghost sm"
+                  className="crm-btn-secondary wa-widget-btn"
                   onClick={() => void handleCopy(widget, 'snippet')}
                 >
+                  <i className="ti ti-copy" aria-hidden="true" />
                   {copiedId === `${widget.id}-snippet` ? 'Copiado!' : 'Copiar código'}
                 </button>
               </div>
 
-              <div className="wa-widget-actions">
-                <button type="button" className="crm-btn ghost sm" onClick={() => openEdit(widget)}>
+              <div className="wa-widget-actions crm-row-actions">
+                <button type="button" className="crm-action-btn" onClick={() => openEdit(widget)}>
+                  <i className="ti ti-pencil" aria-hidden="true" />
                   Editar
                 </button>
-                <button type="button" className="crm-btn ghost sm danger" onClick={() => void handleDelete(widget)}>
+                <button
+                  type="button"
+                  className="crm-action-btn crm-action-btn-danger"
+                  onClick={() => void handleDelete(widget)}
+                >
+                  <i className="ti ti-trash" aria-hidden="true" />
                   Excluir
                 </button>
               </div>
@@ -348,7 +358,7 @@ const BotaoWhatsApp = () => {
             <button type="button" className="crm-btn-secondary" onClick={closeModal}>
               Cancelar
             </button>
-            <button type="submit" className="crm-btn primary" disabled={saving}>
+            <button type="submit" className="crm-btn-primary" disabled={saving} style={{ marginLeft: 'auto' }}>
               {saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Gerar código'}
             </button>
           </div>
