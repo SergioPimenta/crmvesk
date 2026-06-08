@@ -355,6 +355,90 @@ router.post('/contacts', async (req, res) => {
   });
 });
 
+router.post('/contacts/bulk-import', async (req, res) => {
+  const { items = [], pipelineId, stageKey, etapa = 'Prospecção' } = req.body ?? {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: 'Nenhum contato para importar' });
+  }
+  if (!stageKey) return res.status(400).json({ message: 'Etapa do funil é obrigatória' });
+
+  const saved = [];
+  let skipped = 0;
+  let resolvedPipelineId = null;
+
+  const contactKey = (nome, telefone) => {
+    const phone = String(telefone || '').replace(/\D/g, '');
+    return `${String(nome || '').trim().toLowerCase()}|${phone}`;
+  };
+
+  try {
+    await pool.transaction(async (conn) => {
+      const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
+      resolvedPipelineId = pipeId;
+
+      const [stageRows] = await conn.query(
+        'SELECT id FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? AND stage_key = ? LIMIT 1',
+        [req.userId, pipeId, stageKey]
+      );
+      if (!stageRows[0]) {
+        const err = new Error('Etapa inválida para o funil selecionado');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const [existingRows] = await conn.query('SELECT nome, telefone FROM contacts WHERE user_id = ?', [req.userId]);
+      const existing = new Set(existingRows.map((row) => contactKey(row.nome, row.telefone)));
+
+      for (const item of items) {
+        const nome = String(item.nome || '').trim();
+        if (!nome) {
+          skipped += 1;
+          continue;
+        }
+
+        const telefone = String(item.telefone || '').trim();
+        const key = contactKey(nome, telefone);
+        if (existing.has(key)) {
+          skipped += 1;
+          continue;
+        }
+
+        const ultimaInteracao = String(item.ultimaInteracao || 'Importado do Google Maps').trim();
+        const contactEtapa = String(item.etapa || etapa || 'Prospecção');
+
+        const [contactResult] = await conn.query(
+          `INSERT INTO contacts (user_id, company_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
+           VALUES (?, NULL, ?, '', ?, 'Lead', ?, ?, TRUE)`,
+          [req.userId, nome, telefone, contactEtapa, ultimaInteracao]
+        );
+        const contactId = contactResult.insertId;
+
+        const [dealResult] = await conn.query(
+          `INSERT INTO deals (user_id, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key)
+           VALUES (?, ?, NULL, ?, ?, '', '20%', ?)`,
+          [req.userId, pipeId, contactId, nome, stageKey]
+        );
+
+        existing.add(key);
+        saved.push({ contactId, dealId: dealResult.insertId, nome });
+      }
+    });
+  } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ message: err.message });
+    }
+    throw err;
+  }
+
+  res.status(201).json({
+    saved: saved.length,
+    skipped,
+    items: saved,
+    pipelineId: resolvedPipelineId,
+    stageKey,
+  });
+});
+
 router.put('/contacts/:id', async (req, res) => {
   const id = Number(req.params.id);
   const {

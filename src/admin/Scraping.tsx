@@ -37,7 +37,7 @@ const normalizePhone = (phone: string) => {
 };
 
 const Scraping = () => {
-  const { addContact, contacts, pipelines, activePipelineId, stages } = useCrmData();
+  const { refreshCrmData, pipelines, activePipelineId, stages } = useCrmData();
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(10);
   const [headless, setHeadless] = useState(true);
@@ -87,56 +87,48 @@ const Scraping = () => {
     try {
       const { pipelineId, stage } = await resolveFirstStage();
       const etapa = stageToContactEtapa(stage.stageKey, stage.titulo);
-      const existing = new Set(
-        contacts.map((c) => `${c.nome.trim().toLowerCase()}|${normalizePhone(c.telefone)}`)
-      );
 
-      let saved = 0;
-      let skipped = 0;
+      const items = results
+        .map((row) => {
+          const nome = row.nome.trim();
+          if (!nome) return null;
 
-      for (const row of results) {
-        const nome = row.nome.trim();
-        if (!nome) {
-          skipped += 1;
-          continue;
-        }
+          const notes = ['Importado do Google Maps'];
+          if (row.site) notes.push(row.site.replace(/^https?:\/\//, ''));
+          if (row.endereco) notes.push(row.endereco);
 
-        const telefone = normalizePhone(row.telefone);
-        const key = `${nome.toLowerCase()}|${telefone}`;
-        if (existing.has(key)) {
-          skipped += 1;
-          continue;
-        }
+          return {
+            nome,
+            telefone: normalizePhone(row.telefone),
+            etapa,
+            ultimaInteracao: notes.join(' · '),
+          };
+        })
+        .filter(Boolean);
 
-        const notes = ['Importado do Google Maps'];
-        if (row.site) notes.push(row.site.replace(/^https?:\/\//, ''));
-        if (row.endereco) notes.push(row.endereco);
-
-        await addContact({
-          nome,
-          email: '',
-          telefone,
-          tipo: 'Lead',
-          etapa,
-          precisaFollowUp: true,
-          ultimaInteracao: notes.join(' · '),
-          pipelineId,
-          stageKey: stage.stageKey,
-        });
-
-        existing.add(key);
-        saved += 1;
+      if (items.length === 0) {
+        setStatus('Nenhum contato válido para salvar.');
+        return;
       }
 
-      if (saved === 0) {
+      const data = await api.post<{ saved: number; skipped: number }>('/crm/contacts/bulk-import', {
+        pipelineId,
+        stageKey: stage.stageKey,
+        etapa,
+        items,
+      });
+
+      await refreshCrmData();
+
+      if (data.saved === 0) {
         setStatus(
-          skipped > 0
+          data.skipped > 0
             ? 'Nenhum contato novo para salvar (todos já existiam ou estavam vazios).'
             : 'Nenhum contato foi salvo.'
         );
       } else {
         setStatus(
-          `${saved} contato(s) salvo(s) em Contatos${skipped > 0 ? ` · ${skipped} ignorado(s) (duplicados ou vazios)` : ''}.`
+          `${data.saved} contato(s) salvo(s) em Contatos${data.skipped > 0 ? ` · ${data.skipped} ignorado(s) (duplicados ou vazios)` : ''}.`
         );
       }
     } catch (err: unknown) {

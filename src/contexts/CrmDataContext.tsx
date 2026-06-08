@@ -133,6 +133,7 @@ type CrmDataContextType = {
   updateEmail: (id: string, patch: Partial<Pick<EmailItem, 'status'>>) => void;
   deleteEmail: (id: string) => Promise<void>;
   refreshEmails: () => Promise<void>;
+  refreshCrmData: () => Promise<void>;
   addProposal: (proposal: Omit<Proposal, 'id'> & { id?: string }) => string;
 
   addPipeline: (pipeline: Omit<Pipeline, 'id'> & { id?: string }) => string;
@@ -343,10 +344,14 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const key = result.stageKey ?? stageKey;
         setDeals((prev) =>
           prev.map((d) =>
-            d.id === dealTempId ? { ...d, id: dealId, pipelineId: pipeId, stageKey: key } : d
+            d.id === dealTempId
+              ? { ...d, id: dealId, pipelineId: pipeId, stageKey: key, contatoId: id }
+              : d
           )
         );
-        if (pipeId) setActivePipelineId(pipeId);
+        if (pipeId) {
+          setActivePipelineId((prev) => (prev === pipeId ? prev : pipeId));
+        }
       } else {
         setDeals((prev) => prev.filter((d) => d.id !== dealTempId));
         throw new Error('Contato salvo, mas o negócio não foi criado no funil.');
@@ -437,6 +442,27 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         contatoId: (m as any).contatoId ? String((m as any).contatoId) : undefined,
         empresaId: (m as any).empresaId ? String((m as any).empresaId) : undefined,
       }))
+    );
+  }, []);
+
+  const refreshCrmData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const [contactsData, dealsData] = await Promise.all([
+      api.get<Contact[]>('/crm/contacts'),
+      api.get<Record<string, unknown>[]>('/crm/deals'),
+    ]);
+
+    const normalizedContacts = contactsData.map((c) => ({
+      ...c,
+      id: String((c as any).id),
+      empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined,
+    }));
+
+    setContacts(normalizedContacts);
+    setDeals(
+      dealsData.map(mapDealRow).map((deal) => enrichDealWithContact(deal, normalizedContacts))
     );
   }, []);
 
@@ -681,6 +707,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updateEmail,
     deleteEmail,
     refreshEmails,
+    refreshCrmData,
     addProposal,
     addPipeline,
     updatePipeline,
