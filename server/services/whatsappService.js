@@ -4,50 +4,99 @@ import { normalizeRow } from '../utils/rows.js';
 import {
   connectInstance,
   createInstance,
-  extractMessageText,
+  extractMessageText as extractEvolutionMessageText,
   extractQrBase64,
   findChats,
   findMessages,
   getConnectionState,
   isConnectedState,
-  jidToPhone,
-  sendText,
+  jidToPhone as evolutionJidToPhone,
+  sendText as evolutionSendText,
   setWebhook,
 } from './evolutionClient.js';
+import {
+  jidToPhone as metaJidToPhone,
+  parseWebhookMessages,
+  phoneToJid,
+  sendText as metaSendText,
+  validateConnection,
+  verifySignature,
+} from './metaWhatsAppClient.js';
 
 const webhookPublicBase = () =>
-  process.env.WHATSAPP_WEBHOOK_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`;
+  process.env.WHATSAPP_WEBHOOK_PUBLIC_URL ||
+  process.env.PUBLIC_URL ||
+  `http://localhost:${process.env.PORT || 3001}`;
+
+export function jidToPhone(remoteJid) {
+  return evolutionJidToPhone(remoteJid) || metaJidToPhone(remoteJid);
+}
 
 export async function getSettings(userId) {
   const [rows] = await pool.query(
     `SELECT user_id AS userId, provider, base_url AS baseUrl, instance_name AS instanceName,
-            api_key AS apiKey, phone, status, webhook_secret AS webhookSecret
+            api_key AS apiKey, phone, status, webhook_secret AS webhookSecret,
+            app_secret AS appSecret
      FROM whatsapp_settings WHERE user_id = ?`,
     [userId]
   );
   return rows[0] ? normalizeRow(rows[0]) : null;
 }
 
-export async function saveSettings(userId, { baseUrl, instanceName, apiKey, phone = '' }) {
-  if (!baseUrl || !instanceName || !apiKey) {
-    throw new Error('URL da API, instância e token são obrigatórios');
-  }
-
+export async function saveSettings(userId, payload) {
+  const provider = payload.provider === 'meta' ? 'meta' : 'evolution';
   const existing = await getSettings(userId);
   const webhookSecret = existing?.webhookSecret || crypto.randomBytes(24).toString('hex');
 
-  await pool.query(
-    `INSERT INTO whatsapp_settings (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret)
-     VALUES (?, 'evolution', ?, ?, ?, ?, 'disconnected', ?)
-     ON CONFLICT (user_id) DO UPDATE SET
-       provider = 'evolution',
-       base_url = EXCLUDED.base_url,
-       instance_name = EXCLUDED.instance_name,
-       api_key = EXCLUDED.api_key,
-       phone = EXCLUDED.phone,
-       status = CASE WHEN whatsapp_settings.status = 'connected' THEN whatsapp_settings.status ELSE 'disconnected' END`,
-    [userId, baseUrl.trim(), instanceName.trim(), apiKey.trim(), phone.trim(), webhookSecret]
-  );
+  if (provider === 'meta') {
+    const phoneNumberId = String(payload.phoneNumberId || payload.instanceName || '').trim();
+    const accessToken = String(payload.accessToken || payload.apiKey || existing?.apiKey || '').trim();
+    const phone = String(payload.phone || '').trim();
+    const appSecret = String(payload.appSecret ?? existing?.appSecret ?? '').trim();
+
+    if (!phoneNumberId || !accessToken) {
+      throw new Error('Phone Number ID e Access Token são obrigatórios');
+    }
+
+    await pool.query(
+      `INSERT INTO whatsapp_settings
+         (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret, app_secret)
+       VALUES (?, 'meta', '', ?, ?, ?, 'disconnected', ?, ?)
+       ON CONFLICT (user_id) DO UPDATE SET
+         provider = 'meta',
+         base_url = '',
+         instance_name = EXCLUDED.instance_name,
+         api_key = EXCLUDED.api_key,
+         phone = EXCLUDED.phone,
+         app_secret = EXCLUDED.app_secret,
+         status = CASE WHEN whatsapp_settings.status = 'connected' THEN whatsapp_settings.status ELSE 'disconnected' END`,
+      [userId, phoneNumberId, accessToken, phone, webhookSecret, appSecret]
+    );
+  } else {
+    const baseUrl = String(payload.baseUrl || '').trim();
+    const instanceName = String(payload.instanceName || '').trim();
+    const apiKey = String(payload.apiKey || existing?.apiKey || '').trim();
+    const phone = String(payload.phone || '').trim();
+
+    if (!baseUrl || !instanceName || !apiKey) {
+      throw new Error('URL da API, instância e token são obrigatórios');
+    }
+
+    await pool.query(
+      `INSERT INTO whatsapp_settings
+         (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret, app_secret)
+       VALUES (?, 'evolution', ?, ?, ?, ?, 'disconnected', ?, '')
+       ON CONFLICT (user_id) DO UPDATE SET
+         provider = 'evolution',
+         base_url = EXCLUDED.base_url,
+         instance_name = EXCLUDED.instance_name,
+         api_key = EXCLUDED.api_key,
+         phone = EXCLUDED.phone,
+         app_secret = '',
+         status = CASE WHEN whatsapp_settings.status = 'connected' THEN whatsapp_settings.status ELSE 'disconnected' END`,
+      [userId, baseUrl, instanceName, apiKey, phone, webhookSecret]
+    );
+  }
 
   return getSettings(userId);
 }
@@ -58,7 +107,7 @@ export async function deleteSettings(userId) {
   await pool.query('DELETE FROM whatsapp_settings WHERE user_id = ?', [userId]);
 }
 
-function webhookUrlFor(userId, webhookSecret) {
+export function webhookUrlFor(userId, webhookSecret) {
   return `${webhookPublicBase()}/api/whatsapp/webhook/${userId}/${webhookSecret}`;
 }
 
@@ -66,33 +115,84 @@ export async function refreshConnectionStatus(userId) {
   const settings = await getSettings(userId);
   if (!settings) return { configured: false, status: 'disconnected' };
 
+  if (settings.provider === 'meta') {
+    try {
+      const info = await validateConnection(settings.instanceName, settings.apiKey);
+      if (!settings.phone && info.phone) {
+        await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
+      }
+      await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+      return {
+        configured: true,
+        status: 'connected',
+        provider: 'meta',
+        displayName: info.displayName,
+        settings: maskSettings(await getSettings(userId)),
+      };
+    } catch (err) {
+      await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['disconnected', userId]);
+      return {
+        configured: true,
+        status: 'disconnected',
+        provider: 'meta',
+        error: err.message,
+        settings: maskSettings(settings),
+      };
+    }
+  }
+
   try {
     const state = await getConnectionState(settings.baseUrl, settings.apiKey, settings.instanceName);
     const connected = isConnectedState(state);
     const status = connected ? 'connected' : state === 'connecting' ? 'connecting' : 'disconnected';
     await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', [status, userId]);
-    return { configured: true, status, state, settings: maskSettings(settings) };
+    return { configured: true, status, state, provider: 'evolution', settings: maskSettings(settings) };
   } catch (err) {
     await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['disconnected', userId]);
-    return { configured: true, status: 'disconnected', error: err.message, settings: maskSettings(settings) };
+    return {
+      configured: true,
+      status: 'disconnected',
+      provider: 'evolution',
+      error: err.message,
+      settings: maskSettings(settings),
+    };
   }
 }
 
 export function maskSettings(settings) {
   if (!settings) return null;
   return {
-    baseUrl: settings.baseUrl,
+    provider: settings.provider || 'evolution',
+    baseUrl: settings.baseUrl || '',
     instanceName: settings.instanceName,
+    phoneNumberId: settings.provider === 'meta' ? settings.instanceName : undefined,
     phone: settings.phone,
     status: settings.status,
     hasApiKey: Boolean(settings.apiKey),
+    hasAppSecret: Boolean(settings.appSecret),
     apiKeyPreview: settings.apiKey ? `${settings.apiKey.slice(0, 4)}…${settings.apiKey.slice(-4)}` : '',
+    webhookUrl: webhookUrlFor(settings.userId, settings.webhookSecret),
+    verifyToken: settings.webhookSecret,
   };
 }
 
 export async function startConnection(userId) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('Configure a integração antes de conectar');
+
+  if (settings.provider === 'meta') {
+    const info = await validateConnection(settings.instanceName, settings.apiKey);
+    if (!settings.phone && info.phone) {
+      await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
+    }
+    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+    return {
+      status: 'connected',
+      provider: 'meta',
+      displayName: info.displayName,
+      webhookUrl: webhookUrlFor(userId, settings.webhookSecret),
+    };
+  }
 
   const { baseUrl, apiKey, instanceName } = settings;
 
@@ -120,6 +220,7 @@ export async function startConnection(userId) {
 
   return {
     status: 'connecting',
+    provider: 'evolution',
     qrcode,
     pairingCode: connectData?.pairingCode ?? null,
   };
@@ -129,6 +230,14 @@ export async function getConnectionView(userId) {
   const refreshed = await refreshConnectionStatus(userId);
   if (!refreshed.configured) {
     return { configured: false, status: 'disconnected' };
+  }
+
+  if (refreshed.provider === 'meta') {
+    const settings = await getSettings(userId);
+    return {
+      ...refreshed,
+      webhookUrl: settings ? webhookUrlFor(userId, settings.webhookSecret) : null,
+    };
   }
 
   let qrcode = null;
@@ -200,10 +309,56 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
   return ins.insertId;
 }
 
-export async function processWebhook(userId, webhookSecret, payload) {
+export async function verifyMetaWebhook(userId, webhookSecret, query) {
   const settings = await getSettings(userId);
   if (!settings || settings.webhookSecret !== webhookSecret) {
     throw new Error('Webhook não autorizado');
+  }
+
+  const mode = query['hub.mode'];
+  const token = query['hub.verify_token'];
+  const challenge = query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === webhookSecret && challenge) {
+    return challenge;
+  }
+
+  throw new Error('Verificação do webhook falhou');
+}
+
+export async function processWebhook(userId, webhookSecret, payload, { rawBody, signature } = {}) {
+  const settings = await getSettings(userId);
+  if (!settings || settings.webhookSecret !== webhookSecret) {
+    throw new Error('Webhook não autorizado');
+  }
+
+  if (settings.provider === 'meta') {
+    if (settings.appSecret && rawBody) {
+      const valid = verifySignature(settings.appSecret, rawBody, signature);
+      if (!valid) throw new Error('Assinatura do webhook inválida');
+    }
+
+    const items = parseWebhookMessages(payload);
+    for (const item of items) {
+      if (!item.text) continue;
+      const remoteJid = phoneToJid(item.from);
+      const chatId = await upsertChat(userId, {
+        remoteJid,
+        name: item.contactName || item.from,
+        lastMessage: item.text,
+        lastMessageAt: item.messageAt,
+        incrementUnread: true,
+      });
+      await insertMessage(userId, chatId, {
+        waMessageId: item.waMessageId,
+        body: item.text,
+        fromMe: false,
+        messageAt: item.messageAt,
+      });
+    }
+
+    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+    return { ok: true };
   }
 
   const event = String(payload?.event || payload?.type || '').toLowerCase();
@@ -231,7 +386,7 @@ export async function processWebhook(userId, webhookSecret, payload) {
 
     const remoteJid = key.remoteJid;
     const fromMe = Boolean(key.fromMe);
-    const text = extractMessageText(message);
+    const text = extractEvolutionMessageText(message);
     if (!text) continue;
 
     const messageAt = item?.messageTimestamp
@@ -260,6 +415,10 @@ export async function processWebhook(userId, webhookSecret, payload) {
 export async function syncChatsFromProvider(userId) {
   const settings = await getSettings(userId);
   if (!settings) return [];
+
+  if (settings.provider === 'meta') {
+    return listChats(userId);
+  }
 
   const chats = await findChats(settings.baseUrl, settings.apiKey, settings.instanceName);
   for (const chat of chats) {
@@ -336,6 +495,10 @@ export async function loadMessagesFromProvider(userId, chatId) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
 
+  if (settings.provider === 'meta') {
+    return listMessages(userId, chatId);
+  }
+
   const [chatRows] = await pool.query(
     'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
     [chatId, userId]
@@ -347,7 +510,7 @@ export async function loadMessagesFromProvider(userId, chatId) {
   for (const item of messages) {
     const key = item?.key || item;
     const message = item?.message || item;
-    const text = extractMessageText(message);
+    const text = extractEvolutionMessageText(message);
     if (!text || !key?.remoteJid) continue;
     const messageAt = item?.messageTimestamp
       ? new Date(Number(item.messageTimestamp) * 1000)
@@ -376,9 +539,18 @@ export async function sendChatMessage(userId, chatId, text) {
   if (!chat) throw new Error('Conversa não encontrada');
 
   const number = jidToPhone(chat.remoteJid);
-  const result = await sendText(settings.baseUrl, settings.apiKey, settings.instanceName, number, text);
+  let result;
+  let waMessageId = null;
+
+  if (settings.provider === 'meta') {
+    result = await metaSendText(settings.instanceName, settings.apiKey, number, text);
+    waMessageId = result?.messages?.[0]?.id || null;
+  } else {
+    result = await evolutionSendText(settings.baseUrl, settings.apiKey, settings.instanceName, number, text);
+    waMessageId = result?.key?.id || result?.messageId || null;
+  }
+
   const messageAt = new Date();
-  const waMessageId = result?.key?.id || result?.messageId || null;
 
   await insertMessage(userId, chatId, {
     waMessageId,

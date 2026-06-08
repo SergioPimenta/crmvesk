@@ -2352,6 +2352,57 @@ body.vesk-app {
   border-radius: 8px;
 }
 
+.wa-provider-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.wa-provider-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  background: var(--vesk-surface2);
+  color: var(--vesk-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.wa-provider-btn:hover:not(:disabled) {
+  border-color: var(--vesk-orange);
+  color: var(--vesk-text);
+}
+
+.wa-provider-btn.active {
+  border-color: var(--vesk-orange);
+  background: #e85d2415;
+  color: var(--vesk-orange);
+}
+
+.wa-provider-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.crm-btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--vesk-orange);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.crm-btn-link:hover {
+  opacity: 0.85;
+}
+
 .integration-hint code {
   font-size: 10px;
   background: var(--vesk-bg);

@@ -47,7 +47,14 @@ export async function createApp() {
       credentials: true,
     })(req, res, next);
   });
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req, _res, buf) => {
+      if (req.path.includes('/api/whatsapp/webhook/')) {
+        req.rawBody = buf.toString('utf8');
+      }
+    },
+  }));
 
   app.use('/api/auth', authRoutes);
   app.use('/api/upload', uploadRoutes);

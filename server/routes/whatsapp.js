@@ -14,16 +14,33 @@ import {
   sendChatMessage,
   startConnection,
   syncChatsFromProvider,
+  verifyMetaWebhook,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
 const router = express.Router();
 
+router.get('/webhook/:userId/:secret', async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isFinite(userId)) return res.status(400).send('ID inválido');
+    const challenge = await verifyMetaWebhook(userId, req.params.secret, req.query);
+    res.status(200).send(String(challenge));
+  } catch (err) {
+    console.error('WhatsApp webhook verify:', err.message);
+    res.status(403).send(err.message);
+  }
+});
+
 router.post('/webhook/:userId/:secret', async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     if (!Number.isFinite(userId)) return res.status(400).json({ message: 'ID inválido' });
-    await processWebhook(userId, req.params.secret, req.body);
+
+    const rawBody = req.rawBody || JSON.stringify(req.body ?? {});
+    const signature = req.get('x-hub-signature-256') || req.get('X-Hub-Signature-256') || '';
+
+    await processWebhook(userId, req.params.secret, req.body, { rawBody, signature });
     res.json({ ok: true });
   } catch (err) {
     console.error('WhatsApp webhook:', err.message);
@@ -40,18 +57,36 @@ router.get('/config', async (req, res) => {
 
 router.put('/config', async (req, res) => {
   try {
-    const { baseUrl, instanceName, apiKey, phone } = req.body ?? {};
+    const body = req.body ?? {};
     const existing = await getSettings(req.userId);
-    const mergedKey = apiKey?.trim() || existing?.apiKey;
-    if (!mergedKey) {
-      return res.status(400).json({ message: 'Token / API Key é obrigatório' });
+    const provider = body.provider === 'meta' ? 'meta' : body.provider === 'evolution' ? 'evolution' : existing?.provider || 'evolution';
+
+    if (provider === 'meta') {
+      const mergedToken = body.accessToken?.trim() || body.apiKey?.trim() || existing?.apiKey;
+      if (!mergedToken) {
+        return res.status(400).json({ message: 'Access Token é obrigatório' });
+      }
+      await saveSettings(req.userId, {
+        provider: 'meta',
+        phoneNumberId: body.phoneNumberId || body.instanceName,
+        accessToken: mergedToken,
+        phone: body.phone,
+        appSecret: body.appSecret,
+      });
+    } else {
+      const mergedKey = body.apiKey?.trim() || existing?.apiKey;
+      if (!mergedKey) {
+        return res.status(400).json({ message: 'Token / API Key é obrigatório' });
+      }
+      await saveSettings(req.userId, {
+        provider: 'evolution',
+        baseUrl: body.baseUrl,
+        instanceName: body.instanceName,
+        apiKey: mergedKey,
+        phone: body.phone,
+      });
     }
-    await saveSettings(req.userId, {
-      baseUrl,
-      instanceName,
-      apiKey: mergedKey,
-      phone,
-    });
+
     const settings = await getSettings(req.userId);
     res.json({ settings: maskSettings(settings) });
   } catch (err) {
@@ -101,7 +136,7 @@ router.get('/chats', async (req, res) => {
     return res.json({ configured: false, status: 'disconnected', chats: [] });
   }
   const chats = await listChats(req.userId);
-  res.json({ configured: true, status: status.status, chats });
+  res.json({ configured: true, status: status.status, provider: status.provider, chats });
 });
 
 router.get('/chats/:id/messages', async (req, res) => {
