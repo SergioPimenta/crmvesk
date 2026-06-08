@@ -8,10 +8,11 @@ router.use(verifyToken);
 
 router.post('/maps', async (req, res) => {
   try {
-    const { query, limit, onlyWithPhone } = req.body ?? {};
+    const { query, limit, headless, onlyWithPhone } = req.body ?? {};
     const data = await searchGoogleMaps({
       query,
       limit,
+      headless: headless !== false,
       onlyWithPhone: Boolean(onlyWithPhone),
     });
     res.json(data);

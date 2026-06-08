@@ -2568,6 +2568,30 @@ body.vesk-app {
   color: #e05252;
 }
 
+.scrape-status-error div {
+  flex: 1;
+  min-width: 0;
+}
+
+.scrape-setup-steps {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--vesk-muted);
+}
+
+.scrape-setup-steps a {
+  color: #378add;
+}
+
+.scrape-setup-steps code {
+  font-size: 10px;
+  background: var(--vesk-bg);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
 .scrape-api-hint {
   margin: 0;
   font-size: 11px;

@@ -12,6 +12,7 @@ type ScrapeResult = {
 const Scraping = () => {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(30);
+  const [headless, setHeadless] = useState(true);
   const [onlyWithPhone, setOnlyWithPhone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,13 +27,18 @@ const Scraping = () => {
     setResults([]);
 
     try {
-      const data = await api.post<{ total: number; results: ScrapeResult[] }>('/scraping/maps', {
-        query: query.trim(),
-        limit: Number(limit) || 30,
-        onlyWithPhone,
-      });
+      const data = await api.post<{ total: number; results: ScrapeResult[]; source?: string }>(
+        '/scraping/maps',
+        {
+          query: query.trim(),
+          limit: Number(limit) || 30,
+          headless,
+          onlyWithPhone,
+        }
+      );
       setResults(data.results || []);
-      setStatus(`Concluído: ${data.total} empresa(s).`);
+      const via = data.source === 'python-playwright' ? ' (scraper Python)' : '';
+      setStatus(`Concluído: ${data.total} empresa(s)${via}.`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao executar busca');
     } finally {
@@ -40,13 +46,19 @@ const Scraping = () => {
     }
   };
 
+  const showPythonSetup =
+    error.includes('MAPS_SCRAPER_URL') ||
+    error.includes('Scraper Python') ||
+    error.includes('Python não encontrado') ||
+    error.includes('Playwright');
+
   return (
     <CrmLayout>
       <div className="crm-page-header">
         <div>
           <div className="crm-page-title">Google Maps Scraping</div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            Busque empresas e visualize nome, telefone e site em uma tabela
+            Busque empresas e visualize nome, telefone e site em uma tabela — gratuito via Python + Playwright
           </div>
         </div>
       </div>
@@ -88,6 +100,15 @@ const Scraping = () => {
             <label className="crm-checkbox-label scrape-headless">
               <input
                 type="checkbox"
+                checked={headless}
+                onChange={(e) => setHeadless(e.target.checked)}
+                disabled={loading}
+              />
+              Rodar sem abrir janela do Chrome
+            </label>
+            <label className="crm-checkbox-label scrape-headless">
+              <input
+                type="checkbox"
                 checked={onlyWithPhone}
                 onChange={(e) => setOnlyWithPhone(e.target.checked)}
                 disabled={loading}
@@ -99,7 +120,31 @@ const Scraping = () => {
           {error ? (
             <div className="integration-hint scrape-status scrape-status-error">
               <i className="ti ti-alert-circle" aria-hidden="true" />
-              <span>{error}</span>
+              <div>
+                <span>{error}</span>
+                {showPythonSetup ? (
+                  <ol className="scrape-setup-steps">
+                    <li>
+                      Instale Python 3.10+ e no terminal do projeto execute:
+                      <br />
+                      <code>pip install -r scraper/requirements.txt</code>
+                      <br />
+                      <code>playwright install chromium</code>
+                    </li>
+                    <li>
+                      Inicie o serviço scraper:
+                      <br />
+                      <code>npm run scraper</code>
+                    </li>
+                    <li>
+                      No <code>server/.env</code> (ou Vercel) adicione:
+                      <br />
+                      <code>MAPS_SCRAPER_URL=http://localhost:8765</code>
+                    </li>
+                    <li>Reinicie o servidor da API e rode a busca novamente.</li>
+                  </ol>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -111,8 +156,9 @@ const Scraping = () => {
           ) : null}
 
           <p className="scrape-api-hint">
-            Utiliza a <strong>Google Places API</strong>. Configure <code>GOOGLE_MAPS_API_KEY</code> nas variáveis do
-            servidor.
+            Motor gratuito: <strong>Python + Playwright</strong> (sem API paga do Google). Em produção na Vercel,
+            hospede o serviço em <code>scraper/</code> (Railway, Render, VPS) e configure{' '}
+            <code>MAPS_SCRAPER_URL</code>.
           </p>
         </form>
       </div>
@@ -126,7 +172,7 @@ const Scraping = () => {
 
         {results.length === 0 ? (
           <div className="kanban-empty">
-            {loading ? 'Aguarde, buscando empresas…' : 'Nenhum resultado ainda. Execute uma busca acima.'}
+            {loading ? 'Aguarde, o Chrome está coletando empresas no Maps…' : 'Nenhum resultado ainda. Execute uma busca acima.'}
           </div>
         ) : (
           <div className="scrape-table-wrap">

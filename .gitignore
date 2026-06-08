@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Python
+__pycache__/
+*.pyc
+
 # server env
 server/.env
 server/.env.vercel
