@@ -10,6 +10,7 @@ export type Contact = {
   nome: string;
   email: string;
   telefone: string;
+  site?: string;
   empresaId?: string;
   tipo: ContactType;
   etapa: ContactStage;

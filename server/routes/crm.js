@@ -284,7 +284,7 @@ router.put('/companies/:id', async (req, res) => {
 // Contacts
 router.get('/contacts', async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT id, company_id AS empresaId, nome, email, telefone, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp
+    `SELECT id, company_id AS empresaId, nome, email, telefone, site, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp
      FROM contacts WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
@@ -297,6 +297,7 @@ router.post('/contacts', async (req, res) => {
     nome,
     email = '',
     telefone = '',
+    site = '',
     tipo = 'Lead',
     etapa = 'Prospecção',
     ultimaInteracao = '',
@@ -314,9 +315,9 @@ router.post('/contacts', async (req, res) => {
   try {
     await pool.transaction(async (conn) => {
       const [result] = await conn.query(
-        `INSERT INTO contacts (user_id, company_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.userId, asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, !!precisaFollowUp]
+        `INSERT INTO contacts (user_id, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.userId, asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp]
       );
       contactId = result.insertId;
 
@@ -405,11 +406,12 @@ router.post('/contacts/bulk-import', async (req, res) => {
 
         const ultimaInteracao = String(item.ultimaInteracao || 'Google Maps').trim();
         const contactEtapa = String(item.etapa || etapa || 'Prospecção');
+        const site = String(item.site || '').trim();
 
         const [contactResult] = await conn.query(
-          `INSERT INTO contacts (user_id, company_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
-           VALUES (?, NULL, ?, '', ?, 'Lead', ?, ?, TRUE)`,
-          [req.userId, nome, telefone, contactEtapa, ultimaInteracao]
+          `INSERT INTO contacts (user_id, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
+           VALUES (?, NULL, ?, '', ?, ?, 'Lead', ?, ?, TRUE)`,
+          [req.userId, nome, telefone, site, contactEtapa, ultimaInteracao]
         );
         const contactId = contactResult.insertId;
 
@@ -446,6 +448,7 @@ router.put('/contacts/:id', async (req, res) => {
     nome,
     email = '',
     telefone = '',
+    site = '',
     tipo = 'Lead',
     etapa = 'Prospecção',
     ultimaInteracao = '',
@@ -456,9 +459,9 @@ router.put('/contacts/:id', async (req, res) => {
 
   await pool.query(
     `UPDATE contacts
-     SET company_id = ?, nome = ?, email = ?, telefone = ?, tipo = ?, etapa = ?, ultima_interacao = ?, precisa_followup = ?
+     SET company_id = ?, nome = ?, email = ?, telefone = ?, site = ?, tipo = ?, etapa = ?, ultima_interacao = ?, precisa_followup = ?
      WHERE id = ? AND user_id = ?`,
-    [asId(empresaId), nome, email, telefone, tipo, etapa, ultimaInteracao, !!precisaFollowUp, id, req.userId]
+    [asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp, id, req.userId]
   );
   res.status(204).send();
 });

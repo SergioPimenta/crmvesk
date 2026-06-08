@@ -55,6 +55,8 @@ const Contatos = () => {
 
     telefone: '',
 
+    site: '',
+
     empresaId: '',
 
     tipo: 'Lead' as ContactType,
@@ -176,6 +178,8 @@ const Contatos = () => {
 
       telefone: '',
 
+      site: '',
+
       empresaId: '',
 
       tipo: 'Lead',
@@ -220,6 +224,8 @@ const Contatos = () => {
 
       telefone: c.telefone ?? '',
 
+      site: c.site ?? '',
+
       empresaId: c.empresaId ?? '',
 
       tipo: c.tipo,
@@ -248,6 +254,7 @@ const Contatos = () => {
         nome: form.nome.trim(),
         email: form.email.trim(),
         telefone: form.telefone.trim(),
+        site: form.site.trim(),
         empresaId: form.empresaId || undefined,
         tipo: form.tipo,
         etapa,
@@ -298,6 +305,8 @@ const Contatos = () => {
       email: form.email.trim(),
 
       telefone: form.telefone.trim(),
+
+      site: form.site.trim(),
 
       empresaId: form.empresaId || undefined,
 
@@ -417,6 +426,8 @@ const Contatos = () => {
 
               <th>Telefone</th>
 
+              <th>Site</th>
+
               <th>Empresa</th>
 
               <th>Etapa</th>
@@ -460,6 +471,22 @@ const Contatos = () => {
                 </td>
 
                 <td style={{ color: 'var(--vesk-muted)' }}>{c.telefone}</td>
+
+                <td>
+                  {c.site?.trim() ? (
+                    <a
+                      href={c.site.startsWith('http') ? c.site : `https://${c.site}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="scrape-site-link"
+                    >
+                      {c.site.replace(/^https?:\/\//, '').slice(0, 36)}
+                      {c.site.length > 40 ? '…' : ''}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </td>
 
                 <td style={{ color: 'var(--vesk-muted)' }}>{getCompanyName(c.empresaId)}</td>
 
@@ -570,6 +597,26 @@ const Contatos = () => {
             <label htmlFor="c_tel">Telefone</label>
 
             <input id="c_tel" value={form.telefone} onChange={(e) => setForm((p) => ({ ...p, telefone: e.target.value }))} />
+
+          </div>
+
+          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+
+            <label htmlFor="c_site">Site</label>
+
+            <input
+
+              id="c_site"
+
+              type="text"
+
+              placeholder="https://exemplo.com.br"
+
+              value={form.site}
+
+              onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}
+
+            />
 
           </div>
 
@@ -790,6 +837,26 @@ const Contatos = () => {
             <label htmlFor="ec_tel">Telefone</label>
 
             <input id="ec_tel" value={form.telefone} onChange={(e) => setForm((p) => ({ ...p, telefone: e.target.value }))} />
+
+          </div>
+
+          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+
+            <label htmlFor="ec_site">Site</label>
+
+            <input
+
+              id="ec_site"
+
+              type="text"
+
+              placeholder="https://exemplo.com.br"
+
+              value={form.site}
+
+              onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}
+
+            />
 
           </div>
 

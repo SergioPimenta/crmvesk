@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   nome VARCHAR(160) NOT NULL,
   email VARCHAR(160) DEFAULT '',
   telefone VARCHAR(80) DEFAULT '',
+  site VARCHAR(512) DEFAULT '',
   tipo ENUM('Lead','Cliente','Prospect') DEFAULT 'Lead',
   etapa ENUM('Prospecção','Qualificação','Proposta','Negociação','Fechado') DEFAULT 'Prospecção',
   ultima_interacao VARCHAR(255) DEFAULT '',

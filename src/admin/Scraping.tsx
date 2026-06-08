@@ -96,6 +96,7 @@ const Scraping = () => {
           return {
             nome,
             telefone: normalizePhone(row.telefone),
+            site: (row.site || '').trim(),
             etapa,
             ultimaInteracao: 'Google Maps',
           };

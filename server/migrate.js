@@ -114,6 +114,7 @@ export async function runMigrations() {
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
   await migrateDealsContactId();
+  await migrateContactsSite();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -195,6 +196,11 @@ async function migrateContactFormWidgets() {
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_user ON contact_form_widgets(user_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_code ON contact_form_widgets(monitor_code)');
+}
+
+async function migrateContactsSite() {
+  if (!(await tableExists('contacts'))) return;
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS site VARCHAR(512) DEFAULT ''`);
 }
 
 async function migrateDealsContactId() {
