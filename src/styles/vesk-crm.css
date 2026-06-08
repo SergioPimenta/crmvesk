@@ -1163,16 +1163,66 @@ body.vesk-app {
   gap: 8px;
 }
 
+.inbox-filters {
+  margin-bottom: 10px;
+  padding-bottom: 0;
+}
+
 .inbox-item {
-  text-align: left;
-  width: 100%;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   border: 1px solid var(--vesk-border);
   background: var(--vesk-surface2);
   border-radius: 12px;
-  padding: 10px;
-  cursor: pointer;
+  overflow: hidden;
   color: var(--vesk-text);
   font-family: var(--font-body);
+}
+
+.inbox-item.unread {
+  border-color: #e85d2435;
+  background: #e85d2408;
+}
+
+.inbox-item-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 10px;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+
+.inbox-item-delete {
+  flex-shrink: 0;
+  width: 38px;
+  border: none;
+  border-left: 1px solid var(--vesk-border);
+  background: transparent;
+  color: var(--vesk-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.inbox-item-delete:hover {
+  color: #e05252;
+  background: #e0525210;
+}
+
+.inbox-item-delete-inline {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  margin-left: auto;
 }
 
 .inbox-item:hover {
@@ -1182,6 +1232,11 @@ body.vesk-app {
 .inbox-item.active {
   border-color: var(--vesk-orange);
   box-shadow: 0 0 0 2px #e85d2418;
+}
+
+.inbox-item.unread .inbox-from,
+.inbox-item.unread .inbox-subject {
+  font-weight: 700;
 }
 
 .inbox-row {

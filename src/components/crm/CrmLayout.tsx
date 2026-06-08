@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useCrmData } from '../../contexts/CrmDataContext';
+import { useCrmData, isEmailUnread } from '../../contexts/CrmDataContext';
 
 interface CrmLayoutProps {
   children: ReactNode;
@@ -22,7 +22,7 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
   const navigate = useNavigate();
 
   const contatosPendentes = contacts.filter((c) => c.precisaFollowUp).length;
-  const emailsPendentes = emails.filter((e) => e.status === 'Não lido' || e.status === 'Aguardando resposta').length;
+  const emailsPendentes = emails.filter((e) => isEmailUnread(e.status)).length;
 
   const handleLogout = () => {
     logout();

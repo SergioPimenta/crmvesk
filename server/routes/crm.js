@@ -526,6 +526,27 @@ router.post('/emails', async (req, res) => {
   res.status(201).json({ id: result.insertId });
 });
 
+router.put('/emails/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  const { status } = req.body ?? {};
+  if (!status) return res.status(400).json({ message: 'Status é obrigatório' });
+  const [result] = await pool.query(
+    `UPDATE emails SET status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?`,
+    [status, id, req.userId]
+  );
+  if (result.affectedRows === 0) return res.status(404).json({ message: 'E-mail não encontrado' });
+  res.status(204).send();
+});
+
+router.delete('/emails/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  const [result] = await pool.query('DELETE FROM emails WHERE id = ? AND user_id = ?', [id, req.userId]);
+  if (result.affectedRows === 0) return res.status(404).json({ message: 'E-mail não encontrado' });
+  res.status(204).send();
+});
+
 // Proposals
 router.get('/proposals', async (req, res) => {
   const [rows] = await pool.query(

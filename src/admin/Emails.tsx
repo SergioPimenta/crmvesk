@@ -1,17 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
-import { useCrmData, type EmailStatus } from '../contexts/CrmDataContext';
+import {
+  useCrmData,
+  type EmailStatus,
+  isEmailRead,
+  isEmailUnread,
+} from '../contexts/CrmDataContext';
+
+type ReadFilter = 'all' | 'unread' | 'read';
+
+const READ_FILTERS: { id: ReadFilter; label: string }[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'unread', label: 'Não lidos' },
+  { id: 'read', label: 'Lidos' },
+];
 
 const Emails = () => {
-  const { emails, contacts, companies, addEmail, refreshEmails, getContactName, getCompanyName } = useCrmData();
+  const {
+    emails,
+    contacts,
+    companies,
+    addEmail,
+    updateEmail,
+    deleteEmail,
+    refreshEmails,
+    getContactName,
+    getCompanyName,
+  } = useCrmData();
   const [query, setQuery] = useState('');
+  const [readFilter, setReadFilter] = useState<ReadFilter>('all');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
-
-  useEffect(() => {
-    void refreshEmails().catch(() => {});
-  }, [refreshEmails]);
   const [compose, setCompose] = useState({
     para: '',
     assunto: '',
@@ -20,6 +40,10 @@ const Emails = () => {
     empresaId: '',
   });
 
+  useEffect(() => {
+    void refreshEmails().catch(() => {});
+  }, [refreshEmails]);
+
   const selectedContact = useMemo(() => contacts.find((c) => c.id === compose.contatoId) ?? null, [compose.contatoId, contacts]);
   const allowedCompanies = useMemo(() => {
     if (!compose.contatoId) return companies;
@@ -27,15 +51,16 @@ const Emails = () => {
     return companies.filter((co) => co.id === selectedContact.empresaId);
   }, [companies, compose.contatoId, selectedContact?.empresaId]);
 
-  const unreadOrPending = useMemo(
-    () => emails.filter((m) => m.status === 'Não lido' || m.status === 'Aguardando resposta').length,
-    [emails]
-  );
+  const unreadCount = useMemo(() => emails.filter((m) => isEmailUnread(m.status)).length, [emails]);
 
   const filtered = useMemo(() => {
+    let list = emails;
+    if (readFilter === 'unread') list = list.filter((m) => isEmailUnread(m.status));
+    if (readFilter === 'read') list = list.filter((m) => isEmailRead(m.status));
+
     const q = query.trim().toLowerCase();
-    if (!q) return emails;
-    return emails.filter(
+    if (!q) return list;
+    return list.filter(
       (m) =>
         m.de.toLowerCase().includes(q) ||
         m.assunto.toLowerCase().includes(q) ||
@@ -43,14 +68,37 @@ const Emails = () => {
         getContactName(m.contatoId).toLowerCase().includes(q) ||
         getCompanyName(m.empresaId).toLowerCase().includes(q)
     );
-  }, [emails, getCompanyName, getContactName, query]);
+  }, [emails, getCompanyName, getContactName, query, readFilter]);
 
-  const active = useMemo(() => filtered.find((m) => m.id === activeId) ?? filtered[0] ?? null, [activeId, filtered]);
+  const active = useMemo(() => filtered.find((m) => m.id === activeId) ?? null, [activeId, filtered]);
 
   const statusPill = (s: EmailStatus) => {
     if (s === 'Não lido') return <span className="pill-status warn">Não lido</span>;
     if (s === 'Aguardando resposta') return <span className="pill-status wait">Aguardando</span>;
+    if (s === 'Lido') return <span className="pill-status ok">Lido</span>;
     return <span className="pill-status ok">Respondido</span>;
+  };
+
+  const selectEmail = (id: string) => {
+    setActiveId(id);
+    const email = emails.find((m) => m.id === id);
+    if (email && isEmailUnread(email.status)) {
+      updateEmail(id, { status: 'Lido' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Excluir esta mensagem da caixa de entrada?')) return;
+    try {
+      await deleteEmail(id);
+      if (activeId === id) {
+        const remaining = filtered.filter((m) => m.id !== id);
+        setActiveId(remaining[0]?.id ?? null);
+      }
+    } catch {
+      alert('Não foi possível excluir a mensagem.');
+      void refreshEmails();
+    }
   };
 
   const resetCompose = () =>
@@ -87,7 +135,7 @@ const Emails = () => {
       <div className="crm-page-header">
         <div>
           <div className="crm-page-title">
-            E-mails <span>({unreadOrPending})</span>
+            E-mails <span>({unreadCount})</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
             Caixa centralizada: registre conversas vinculadas a contatos e negócios sem sair do CRM
@@ -110,39 +158,62 @@ const Emails = () => {
           <div className="crm-card-header" style={{ marginBottom: 10 }}>
             <i className="ti ti-mail" style={{ color: 'var(--vesk-orange)', fontSize: 16 }} aria-hidden="true" />
             <div className="crm-card-title">Entrada</div>
-            <span className="pipeline-badge">
-              {unreadOrPending} pendentes
-            </span>
+            <span className="pipeline-badge">{unreadCount} pendentes</span>
+          </div>
+
+          <div className="crm-tabs inbox-filters" aria-label="Filtrar por leitura">
+            {READ_FILTERS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`crm-tab${readFilter === tab.id ? ' active' : ''}`}
+                onClick={() => setReadFilter(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <div className="inbox-items" role="list">
-            {filtered.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                className={`inbox-item${(active?.id ?? null) === m.id ? ' active' : ''}`}
-                onClick={() => setActiveId(m.id)}
-                role="listitem"
-              >
-                <div className="inbox-row">
-                  <div className="inbox-from">{m.de}</div>
-                  <div className="inbox-when">{m.quando}</div>
+            {filtered.map((m) => {
+              const unread = isEmailUnread(m.status);
+              return (
+                <div
+                  key={m.id}
+                  className={`inbox-item${active?.id === m.id ? ' active' : ''}${unread ? ' unread' : ''}`}
+                  role="listitem"
+                >
+                  <button type="button" className="inbox-item-main" onClick={() => selectEmail(m.id)}>
+                    <div className="inbox-row">
+                      <div className="inbox-from">{m.de}</div>
+                      <div className="inbox-when">{m.quando}</div>
+                    </div>
+                    <div className="inbox-subject">{m.assunto}</div>
+                    <div className="inbox-preview">{m.preview}</div>
+                    <div className="inbox-meta">
+                      <span className="pill-stage">
+                        <i className="ti ti-user" aria-hidden="true" style={{ fontSize: 12 }} />
+                        {getContactName(m.contatoId)}
+                      </span>
+                      <span className="pill-stage">
+                        <i className="ti ti-building" aria-hidden="true" style={{ fontSize: 12 }} />
+                        {getCompanyName(m.empresaId)}
+                      </span>
+                      <span style={{ marginLeft: 'auto' }}>{statusPill(m.status)}</span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="inbox-item-delete"
+                    onClick={() => void handleDelete(m.id)}
+                    aria-label="Excluir mensagem"
+                    title="Excluir"
+                  >
+                    <i className="ti ti-trash" aria-hidden="true" />
+                  </button>
                 </div>
-                <div className="inbox-subject">{m.assunto}</div>
-                <div className="inbox-preview">{m.preview}</div>
-                <div className="inbox-meta">
-                  <span className="pill-stage">
-                    <i className="ti ti-user" aria-hidden="true" style={{ fontSize: 12 }} />
-                    {getContactName(m.contatoId)}
-                  </span>
-                  <span className="pill-stage">
-                    <i className="ti ti-building" aria-hidden="true" style={{ fontSize: 12 }} />
-                    {getCompanyName(m.empresaId)}
-                  </span>
-                  <span style={{ marginLeft: 'auto' }}>{statusPill(m.status)}</span>
-                </div>
-              </button>
-            ))}
+              );
+            })}
             {filtered.length === 0 ? <div className="kanban-empty">Nenhum e-mail encontrado.</div> : null}
           </div>
         </div>
@@ -151,9 +222,17 @@ const Emails = () => {
           <div className="crm-card-header">
             <i className="ti ti-message" style={{ color: 'var(--vesk-orange)', fontSize: 16 }} aria-hidden="true" />
             <div className="crm-card-title">Mensagem</div>
-            <button type="button" className="crm-card-action">
-              Vincular a contato/negócio →
-            </button>
+            {active ? (
+              <button
+                type="button"
+                className="inbox-item-delete inbox-item-delete-inline"
+                onClick={() => void handleDelete(active.id)}
+                aria-label="Excluir mensagem"
+                title="Excluir"
+              >
+                <i className="ti ti-trash" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
 
           {active ? (
@@ -166,6 +245,9 @@ const Emails = () => {
                 <div className="email-line">
                   <span className="email-k">Contato</span> {getContactName(active.contatoId)} · <span className="email-k">Empresa</span>{' '}
                   {getCompanyName(active.empresaId)}
+                </div>
+                <div className="email-line" style={{ marginTop: 6 }}>
+                  {statusPill(active.status)}
                 </div>
               </div>
 
@@ -184,13 +266,20 @@ const Emails = () => {
                   <i className="ti ti-reply" style={{ fontSize: 13 }} aria-hidden="true" />
                   Responder
                 </button>
-                <button type="button" className="crm-btn-secondary">
-                  <i className="ti ti-flag" style={{ fontSize: 13 }} aria-hidden="true" />
-                  Marcar
-                </button>
-                <button type="button" className="crm-btn-primary" style={{ marginLeft: 'auto' }}>
-                  <i className="ti ti-check" style={{ fontSize: 13 }} aria-hidden="true" />
-                  Resolver
+                {isEmailUnread(active.status) ? (
+                  <button type="button" className="crm-btn-secondary" onClick={() => updateEmail(active.id, { status: 'Lido' })}>
+                    <i className="ti ti-mail-opened" style={{ fontSize: 13 }} aria-hidden="true" />
+                    Marcar como lido
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="crm-btn-secondary crm-btn-danger"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => void handleDelete(active.id)}
+                >
+                  <i className="ti ti-trash" style={{ fontSize: 13 }} aria-hidden="true" />
+                  Excluir
                 </button>
               </div>
             </>
@@ -269,4 +358,3 @@ const Emails = () => {
 };
 
 export default Emails;
-

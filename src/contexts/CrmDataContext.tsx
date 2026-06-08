@@ -72,7 +72,12 @@ export type Activity = {
   status: 'Pendente' | 'Concluída';
 };
 
-export type EmailStatus = 'Não lido' | 'Aguardando resposta' | 'Respondido';
+export type EmailStatus = 'Não lido' | 'Aguardando resposta' | 'Respondido' | 'Lido';
+
+export const isEmailUnread = (status: EmailStatus) =>
+  status === 'Não lido' || status === 'Aguardando resposta';
+
+export const isEmailRead = (status: EmailStatus) => status === 'Lido' || status === 'Respondido';
 
 export type EmailItem = {
   id: string;
@@ -125,6 +130,8 @@ type CrmDataContextType = {
   deleteDeal: (id: string) => Promise<void>;
   addActivity: (activity: Omit<Activity, 'id'> & { id?: string }) => string;
   addEmail: (email: Omit<EmailItem, 'id'> & { id?: string }) => string;
+  updateEmail: (id: string, patch: Partial<Pick<EmailItem, 'status'>>) => void;
+  deleteEmail: (id: string) => Promise<void>;
   refreshEmails: () => Promise<void>;
   addProposal: (proposal: Omit<Proposal, 'id'> & { id?: string }) => string;
 
@@ -407,6 +414,20 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return tempId;
   };
 
+  const updateEmail: CrmDataContextType['updateEmail'] = (id, patch) => {
+    setEmails((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return;
+    void api.put(`/crm/emails/${numericId}`, patch);
+  };
+
+  const deleteEmail: CrmDataContextType['deleteEmail'] = async (id) => {
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) throw new Error('ID inválido');
+    setEmails((prev) => prev.filter((m) => m.id !== id));
+    await api.delete(`/crm/emails/${numericId}`);
+  };
+
   const refreshEmails = useCallback(async () => {
     const emailsData = await api.get<EmailItem[]>('/crm/emails');
     setEmails(
@@ -657,6 +678,8 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     deleteDeal,
     addActivity,
     addEmail,
+    updateEmail,
+    deleteEmail,
     refreshEmails,
     addProposal,
     addPipeline,
