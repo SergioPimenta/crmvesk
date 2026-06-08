@@ -6,9 +6,10 @@ type ModalProps = {
   description?: string;
   children: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 };
 
-const Modal = ({ open, title, description, children, onClose }: ModalProps) => {
+const Modal = ({ open, title, description, children, onClose, wide }: ModalProps) => {
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -22,7 +23,13 @@ const Modal = ({ open, title, description, children, onClose }: ModalProps) => {
 
   return (
     <div className="modal-overlay" role="presentation" onMouseDown={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className={`modal${wide ? ' modal-wide' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div>
             <div className="modal-title">{title}</div>
