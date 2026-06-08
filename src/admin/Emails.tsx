@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
 import { useCrmData, type EmailStatus } from '../contexts/CrmDataContext';
 
 const Emails = () => {
-  const { emails, contacts, companies, addEmail, getContactName, getCompanyName } = useCrmData();
+  const { emails, contacts, companies, addEmail, refreshEmails, getContactName, getCompanyName } = useCrmData();
   const [query, setQuery] = useState('');
-  const [activeId, setActiveId] = useState<string | null>('m1');
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+
+  useEffect(() => {
+    void refreshEmails().catch(() => {});
+  }, [refreshEmails]);
   const [compose, setCompose] = useState({
     para: '',
     assunto: '',
@@ -166,13 +170,13 @@ const Emails = () => {
               </div>
 
               <div className="email-body">
-                <p>
-                  Olá! Este é um exemplo de mensagem exibida dentro do CRM. A ideia aqui é centralizar a comunicação por e-mail e
-                  manter o histórico vinculado ao contato e/ou ao negócio do pipeline.
-                </p>
-                <p style={{ color: 'var(--vesk-muted)', marginTop: 10, fontSize: 12 }}>
-                  (Integração real com provedor de e-mail ficará para a camada de API/IMAP/SMTP.)
-                </p>
+                <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{active.preview || '—'}</p>
+                {active.assunto.toLowerCase().includes('formulário') ? (
+                  <p style={{ color: 'var(--vesk-muted)', marginTop: 12, fontSize: 12 }}>
+                    <i className="ti ti-forms" aria-hidden="true" style={{ marginRight: 4 }} />
+                    Recebido via formulário de contato do site
+                  </p>
+                ) : null}
               </div>
 
               <div className="email-actions">

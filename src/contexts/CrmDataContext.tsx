@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { enrichDealWithContact, mapDealRow } from '../utils/apiRow';
 
@@ -125,6 +125,7 @@ type CrmDataContextType = {
   deleteDeal: (id: string) => Promise<void>;
   addActivity: (activity: Omit<Activity, 'id'> & { id?: string }) => string;
   addEmail: (email: Omit<EmailItem, 'id'> & { id?: string }) => string;
+  refreshEmails: () => Promise<void>;
   addProposal: (proposal: Omit<Proposal, 'id'> & { id?: string }) => string;
 
   addPipeline: (pipeline: Omit<Pipeline, 'id'> & { id?: string }) => string;
@@ -406,6 +407,18 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return tempId;
   };
 
+  const refreshEmails = useCallback(async () => {
+    const emailsData = await api.get<EmailItem[]>('/crm/emails');
+    setEmails(
+      emailsData.map((m) => ({
+        ...m,
+        id: String((m as any).id),
+        contatoId: (m as any).contatoId ? String((m as any).contatoId) : undefined,
+        empresaId: (m as any).empresaId ? String((m as any).empresaId) : undefined,
+      }))
+    );
+  }, []);
+
   const addProposal: CrmDataContextType['addProposal'] = (proposal) => {
     const tempId = proposal.id ?? genId('p');
     const optimistic: Proposal = { ...proposal, id: tempId };
@@ -644,6 +657,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     deleteDeal,
     addActivity,
     addEmail,
+    refreshEmails,
     addProposal,
     addPipeline,
     updatePipeline,

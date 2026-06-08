@@ -352,6 +352,22 @@ export async function submitFormLead(monitorCode, body = {}) {
     [userId, pipeline.pipelineId, contactId, dealTitle, pipeline.stageKey]
   );
 
+  const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const assunto = `Formulário de contato · ${siteLabel}`;
+  const fromLabel = email ? `${contactName} <${email}>` : contactName;
+  const previewParts = [];
+  if (mensagem) previewParts.push(mensagem);
+  if (telefone) previewParts.push(`Telefone: ${telefone}`);
+  if (empresa) previewParts.push(`Empresa: ${empresa}`);
+  if (pageUrl) previewParts.push(`Página: ${pageUrl}`);
+  const preview = (previewParts.join('\n') || `Novo lead enviado por ${siteLabel}`).slice(0, 255);
+
+  await pool.query(
+    `INSERT INTO emails (user_id, contact_id, company_id, de, assunto, preview, quando, status)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, 'Não lido')`,
+    [userId, contactId, fromLabel, assunto, preview, quando]
+  );
+
   await recordFormPing(monitorCode, 'submit');
 
   return {
