@@ -1,9 +1,14 @@
 """Scraper gratuito do Google Maps via Playwright (sem API paga)."""
 import re
-import time
 from urllib.parse import quote_plus
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+
+PHONE_RE = re.compile(r"\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}")
+DOMAIN_RE = re.compile(
+    r"(?:Acesse o site[·\s]+|·\s*)([\w-]+(?:\.[\w-]+)+(?:/[\w./-]*)?)",
+    re.IGNORECASE,
+)
 
 
 def digits_only(phone: str) -> str:
@@ -14,11 +19,15 @@ def format_phone_br(phone: str) -> str:
     if not phone:
         return "—"
     d = digits_only(phone)
+    if d.startswith("0") and len(d) > 11:
+        d = d.lstrip("0")
+    if len(d) == 13 and d.startswith("55"):
+        d = d[2:]
     if len(d) == 11:
         return f"({d[:2]}) {d[2:7]}-{d[7:]}"
     if len(d) == 10:
         return f"({d[:2]}) {d[2:6]}-{d[6:]}"
-    return phone
+    return phone.strip()
 
 
 def _dismiss_cookies(page) -> None:
@@ -31,38 +40,147 @@ def _dismiss_cookies(page) -> None:
             pass
 
 
-def _extract_detail(page) -> dict:
+def _parse_phone_from_text(text: str) -> str:
+    matches = PHONE_RE.findall(text or "")
+    return matches[-1].strip() if matches else ""
+
+
+def _parse_site_from_text(text: str) -> str:
+    m = DOMAIN_RE.search(text or "")
+    if not m:
+        return ""
+    site = m.group(1).strip().rstrip("·")
+    if not site.startswith("http"):
+        site = f"https://{site}"
+    return site
+
+
+def _extract_from_article(article) -> dict:
+    """Extrai nome, telefone, site e endereço direto do card da lista (sem abrir painel)."""
+    data = article.evaluate(
+        """(el) => {
+            const link = el.querySelector('a.hfpxzc');
+            const name = (link && link.getAttribute('aria-label')) || '';
+            const text = el.innerText || '';
+
+            let site = '';
+            for (const a of el.querySelectorAll('a[href]')) {
+                const href = a.href || '';
+                const aria = (a.getAttribute('aria-label') || '').toLowerCase();
+                if (!href.startsWith('http')) continue;
+                if (href.includes('google.com/maps') || href.includes('google.com/aclk')) continue;
+                if (aria.includes('acessar o site') || aria.includes('website') || aria.includes('site de')) {
+                    site = href;
+                    break;
+                }
+            }
+            if (!site) {
+                for (const a of el.querySelectorAll('a[href^="http"]')) {
+                    const href = a.href || '';
+                    if (href.includes('google.com') || href.includes('gstatic.com')) continue;
+                    site = href;
+                    break;
+                }
+            }
+
+            let endereco = '';
+            const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+            for (const line of lines) {
+                if (line === name || /^\\d[,.]\\d/.test(line) || /^patrocinado$/i.test(line)) continue;
+                if (/^(aberto|fechado|fecha|abre)/i.test(line)) continue;
+                if (line.includes('·') && /\\(\\d{2}\\)/.test(line)) {
+                    const part = line.split('·').map(p => p.trim()).find(p =>
+                        !/^(aberto|fechado|fecha|abre)/i.test(p) && !/\\(\\d{2}\\)\\s*\\d/.test(p)
+                    );
+                    if (part && part.length > 8) endereco = part;
+                    continue;
+                }
+                if (/\\(\\d{2}\\)\\s*\\d{4}/.test(line)) continue;
+                if (/website|rotas|ligar|reservar/i.test(line)) continue;
+                if (line.length > 10 && (line.includes('Rua') || line.includes('Av') || line.includes('-') || line.includes(','))) {
+                    endereco = line.replace(/^[^·]+·\\s*/, '').trim();
+                }
+            }
+
+            return { name, text, site, endereco };
+        }"""
+    )
+
+    phone_raw = _parse_phone_from_text(data.get("text", ""))
+    site = (data.get("site") or "").strip()
+    if not site:
+        site = _parse_site_from_text(data.get("text", ""))
+
+    return {
+        "nome": (data.get("name") or "").strip(),
+        "telefone": format_phone_br(phone_raw),
+        "telefoneRaw": digits_only(phone_raw),
+        "site": site,
+        "endereco": (data.get("endereco") or "").strip(),
+    }
+
+
+def _extract_detail_panel(page) -> dict:
+    """Fallback: painel lateral após clique no card."""
     phone = ""
     site = ""
     endereco = ""
 
     try:
-        tel = page.locator('a[href^="tel:"]').first
-        if tel.count():
-            href = tel.get_attribute("href") or ""
-            phone = href.replace("tel:", "").strip()
+        page.wait_for_url(re.compile(r"/maps/place/"), timeout=8000)
     except Exception:
         pass
+    page.wait_for_timeout(1200)
 
-    try:
-        web = page.locator('a[data-item-id="authority"]').first
-        if web.count():
-            site = (web.get_attribute("href") or "").strip()
-    except Exception:
-        pass
+    panel = page.evaluate(
+        """() => {
+            let phone = '';
+            let site = '';
+            let endereco = '';
 
-    try:
-        addr_btn = page.locator('button[data-item-id="address"]').first
-        if addr_btn.count():
-            endereco = (addr_btn.get_attribute("aria-label") or addr_btn.inner_text() or "").strip()
-    except Exception:
-        pass
+            for (const a of document.querySelectorAll('a[href^="tel:"]')) {
+                phone = (a.getAttribute('href') || '').replace('tel:', '').trim();
+                if (phone) break;
+            }
+            if (!phone) {
+                const btn = document.querySelector('button[data-item-id^="phone"]');
+                if (btn) {
+                    const aria = btn.getAttribute('aria-label') || '';
+                    const m = aria.match(/\\(\\d{2}\\)\\s*[\\d-]+/);
+                    if (m) phone = m[0];
+                    else phone = (btn.innerText || '').trim();
+                }
+            }
+
+            for (const a of document.querySelectorAll('a[href^="http"]')) {
+                const href = a.href || '';
+                const aria = (a.getAttribute('aria-label') || '').toLowerCase();
+                if (href.includes('google.com/maps') || href.includes('google.com/aclk')) continue;
+                if (a.getAttribute('data-item-id') === 'authority' || aria.includes('site') || aria.includes('website')) {
+                    site = href;
+                    break;
+                }
+            }
+
+            const addrBtn = document.querySelector('button[data-item-id="address"], button[data-item-id*="address"]');
+            if (addrBtn) {
+                endereco = (addrBtn.getAttribute('aria-label') || addrBtn.innerText || '').trim();
+                endereco = endereco.replace(/^Endere[cç]o:\\s*/i, '');
+            }
+
+            return { phone, site, endereco };
+        }"""
+    )
+
+    phone = panel.get("phone") or phone
+    site = panel.get("site") or site
+    endereco = panel.get("endereco") or endereco
 
     return {
         "telefone": format_phone_br(phone),
         "telefoneRaw": digits_only(phone),
-        "site": site,
-        "endereco": endereco,
+        "site": (site or "").strip(),
+        "endereco": (endereco or "").strip(),
     }
 
 
@@ -108,11 +226,11 @@ def scrape_google_maps(
             ) from exc
 
         stalls = 0
-        card_index = 0
+        article_index = 0
 
-        while len(results) < max_results and stalls < 8:
-            cards = page.locator("a.hfpxzc")
-            count = cards.count()
+        while len(results) < max_results and stalls < 10:
+            articles = page.locator('div[role="feed"] div[role="article"]')
+            count = articles.count()
 
             if count == 0:
                 stalls += 1
@@ -121,29 +239,42 @@ def scrape_google_maps(
                 continue
 
             progressed = False
-            while card_index < count and len(results) < max_results:
-                card = cards.nth(card_index)
-                card_index += 1
+            while article_index < count and len(results) < max_results:
+                article = articles.nth(article_index)
+                article_index += 1
                 try:
-                    name = (card.get_attribute("aria-label") or "").strip()
+                    item = _extract_from_article(article)
+                    name = item["nome"]
                     if not name or name in seen_names:
                         continue
-                    seen_names.add(name)
 
-                    card.click(timeout=8000)
-                    page.wait_for_timeout(1800)
+                    if len(item["telefoneRaw"]) < 10 or not item["site"]:
+                        try:
+                            link = article.locator("a.hfpxzc").first
+                            if link.count():
+                                link.click(timeout=8000)
+                                detail = _extract_detail_panel(page)
+                                if len(item["telefoneRaw"]) < 10 and len(detail["telefoneRaw"]) >= 10:
+                                    item["telefone"] = detail["telefone"]
+                                    item["telefoneRaw"] = detail["telefoneRaw"]
+                                if not item["site"] and detail["site"]:
+                                    item["site"] = detail["site"]
+                                if not item["endereco"] and detail["endereco"]:
+                                    item["endereco"] = detail["endereco"]
+                        except Exception:
+                            pass
 
-                    detail = _extract_detail(page)
-                    if only_with_phone and len(detail["telefoneRaw"]) < 10:
+                    if only_with_phone and len(item["telefoneRaw"]) < 10:
                         continue
 
+                    seen_names.add(name)
                     results.append(
                         {
                             "nome": name,
-                            "telefone": detail["telefone"],
-                            "telefoneRaw": detail["telefoneRaw"],
-                            "site": detail["site"],
-                            "endereco": detail["endereco"],
+                            "telefone": item["telefone"],
+                            "telefoneRaw": item["telefoneRaw"],
+                            "site": item["site"],
+                            "endereco": item["endereco"],
                         }
                     )
                     progressed = True
