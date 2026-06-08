@@ -107,10 +107,117 @@ function runPythonCli({ query, limit, headless, onlyWithPhone }) {
   });
 }
 
+async function warmUpScraper(base) {
+  try {
+    await fetch(`${base}/health`, { signal: AbortSignal.timeout(45000) });
+  } catch {
+    // cold start — aguarda e segue
+    await new Promise((r) => setTimeout(r, 8000));
+  }
+}
+
+function scraperBaseUrl() {
+  return String(process.env.MAPS_SCRAPER_URL || '').replace(/\/$/, '');
+}
+
+async function postScraperJson(base, path, body, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = data?.message || data?.detail;
+      if (res.status === 502) {
+        throw new Error(
+          detail ||
+            'Serviço scraper indisponível (502). Aguarde 30s e tente de novo com menos resultados.'
+        );
+      }
+      throw new Error(detail || `Erro no serviço scraper (${res.status})`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getScraperJson(base, path, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${base}${path}`, { signal: controller.signal });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.message || data?.detail || `Erro no serviço scraper (${res.status})`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function startGoogleMapsSearch({
+  query,
+  limit = 10,
+  headless = true,
+  onlyWithPhone = false,
+}) {
+  const textQuery = String(query || '').trim();
+  if (!textQuery) throw new Error('Informe o termo de busca');
+
+  const maxResults = Math.min(Math.max(Number(limit) || 10, 1), 30);
+  const opts = { query: textQuery, limit: maxResults, headless: headless !== false, onlyWithPhone };
+  const base = scraperBaseUrl();
+
+  if (base) {
+    await warmUpScraper(base);
+    try {
+      const data = await postScraperJson(base, '/search/async', opts);
+      return { mode: 'async', jobId: data.jobId, status: data.status || 'running' };
+    } catch (err) {
+      if (!String(err.message || '').includes('502')) throw err;
+      await new Promise((r) => setTimeout(r, 12000));
+      await warmUpScraper(base);
+      const data = await postScraperJson(base, '/search/async', opts);
+      return { mode: 'async', jobId: data.jobId, status: data.status || 'running' };
+    }
+  }
+
+  const onVercel = Boolean(process.env.VERCEL);
+  const preferPython = process.env.MAPS_SCRAPER_MODE !== 'api';
+  if (!onVercel && preferPython && pythonAvailable()) {
+    const data = await runPythonCli(opts);
+    return { mode: 'sync', ...data };
+  }
+
+  const apiResult = await searchViaPlacesApi(opts);
+  if (apiResult) return { mode: 'sync', ...apiResult };
+
+  throw new Error(
+    onVercel
+      ? 'Configure MAPS_SCRAPER_URL apontando para o serviço Python (scraper/main.py).'
+      : 'Scraper Python não configurado. Rode npm run scraper e defina MAPS_SCRAPER_URL no server/.env'
+  );
+}
+
+export async function getGoogleMapsSearchStatus(jobId) {
+  const base = scraperBaseUrl();
+  if (!base) throw new Error('MAPS_SCRAPER_URL não configurado');
+  if (!jobId) throw new Error('Job inválido');
+  return getScraperJson(base, `/search/status/${encodeURIComponent(jobId)}`);
+}
+
 async function searchViaHttpService({ query, limit, headless, onlyWithPhone }) {
-  const base = String(process.env.MAPS_SCRAPER_URL || '').replace(/\/$/, '');
+  const base = scraperBaseUrl();
   if (!base) return null;
 
+  await warmUpScraper(base);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PYTHON_TIMEOUT_MS);
 

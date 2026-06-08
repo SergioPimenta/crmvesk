@@ -1,14 +1,17 @@
 """Scraper gratuito do Google Maps via Playwright (sem API paga)."""
 import re
+import time
 from urllib.parse import quote_plus
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 PHONE_RE = re.compile(r"\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}")
+PHONE_ALT_RE = re.compile(r"\b\d{2}\s*\d{4,5}[-\s]?\d{4}\b")
 DOMAIN_RE = re.compile(
     r"(?:Acesse o site[·\s]+|·\s*)([\w-]+(?:\.[\w-]+)+(?:/[\w./-]*)?)",
     re.IGNORECASE,
 )
+MAX_DETAIL_CLICKS = 8
 
 
 def digits_only(phone: str) -> str:
@@ -34,7 +37,7 @@ def _dismiss_cookies(page) -> None:
     for label in ("Aceitar tudo", "Accept all", "Aceitar", "Accept"):
         try:
             page.get_by_role("button", name=label).click(timeout=2500)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(400)
             return
         except Exception:
             pass
@@ -42,6 +45,9 @@ def _dismiss_cookies(page) -> None:
 
 def _parse_phone_from_text(text: str) -> str:
     matches = PHONE_RE.findall(text or "")
+    if matches:
+        return matches[-1].strip()
+    matches = PHONE_ALT_RE.findall(text or "")
     return matches[-1].strip() if matches else ""
 
 
@@ -56,12 +62,12 @@ def _parse_site_from_text(text: str) -> str:
 
 
 def _extract_from_article(article) -> dict:
-    """Extrai nome, telefone, site e endereço direto do card da lista (sem abrir painel)."""
+    """Extrai nome, telefone, site e endereço direto do card da lista."""
     data = article.evaluate(
-        """(el) => {
+        r"""(el) => {
             const link = el.querySelector('a.hfpxzc');
             const name = (link && link.getAttribute('aria-label')) || '';
-            const text = el.innerText || '';
+            const text = ((el.innerText || '') + '\n' + (el.textContent || '')).slice(0, 4000);
 
             let site = '';
             for (const a of el.querySelectorAll('a[href]')) {
@@ -88,28 +94,32 @@ def _extract_from_article(article) -> dict:
             const phoneMatch = text.match(/\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}/g);
             if (phoneMatch) phone = phoneMatch[phoneMatch.length - 1];
             if (!phone) {
-                for (const el of el.querySelectorAll('[aria-label], [data-item-id]')) {
-                    const blob = (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('data-item-id') || '');
+                for (const node of el.querySelectorAll('[aria-label], [data-item-id]')) {
+                    const blob = (node.getAttribute('aria-label') || '') + ' ' + (node.getAttribute('data-item-id') || '');
                     const m = blob.match(/\(\d{2}\)\s*[\d-]+/);
                     if (m) { phone = m[0]; break; }
                 }
             }
 
-            const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             for (const line of lines) {
-                if (line === name || /^\\d[,.]\\d/.test(line) || /^patrocinado$/i.test(line)) continue;
+                if (!phone) {
+                    const m = line.match(/\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}/);
+                    if (m) phone = m[0];
+                }
+                if (line === name || /^\d[,.]\d/.test(line) || /^patrocinado$/i.test(line)) continue;
                 if (/^(aberto|fechado|fecha|abre)/i.test(line)) continue;
-                if (line.includes('·') && /\\(\\d{2}\\)/.test(line)) {
+                if (line.includes('·') && /\(\d{2}\)/.test(line)) {
                     const part = line.split('·').map(p => p.trim()).find(p =>
-                        !/^(aberto|fechado|fecha|abre)/i.test(p) && !/\\(\\d{2}\\)\\s*\\d/.test(p)
+                        !/^(aberto|fechado|fecha|abre)/i.test(p) && !/\(\d{2}\)\s*\d/.test(p)
                     );
                     if (part && part.length > 8) endereco = part;
                     continue;
                 }
-                if (/\\(\\d{2}\\)\\s*\\d{4}/.test(line)) continue;
+                if (/\(\d{2}\)\s*\d{4}/.test(line)) continue;
                 if (/website|rotas|ligar|reservar/i.test(line)) continue;
                 if (line.length > 10 && (line.includes('Rua') || line.includes('Av') || line.includes('-') || line.includes(','))) {
-                    endereco = line.replace(/^[^·]+·\\s*/, '').trim();
+                    endereco = line.replace(/^[^·]+·\s*/, '').trim();
                 }
             }
 
@@ -137,18 +147,14 @@ def _extract_from_article(article) -> dict:
 
 def _extract_detail_panel(page) -> dict:
     """Fallback: painel lateral após clique no card."""
-    phone = ""
-    site = ""
-    endereco = ""
-
     try:
-        page.wait_for_url(re.compile(r"/maps/place/"), timeout=8000)
+        page.wait_for_url(re.compile(r"/maps/place/"), timeout=6000)
     except Exception:
         pass
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(900)
 
     panel = page.evaluate(
-        """() => {
+        r"""() => {
             let phone = '';
             let site = '';
             let endereco = '';
@@ -161,7 +167,7 @@ def _extract_detail_panel(page) -> dict:
                 const btn = document.querySelector('button[data-item-id^="phone"]');
                 if (btn) {
                     const aria = btn.getAttribute('aria-label') || '';
-                    const m = aria.match(/\\(\\d{2}\\)\\s*[\\d-]+/);
+                    const m = aria.match(/\(\d{2}\)\s*[\d-]+/);
                     if (m) phone = m[0];
                     else phone = (btn.innerText || '').trim();
                 }
@@ -180,22 +186,18 @@ def _extract_detail_panel(page) -> dict:
             const addrBtn = document.querySelector('button[data-item-id="address"], button[data-item-id*="address"]');
             if (addrBtn) {
                 endereco = (addrBtn.getAttribute('aria-label') || addrBtn.innerText || '').trim();
-                endereco = endereco.replace(/^Endere[cç]o:\\s*/i, '');
+                endereco = endereco.replace(/^Endere[cç]o:\s*/i, '');
             }
 
             return { phone, site, endereco };
         }"""
     )
 
-    phone = panel.get("phone") or phone
-    site = panel.get("site") or site
-    endereco = panel.get("endereco") or endereco
-
     return {
-        "telefone": format_phone_br(phone),
-        "telefoneRaw": digits_only(phone),
-        "site": (site or "").strip(),
-        "endereco": (endereco or "").strip(),
+        "telefone": format_phone_br(panel.get("phone") or ""),
+        "telefoneRaw": digits_only(panel.get("phone") or ""),
+        "site": (panel.get("site") or "").strip(),
+        "endereco": (panel.get("endereco") or "").strip(),
     }
 
 
@@ -204,17 +206,23 @@ def scrape_google_maps(
     limit: int = 30,
     headless: bool = True,
     only_with_phone: bool = False,
+    time_budget_seconds: int = 90,
 ) -> list[dict]:
     text_query = (query or "").strip()
     if not text_query:
         raise ValueError("Informe o termo de busca")
 
     max_results = max(1, min(int(limit or 30), 60))
+    deadline = time.monotonic() + max(30, int(time_budget_seconds or 90))
     results: list[dict] = []
     seen_names: set[str] = set()
+    detail_clicks = 0
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(
+            headless=headless,
+            args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-gpu"],
+        )
         context = browser.new_context(
             locale="pt-BR",
             viewport={"width": 1360, "height": 900},
@@ -224,11 +232,11 @@ def scrape_google_maps(
             ),
         )
         page = context.new_page()
-        page.set_default_timeout(45000)
+        page.set_default_timeout(35000)
+        search_url = f"https://www.google.com/maps/search/{quote_plus(text_query)}"
 
-        url = f"https://www.google.com/maps/search/{quote_plus(text_query)}"
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(2000)
+        page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(1500)
         _dismiss_cookies(page)
 
         feed = page.locator('div[role="feed"]')
@@ -243,18 +251,18 @@ def scrape_google_maps(
         stalls = 0
         article_index = 0
 
-        while len(results) < max_results and stalls < 10:
+        while len(results) < max_results and stalls < 10 and time.monotonic() < deadline:
             articles = page.locator('div[role="feed"] div[role="article"]')
             count = articles.count()
 
             if count == 0:
                 stalls += 1
                 feed.evaluate("el => { el.scrollTop = el.scrollHeight }")
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(1000)
                 continue
 
             progressed = False
-            while article_index < count and len(results) < max_results:
+            while article_index < count and len(results) < max_results and time.monotonic() < deadline:
                 article = articles.nth(article_index)
                 article_index += 1
                 try:
@@ -263,11 +271,16 @@ def scrape_google_maps(
                     if not name or name in seen_names:
                         continue
 
-                    if len(item["telefoneRaw"]) < 10:
+                    if (
+                        len(item["telefoneRaw"]) < 10
+                        and detail_clicks < MAX_DETAIL_CLICKS
+                        and time.monotonic() < deadline - 12
+                    ):
                         try:
                             link = article.locator("a.hfpxzc").first
                             if link.count():
-                                link.click(timeout=8000)
+                                link.click(timeout=6000)
+                                detail_clicks += 1
                                 detail = _extract_detail_panel(page)
                                 if len(detail["telefoneRaw"]) >= 10:
                                     item["telefone"] = detail["telefone"]
@@ -276,8 +289,18 @@ def scrape_google_maps(
                                     item["site"] = detail["site"]
                                 if not item["endereco"] and detail["endereco"]:
                                     item["endereco"] = detail["endereco"]
+                                if page.url != search_url and "/maps/search/" not in page.url:
+                                    page.go_back(wait_until="domcontentloaded", timeout=15000)
+                                    page.wait_for_timeout(600)
+                                    feed = page.locator('div[role="feed"]')
                         except Exception:
-                            pass
+                            try:
+                                if page.url != search_url:
+                                    page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+                                    page.wait_for_timeout(800)
+                                    feed = page.locator('div[role="feed"]')
+                            except Exception:
+                                pass
 
                     if only_with_phone and len(item["telefoneRaw"]) < 10:
                         continue
@@ -305,7 +328,7 @@ def scrape_google_maps(
                 break
 
             feed.evaluate("el => { el.scrollTop = el.scrollHeight }")
-            page.wait_for_timeout(1600)
+            page.wait_for_timeout(1000)
 
         browser.close()
 

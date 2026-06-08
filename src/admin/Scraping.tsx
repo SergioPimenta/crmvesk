@@ -9,9 +9,29 @@ type ScrapeResult = {
   endereco?: string;
 };
 
+type StartResponse = {
+  mode?: 'async' | 'sync';
+  jobId?: string;
+  status?: string;
+  total?: number;
+  results?: ScrapeResult[];
+  source?: string;
+  message?: string;
+};
+
+type JobStatus = {
+  status: 'running' | 'done' | 'error';
+  total?: number;
+  results?: ScrapeResult[];
+  source?: string;
+  message?: string;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const Scraping = () => {
   const [query, setQuery] = useState('');
-  const [limit, setLimit] = useState(30);
+  const [limit, setLimit] = useState(10);
   const [headless, setHeadless] = useState(true);
   const [onlyWithPhone, setOnlyWithPhone] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,18 +47,45 @@ const Scraping = () => {
     setResults([]);
 
     try {
-      const data = await api.post<{ total: number; results: ScrapeResult[]; source?: string }>(
-        '/scraping/maps',
-        {
-          query: query.trim(),
-          limit: Number(limit) || 30,
-          headless,
-          onlyWithPhone,
+      const started = await api.post<StartResponse>('/scraping/maps/start', {
+        query: query.trim(),
+        limit: Number(limit) || 10,
+        headless,
+        onlyWithPhone,
+      });
+
+      if (started.mode === 'sync' || started.status === 'done') {
+        setResults(started.results || []);
+        const via = started.source === 'python-playwright' ? ' (scraper Python)' : '';
+        setStatus(`Concluído: ${started.total ?? started.results?.length ?? 0} empresa(s)${via}.`);
+        return;
+      }
+
+      setStatus('Buscando no Google Maps… pode levar 1–3 min (serviço acordando no Render).');
+
+      const jobId = started.jobId;
+      if (!jobId) throw new Error('Não foi possível iniciar a busca.');
+
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(3000);
+        const job = await api.get<JobStatus>(`/scraping/maps/status/${jobId}`);
+
+        if (job.status === 'running') {
+          setStatus(`Coletando empresas… (${Math.floor((attempt + 1) * 3 / 60)} min)`);
+          continue;
         }
-      );
-      setResults(data.results || []);
-      const via = data.source === 'python-playwright' ? ' (scraper Python)' : '';
-      setStatus(`Concluído: ${data.total} empresa(s)${via}.`);
+
+        if (job.status === 'error') {
+          throw new Error(job.message || 'Erro ao executar busca');
+        }
+
+        setResults(job.results || []);
+        const via = job.source === 'python-playwright' ? ' (scraper Python)' : '';
+        setStatus(`Concluído: ${job.total ?? job.results?.length ?? 0} empresa(s)${via}.`);
+        return;
+      }
+
+      throw new Error('A busca excedeu o tempo limite. Tente com menos resultados.');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao executar busca');
     } finally {
@@ -84,7 +131,7 @@ const Scraping = () => {
                 id="scrape_limit"
                 type="number"
                 min={1}
-                max={60}
+                max={30}
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
                 disabled={loading}
@@ -172,7 +219,7 @@ const Scraping = () => {
 
         {results.length === 0 ? (
           <div className="kanban-empty">
-            {loading ? 'Aguarde, o Chrome está coletando empresas no Maps…' : 'Nenhum resultado ainda. Execute uma busca acima.'}
+            {loading ? 'Aguarde, coletando empresas no Maps (pode levar alguns minutos)…' : 'Nenhum resultado ainda. Execute uma busca acima.'}
           </div>
         ) : (
           <div className="scrape-table-wrap">
