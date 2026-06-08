@@ -14,9 +14,7 @@ type FieldMapping = {
 
 type FieldConfig = {
   enabled: boolean;
-  siteNames: string;
-  useAdvanced: boolean;
-  advancedSelector: string;
+  selector: string;
   required: boolean;
 };
 
@@ -56,7 +54,6 @@ const CRM_FIELD_DEFS: {
   label: string;
   icon: string;
   hint: string;
-  commonNames: string[];
   required?: boolean;
   defaultEnabled?: boolean;
 }[] = [
@@ -65,7 +62,6 @@ const CRM_FIELD_DEFS: {
     label: 'Nome',
     icon: 'ti-user',
     hint: 'Nome completo ou primeiro nome do visitante',
-    commonNames: ['nome', 'name', 'full_name'],
     required: true,
     defaultEnabled: true,
   },
@@ -74,7 +70,6 @@ const CRM_FIELD_DEFS: {
     label: 'E-mail',
     icon: 'ti-mail',
     hint: 'Endereço de e-mail para contato',
-    commonNames: ['email', 'e-mail', 'mail'],
     defaultEnabled: true,
   },
   {
@@ -82,7 +77,6 @@ const CRM_FIELD_DEFS: {
     label: 'Telefone',
     icon: 'ti-phone',
     hint: 'Telefone ou celular com DDD',
-    commonNames: ['telefone', 'phone', 'tel', 'celular'],
     defaultEnabled: true,
   },
   {
@@ -90,7 +84,6 @@ const CRM_FIELD_DEFS: {
     label: 'Mensagem',
     icon: 'ti-message',
     hint: 'Texto livre ou observações do formulário',
-    commonNames: ['mensagem', 'message', 'msg', 'comentario'],
     defaultEnabled: true,
   },
   {
@@ -98,7 +91,6 @@ const CRM_FIELD_DEFS: {
     label: 'Empresa',
     icon: 'ti-building',
     hint: 'Nome da empresa ou organização',
-    commonNames: ['empresa', 'company', 'organizacao'],
     defaultEnabled: false,
   },
 ];
@@ -134,56 +126,11 @@ const CRM_FIELD_LABEL: Record<CrmField, string> = {
   empresa: 'Empresa',
 };
 
-function buildSelectorFromNames(names: string): string {
-  const parts = names
-    .split(',')
-    .map((n) => n.trim())
-    .filter(Boolean);
-  if (parts.length === 0) return '';
-  return parts
-    .flatMap((n) => [`input[name='${n}']`, `textarea[name='${n}']`, `select[name='${n}']`])
-    .join(', ');
-}
-
-function parseSelector(selector: string): { siteNames: string; useAdvanced: boolean; advancedSelector: string } {
-  const trimmed = selector.trim();
-  if (!trimmed) return { siteNames: '', useAdvanced: false, advancedSelector: '' };
-
-  const nameMatches = [...trimmed.matchAll(/\[name=['"]([^'"]+)['"]\]/g)].map((m) => m[1]);
-  const uniqueNames = [...new Set(nameMatches)];
-  const hasComplex =
-    trimmed.includes('#') ||
-    trimmed.includes('.') ||
-    trimmed.includes(':') ||
-    trimmed.includes('>') ||
-    trimmed.includes('input[type=');
-
-  if (hasComplex) {
-    return {
-      siteNames: uniqueNames.join(', '),
-      useAdvanced: true,
-      advancedSelector: trimmed,
-    };
-  }
-
-  if (uniqueNames.length > 0) {
-    return { siteNames: uniqueNames.join(', '), useAdvanced: false, advancedSelector: '' };
-  }
-
-  return { siteNames: trimmed, useAdvanced: true, advancedSelector: trimmed };
-}
-
 function defaultFieldConfig(def: (typeof CRM_FIELD_DEFS)[number]): FieldConfig {
   const defaultMapping = DEFAULT_FIELD_MAPPINGS.find((m) => m.crmField === def.crmField);
-  const parsed = defaultMapping
-    ? parseSelector(defaultMapping.selector)
-    : { siteNames: def.commonNames.slice(0, 2).join(', '), useAdvanced: false, advancedSelector: '' };
-
   return {
     enabled: def.defaultEnabled !== false,
-    siteNames: parsed.siteNames || def.commonNames.slice(0, 2).join(', '),
-    useAdvanced: parsed.useAdvanced,
-    advancedSelector: parsed.advancedSelector,
+    selector: defaultMapping?.selector || '',
     required: Boolean(def.required),
   };
 }
@@ -205,12 +152,9 @@ function mappingsToFieldState(mappings: FieldMapping[]): FieldConfigState {
       }
       continue;
     }
-    const parsed = parseSelector(mapping.selector);
     state[def.crmField] = {
       enabled: true,
-      siteNames: parsed.siteNames || def.commonNames.slice(0, 2).join(', '),
-      useAdvanced: parsed.useAdvanced,
-      advancedSelector: parsed.advancedSelector || mapping.selector,
+      selector: mapping.selector,
       required: Boolean(mapping.required ?? def.required),
     };
   }
@@ -221,7 +165,7 @@ function fieldStateToMappings(state: FieldConfigState): FieldMapping[] {
   return CRM_FIELD_DEFS.flatMap((def) => {
     const cfg = state[def.crmField];
     if (!cfg.enabled) return [];
-    const selector = cfg.useAdvanced ? cfg.advancedSelector.trim() : buildSelectorFromNames(cfg.siteNames);
+    const selector = cfg.selector.trim();
     if (!selector) return [];
     return [
       {
@@ -232,10 +176,6 @@ function fieldStateToMappings(state: FieldConfigState): FieldMapping[] {
       },
     ];
   });
-}
-
-function resolveSelector(cfg: FieldConfig): string {
-  return cfg.useAdvanced ? cfg.advancedSelector.trim() : buildSelectorFromNames(cfg.siteNames);
 }
 
 const formatDate = (value: string | null) => {
@@ -328,17 +268,6 @@ const ContactFormTab = () => {
     }));
   };
 
-  const toggleSiteNameChip = (crmField: CrmField, name: string) => {
-    const cfg = form.fieldConfig[crmField];
-    const current = cfg.siteNames
-      .split(',')
-      .map((n) => n.trim())
-      .filter(Boolean);
-    const exists = current.includes(name);
-    const next = exists ? current.filter((n) => n !== name) : [...current, name];
-    updateFieldConfig(crmField, { siteNames: next.join(', ') });
-  };
-
   const openCreate = () => {
     setEditing(null);
     setForm(buildEmptyForm());
@@ -377,8 +306,8 @@ const ContactFormTab = () => {
     }
 
     const nomeCfg = form.fieldConfig.nome;
-    if (!nomeCfg.enabled || !resolveSelector(nomeCfg)) {
-      setError('O campo Nome precisa estar ativo e configurado — é usado para identificar o lead.');
+    if (!nomeCfg.enabled || !nomeCfg.selector.trim()) {
+      setError('O campo Nome precisa estar ativo com um seletor CSS — é usado para identificar o lead.');
       return;
     }
 
@@ -580,7 +509,7 @@ const ContactFormTab = () => {
         open={modalOpen}
         wide
         title={editing ? 'Editar rastreador de formulário' : 'Novo rastreador de formulário'}
-        description="Informe o site, escolha o formulário e associe cada campo do CRM ao name do site."
+        description="Informe o site, o formulário e o seletor CSS de cada campo do CRM."
         onClose={closeModal}
       >
         <form className="crm-form integration-form" onSubmit={(e) => void handleSave(e)}>
@@ -650,17 +579,12 @@ const ContactFormTab = () => {
               3 · Campos do formulário
             </div>
             <p className="form-field-map-intro">
-              Para cada dado do CRM, informe como o campo se chama no HTML do site (atributo{' '}
-              <code>name</code>). Clique nas sugestões ou digite vários nomes separados por vírgula.
+              Para cada dado do CRM, informe o seletor CSS do campo no site. Separe múltiplos seletores por vírgula.
             </p>
 
             {CRM_FIELD_DEFS.map((def) => {
               const cfg = form.fieldConfig[def.crmField];
-              const selectedNames = cfg.siteNames
-                .split(',')
-                .map((n) => n.trim())
-                .filter(Boolean);
-              const preview = resolveSelector(cfg);
+              const defaultSelector = DEFAULT_FIELD_MAPPINGS.find((m) => m.crmField === def.crmField)?.selector || '';
 
               return (
                 <div key={def.crmField} className={`form-field-card${cfg.enabled ? '' : ' disabled'}`}>
@@ -690,65 +614,16 @@ const ContactFormTab = () => {
                   </div>
 
                   {cfg.enabled ? (
-                    <>
-                      <div className="form-field-bridge">
-                        <span className="form-field-bridge-label">{def.label} no CRM</span>
-                        <i className="ti ti-arrow-right" aria-hidden="true" />
-                        <span>
-                          vem de <code>name=&quot;…&quot;</code> no site
-                        </span>
-                      </div>
-
-                      {!cfg.useAdvanced ? (
-                        <>
-                          <input
-                            className="form-field-site-input"
-                            type="text"
-                            placeholder={`Ex.: ${def.commonNames.slice(0, 2).join(', ')}`}
-                            value={cfg.siteNames}
-                            onChange={(e) => updateFieldConfig(def.crmField, { siteNames: e.target.value })}
-                          />
-                          <div className="form-field-chips">
-                            {def.commonNames.map((name) => (
-                              <button
-                                key={name}
-                                type="button"
-                                className={`form-field-chip${selectedNames.includes(name) ? ' selected' : ''}`}
-                                onClick={() => toggleSiteNameChip(def.crmField, name)}
-                              >
-                                {name}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <textarea
-                          className="form-field-advanced"
-                          placeholder="input[name='email'], #contato .campo-email"
-                          value={cfg.advancedSelector}
-                          onChange={(e) => updateFieldConfig(def.crmField, { advancedSelector: e.target.value })}
-                        />
-                      )}
-
-                      {preview ? (
-                        <div className="form-field-preview">
-                          Será capturado com: <code>{preview}</code>
-                        </div>
-                      ) : null}
-
-                      <button
-                        type="button"
-                        className="form-advanced-toggle"
-                        onClick={() =>
-                          updateFieldConfig(def.crmField, {
-                            useAdvanced: !cfg.useAdvanced,
-                            advancedSelector: cfg.useAdvanced ? '' : preview || cfg.advancedSelector,
-                          })
-                        }
-                      >
-                        {cfg.useAdvanced ? '← Voltar ao modo simples (name)' : 'Usar seletor CSS avançado'}
-                      </button>
-                    </>
+                    <div className="crm-field">
+                      <label htmlFor={`cf_sel_${def.crmField}`}>Seletor CSS</label>
+                      <input
+                        id={`cf_sel_${def.crmField}`}
+                        type="text"
+                        placeholder={defaultSelector}
+                        value={cfg.selector}
+                        onChange={(e) => updateFieldConfig(def.crmField, { selector: e.target.value })}
+                      />
+                    </div>
                   ) : null}
                 </div>
               );
