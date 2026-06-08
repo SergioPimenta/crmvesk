@@ -84,6 +84,17 @@ def _extract_from_article(article) -> dict:
             }
 
             let endereco = '';
+            let phone = '';
+            const phoneMatch = text.match(/\(\d{2}\)\s*\d{4,5}[-\s]?\d{4}/g);
+            if (phoneMatch) phone = phoneMatch[phoneMatch.length - 1];
+            if (!phone) {
+                for (const el of el.querySelectorAll('[aria-label], [data-item-id]')) {
+                    const blob = (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('data-item-id') || '');
+                    const m = blob.match(/\(\d{2}\)\s*[\d-]+/);
+                    if (m) { phone = m[0]; break; }
+                }
+            }
+
             const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
             for (const line of lines) {
                 if (line === name || /^\\d[,.]\\d/.test(line) || /^patrocinado$/i.test(line)) continue;
@@ -102,7 +113,7 @@ def _extract_from_article(article) -> dict:
                 }
             }
 
-            return { name, text, site, endereco };
+            return { name, text, site, endereco, phone };
         }"""
     )
 
@@ -110,6 +121,10 @@ def _extract_from_article(article) -> dict:
     site = (data.get("site") or "").strip()
     if not site:
         site = _parse_site_from_text(data.get("text", ""))
+
+    if not phone_raw:
+        phone_from_aria = data.get("phone") or ""
+        phone_raw = _parse_phone_from_text(phone_from_aria) or phone_from_aria
 
     return {
         "nome": (data.get("name") or "").strip(),
@@ -248,13 +263,13 @@ def scrape_google_maps(
                     if not name or name in seen_names:
                         continue
 
-                    if len(item["telefoneRaw"]) < 10 or not item["site"]:
+                    if len(item["telefoneRaw"]) < 10:
                         try:
                             link = article.locator("a.hfpxzc").first
                             if link.count():
                                 link.click(timeout=8000)
                                 detail = _extract_detail_panel(page)
-                                if len(item["telefoneRaw"]) < 10 and len(detail["telefoneRaw"]) >= 10:
+                                if len(detail["telefoneRaw"]) >= 10:
                                     item["telefone"] = detail["telefone"]
                                     item["telefoneRaw"] = detail["telefoneRaw"]
                                 if not item["site"] and detail["site"]:

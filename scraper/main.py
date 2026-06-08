@@ -24,7 +24,7 @@ class SearchBody(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "engine": "python-playwright", "version": "1.1.0"}
+    return {"ok": True, "engine": "python-playwright", "version": "1.1.1"}
 
 
 @app.post("/search")
