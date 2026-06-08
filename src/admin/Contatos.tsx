@@ -448,21 +448,21 @@ const Contatos = () => {
 
                 <td>
 
-                  <div className="contact-name-cell">
+                    <div className="contact-name-cell">
 
                     <div className={`contact-av${c.precisaFollowUp ? ' attention' : ''}`}>{initials(c.nome)}</div>
 
-                    <div style={{ minWidth: 0 }}>
+                    <div className="contact-name-cell__body">
 
-                      <div style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="contact-name-cell__title">
 
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</span>
+                        <span className="contact-name-cell__name" title={c.nome}>{c.nome}</span>
 
                         {c.precisaFollowUp ? <span className="pill-attention">Novo</span> : null}
 
                       </div>
 
-                      <div style={{ fontSize: 10, color: 'var(--vesk-muted)' }}>{c.email}</div>
+                      <div className="contact-name-cell__email">{c.email}</div>
 
                     </div>
 

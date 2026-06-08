@@ -720,6 +720,43 @@ body.vesk-app {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 300px;
+}
+
+.contact-name-cell__body {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.contact-name-cell__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.contact-name-cell__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.contact-name-cell__email {
+  font-size: 10px;
+  color: var(--vesk-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-name-cell__title .pill-attention {
+  flex-shrink: 0;
 }
 
 .contact-av {
