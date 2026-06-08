@@ -2512,4 +2512,119 @@ body.vesk-app {
   .crm-search {
     display: none;
   }
+
+  .scrape-search-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Google Maps Scraping */
+.scrape-search-card {
+  margin-bottom: 14px;
+}
+
+.scrape-search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scrape-search-fields {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 12px;
+}
+
+.scrape-search-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.scrape-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scrape-headless {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vesk-muted);
+}
+
+.scrape-status {
+  margin: 0;
+}
+
+.scrape-status-ok {
+  border-color: #4caf8240;
+  color: #4caf82;
+}
+
+.scrape-status-error {
+  border-color: #e0525240;
+  color: #e05252;
+}
+
+.scrape-api-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vesk-muted);
+  line-height: 1.5;
+}
+
+.scrape-api-hint code {
+  font-size: 10px;
+  background: var(--vesk-surface2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.scrape-results-card {
+  min-height: 200px;
+}
+
+.scrape-table-wrap {
+  overflow-x: auto;
+}
+
+.scrape-table th {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--vesk-sub);
+  background: var(--vesk-surface2);
+}
+
+.scrape-col-num {
+  width: 44px;
+  text-align: center;
+  color: var(--vesk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scrape-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vesk-text);
+}
+
+.scrape-address {
+  font-size: 10px;
+  color: var(--vesk-muted);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.scrape-site-link {
+  color: #378add;
+  font-size: 11px;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.scrape-site-link:hover {
+  text-decoration: underline;
 }

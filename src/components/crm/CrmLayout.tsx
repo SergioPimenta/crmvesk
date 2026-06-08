@@ -109,6 +109,10 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
               <i className="ti ti-file-text" aria-hidden="true" />
               Propostas
             </NavLink>
+            <NavLink to="/admin/scraping" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`}>
+              <i className="ti ti-map-pin" aria-hidden="true" />
+              Scraping
+            </NavLink>
           </div>
           <div className="crm-nav-section">
             <div className="crm-nav-label">Integrações</div>

@@ -11,6 +11,7 @@ import Propostas from './admin/Propostas';
 import Integracoes from './admin/Integracoes';
 import WhatsApp from './admin/WhatsApp';
 import BotaoWhatsApp from './admin/BotaoWhatsApp';
+import Scraping from './admin/Scraping';
 import PrivateRoute from './components/PrivateRoute';
 import GuestRoute from './components/GuestRoute';
 
@@ -32,6 +33,7 @@ function App() {
         <Route path="botao-whatsapp" element={<BotaoWhatsApp />} />
         <Route path="relatorios" element={<Relatorios />} />
         <Route path="propostas" element={<Propostas />} />
+        <Route path="scraping" element={<Scraping />} />
         <Route path="integracoes" element={<Integracoes />} />
       </Route>
 
