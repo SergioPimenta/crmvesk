@@ -9,6 +9,7 @@ import { useCrmData, type ContactStage, type ContactType, type PipelineStage } f
 import { api } from '../services/api';
 
 import { stageToContactEtapa } from '../utils/crmStage';
+import { contactOrigin } from '../utils/contactOrigin';
 
 
 
@@ -420,7 +421,7 @@ const Contatos = () => {
 
               <th>Etapa</th>
 
-              <th>Última interação</th>
+              <th>Origem</th>
 
               <th />
 
@@ -468,7 +469,7 @@ const Contatos = () => {
 
                 </td>
 
-                <td style={{ color: 'var(--vesk-muted)' }}>{c.ultimaInteracao}</td>
+                <td style={{ color: 'var(--vesk-muted)' }}>{contactOrigin(c.ultimaInteracao)}</td>
 
                 <td>
 

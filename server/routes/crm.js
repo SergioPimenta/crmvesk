@@ -403,7 +403,7 @@ router.post('/contacts/bulk-import', async (req, res) => {
           continue;
         }
 
-        const ultimaInteracao = String(item.ultimaInteracao || 'Importado do Google Maps').trim();
+        const ultimaInteracao = String(item.ultimaInteracao || 'Google Maps').trim();
         const contactEtapa = String(item.etapa || etapa || 'Prospecção');
 
         const [contactResult] = await conn.query(

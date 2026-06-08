@@ -93,15 +93,11 @@ const Scraping = () => {
           const nome = row.nome.trim();
           if (!nome) return null;
 
-          const notes = ['Importado do Google Maps'];
-          if (row.site) notes.push(row.site.replace(/^https?:\/\//, ''));
-          if (row.endereco) notes.push(row.endereco);
-
           return {
             nome,
             telefone: normalizePhone(row.telefone),
             etapa,
-            ultimaInteracao: notes.join(' · '),
+            ultimaInteracao: 'Google Maps',
           };
         })
         .filter(Boolean);
