@@ -2020,6 +2020,80 @@ body.vesk-app {
   color: #25d366;
 }
 
+.integration-brand.form-track {
+  background: #e85d2422;
+  color: var(--vesk-orange);
+}
+
+.form-track-selector {
+  display: block;
+  font-size: 11px;
+  padding: 8px 10px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  word-break: break-all;
+}
+
+.form-field-map {
+  margin-top: 4px;
+}
+
+.form-field-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.form-field-map-head label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--vesk-sub);
+}
+
+.form-field-map-table {
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.form-field-map-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 44px 36px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-top: 1px solid var(--vesk-border);
+}
+
+.form-field-map-row:first-child {
+  border-top: none;
+}
+
+.form-field-map-header {
+  background: var(--vesk-surface2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vesk-muted);
+}
+
+.form-field-map-row select,
+.form-field-map-row input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-field-map-check {
+  justify-content: center;
+  margin: 0;
+}
+
 .integration-panel-title {
   margin: 0 0 4px;
   font-size: 16px;

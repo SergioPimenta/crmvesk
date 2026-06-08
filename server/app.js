@@ -7,7 +7,9 @@ import uploadRoutes from './routes/upload.js';
 import crmRoutes from './routes/crm.js';
 import whatsappRoutes from './routes/whatsapp.js';
 import widgetPublicRoutes from './routes/widgetPublic.js';
+import formPublicRoutes from './routes/formPublic.js';
 import whatsappButtonRoutes from './routes/whatsappButton.js';
+import contactFormRoutes from './routes/contactForm.js';
 
 dotenv.config();
 
@@ -23,7 +25,7 @@ export async function createApp() {
 
   // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
   app.use((req, res, next) => {
-    if (!req.path.startsWith('/api/widget')) return next();
+    if (!req.path.startsWith('/api/widget') && !req.path.startsWith('/api/form')) return next();
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -37,7 +39,7 @@ export async function createApp() {
 
   const corsOrigin = process.env.FRONTEND_URL;
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/widget')) return next();
+    if (req.path.startsWith('/api/widget') || req.path.startsWith('/api/form')) return next();
     if (!corsOrigin) return next();
     return cors({
       origin: corsOrigin.split(',').map((o) => o.trim()),
@@ -50,7 +52,9 @@ export async function createApp() {
   app.use('/api/upload', uploadRoutes);
   app.use('/api/crm', crmRoutes);
   app.use('/api/widget', widgetPublicRoutes);
+  app.use('/api/form', formPublicRoutes);
   app.use('/api/whatsapp-button', whatsappButtonRoutes);
+  app.use('/api/contact-form', contactFormRoutes);
   app.use('/api/whatsapp', whatsappRoutes);
 
   app.get('/api', (req, res) => {

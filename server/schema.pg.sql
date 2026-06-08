@@ -178,3 +178,24 @@ CREATE TABLE IF NOT EXISTS whatsapp_button_widgets (
 
 CREATE INDEX IF NOT EXISTS idx_wa_button_user ON whatsapp_button_widgets(user_id);
 CREATE INDEX IF NOT EXISTS idx_wa_button_code ON whatsapp_button_widgets(monitor_code);
+
+CREATE TABLE IF NOT EXISTS contact_form_widgets (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  site_url VARCHAR(512) NOT NULL,
+  site_name VARCHAR(160) DEFAULT '',
+  monitor_code VARCHAR(64) UNIQUE NOT NULL,
+  form_selector VARCHAR(255) DEFAULT 'form',
+  field_mappings JSONB DEFAULT '[]'::jsonb,
+  pipeline_id INT REFERENCES pipelines(id) ON DELETE SET NULL,
+  stage_key VARCHAR(64) DEFAULT 'prospeccao',
+  active BOOLEAN DEFAULT TRUE,
+  page_views INT DEFAULT 0,
+  form_submissions INT DEFAULT 0,
+  last_seen_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_form_user ON contact_form_widgets(user_id);
+CREATE INDEX IF NOT EXISTS idx_contact_form_code ON contact_form_widgets(monitor_code);

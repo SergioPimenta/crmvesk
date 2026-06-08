@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
+import ContactFormTab from '../components/integrations/ContactFormTab';
 import { api } from '../services/api';
 
-type IntegrationTab = 'whatsapp';
+type IntegrationTab = 'whatsapp' | 'formulario';
 
 type WaSettings = {
   baseUrl: string;
@@ -16,6 +17,7 @@ type WaSettings = {
 
 const TABS: { id: IntegrationTab; label: string; icon: string }[] = [
   { id: 'whatsapp', label: 'WhatsApp', icon: 'ti-brand-whatsapp' },
+  { id: 'formulario', label: 'Formulário de contato', icon: 'ti-forms' },
 ];
 
 const Integracoes = () => {
@@ -333,6 +335,8 @@ const Integracoes = () => {
               </div>
             </div>
           </div>
+        ) : activeTab === 'formulario' ? (
+          <ContactFormTab />
         ) : null}
       </div>
     </CrmLayout>

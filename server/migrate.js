@@ -112,6 +112,7 @@ export async function runMigrations() {
   await migrateWhatsappMetaColumns();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
+  await migrateContactFormWidgets();
   await migrateDealsContactId();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
@@ -168,6 +169,32 @@ async function migrateWhatsappWidgetPipeline() {
   await pool.query(
     `ALTER TABLE whatsapp_button_widgets ADD COLUMN IF NOT EXISTS stage_key VARCHAR(64) DEFAULT 'prospeccao'`
   );
+}
+
+async function migrateContactFormWidgets() {
+  if (await tableExists('contact_form_widgets')) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_form_widgets (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      site_url VARCHAR(512) NOT NULL,
+      site_name VARCHAR(160) DEFAULT '',
+      monitor_code VARCHAR(64) UNIQUE NOT NULL,
+      form_selector VARCHAR(255) DEFAULT 'form',
+      field_mappings JSONB DEFAULT '[]'::jsonb,
+      pipeline_id INT REFERENCES pipelines(id) ON DELETE SET NULL,
+      stage_key VARCHAR(64) DEFAULT 'prospeccao',
+      active BOOLEAN DEFAULT TRUE,
+      page_views INT DEFAULT 0,
+      form_submissions INT DEFAULT 0,
+      last_seen_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_user ON contact_form_widgets(user_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_code ON contact_form_widgets(monitor_code)');
 }
 
 async function migrateDealsContactId() {
