@@ -2610,6 +2610,19 @@ body.vesk-app {
   min-height: 200px;
 }
 
+.scrape-results-header {
+  margin-bottom: 12px;
+}
+
+.scrape-save-contacts-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 8px 14px;
+}
+
 .scrape-table-wrap {
   overflow-x: auto;
 }

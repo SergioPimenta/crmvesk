@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
+import { useCrmData, type PipelineStage } from '../contexts/CrmDataContext';
 import { api } from '../services/api';
+import { stageToContactEtapa } from '../utils/crmStage';
 
 type ScrapeResult = {
   nome: string;
@@ -29,15 +31,120 @@ type JobStatus = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const normalizePhone = (phone: string) => {
+  const value = (phone || '').trim();
+  return value === '—' || value === '-' ? '' : value;
+};
+
 const Scraping = () => {
+  const { addContact, contacts, pipelines, activePipelineId, stages } = useCrmData();
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(10);
   const [headless, setHeadless] = useState(true);
   const [onlyWithPhone, setOnlyWithPhone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingContacts, setSavingContacts] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [results, setResults] = useState<ScrapeResult[]>([]);
+
+  const defaultPipelineId = activePipelineId ?? pipelines.find((p) => p.isDefault)?.id ?? pipelines[0]?.id ?? '';
+
+  const resolveFirstStage = async (): Promise<{ pipelineId: string; stage: PipelineStage }> => {
+    if (!defaultPipelineId) {
+      throw new Error('Nenhum funil configurado. Crie um funil antes de salvar contatos.');
+    }
+
+    let pipelineStages = stages.filter((s) => s.pipelineId === defaultPipelineId);
+    if (pipelineStages.length === 0) {
+      const rows = await api.get<Array<{ id: number; pipelineId: number; stageKey: string; titulo: string; cor: string; pos: number }>>(
+        `/crm/pipelines/${defaultPipelineId}/stages`
+      );
+      pipelineStages = rows.map((s) => ({
+        id: String(s.id),
+        pipelineId: String(s.pipelineId),
+        stageKey: String(s.stageKey),
+        titulo: s.titulo,
+        cor: s.cor,
+        pos: s.pos,
+      }));
+    }
+
+    const firstStage = [...pipelineStages].sort((a, b) => a.pos - b.pos)[0];
+    if (!firstStage) {
+      throw new Error('O funil não possui etapas. Configure etapas no pipeline antes de salvar.');
+    }
+
+    return { pipelineId: defaultPipelineId, stage: firstStage };
+  };
+
+  const saveResultsToContacts = async () => {
+    if (results.length === 0 || savingContacts) return;
+
+    setSavingContacts(true);
+    setError('');
+
+    try {
+      const { pipelineId, stage } = await resolveFirstStage();
+      const etapa = stageToContactEtapa(stage.stageKey, stage.titulo);
+      const existing = new Set(
+        contacts.map((c) => `${c.nome.trim().toLowerCase()}|${normalizePhone(c.telefone)}`)
+      );
+
+      let saved = 0;
+      let skipped = 0;
+
+      for (const row of results) {
+        const nome = row.nome.trim();
+        if (!nome) {
+          skipped += 1;
+          continue;
+        }
+
+        const telefone = normalizePhone(row.telefone);
+        const key = `${nome.toLowerCase()}|${telefone}`;
+        if (existing.has(key)) {
+          skipped += 1;
+          continue;
+        }
+
+        const notes = ['Importado do Google Maps'];
+        if (row.site) notes.push(row.site.replace(/^https?:\/\//, ''));
+        if (row.endereco) notes.push(row.endereco);
+
+        await addContact({
+          nome,
+          email: '',
+          telefone,
+          tipo: 'Lead',
+          etapa,
+          precisaFollowUp: true,
+          ultimaInteracao: notes.join(' · '),
+          pipelineId,
+          stageKey: stage.stageKey,
+        });
+
+        existing.add(key);
+        saved += 1;
+      }
+
+      if (saved === 0) {
+        setStatus(
+          skipped > 0
+            ? 'Nenhum contato novo para salvar (todos já existiam ou estavam vazios).'
+            : 'Nenhum contato foi salvo.'
+        );
+      } else {
+        setStatus(
+          `${saved} contato(s) salvo(s) em Contatos${skipped > 0 ? ` · ${skipped} ignorado(s) (duplicados ou vazios)` : ''}.`
+        );
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Não foi possível salvar os contatos.');
+    } finally {
+      setSavingContacts(false);
+    }
+  };
 
   const runSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,10 +318,21 @@ const Scraping = () => {
       </div>
 
       <div className="crm-card scrape-results-card">
-        <div className="crm-card-header" style={{ marginBottom: 12 }}>
+        <div className="crm-card-header scrape-results-header">
           <i className="ti ti-list" style={{ color: 'var(--vesk-orange)', fontSize: 16 }} aria-hidden="true" />
           <div className="crm-card-title">Resultados</div>
           {results.length > 0 ? <span className="pipeline-badge">{results.length}</span> : null}
+          {results.length > 0 ? (
+            <button
+              type="button"
+              className="crm-btn-primary scrape-save-contacts-btn"
+              disabled={savingContacts || loading}
+              onClick={() => void saveResultsToContacts()}
+            >
+              <i className="ti ti-user-plus" aria-hidden="true" />
+              {savingContacts ? 'Salvando…' : 'Salvar em contatos'}
+            </button>
+          ) : null}
         </div>
 
         {results.length === 0 ? (
