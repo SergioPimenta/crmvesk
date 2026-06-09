@@ -56,10 +56,16 @@ export const loginUser = async (email, password) => {
       { expiresIn: '24h' }
     );
 
-    // Filter user object output
-    delete user.password;
-
-    return { success: true, token, user };
+    return {
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role || 'user',
+      },
+    };
   } catch (error) {
     return { success: false, error: error.message };
   }

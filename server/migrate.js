@@ -118,6 +118,7 @@ export async function runMigrations() {
   await migrateDealsContactId();
   await migrateContactsSite();
   await migrateUsersActive();
+  await migrateEnsureAdminUser();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -126,6 +127,19 @@ async function migrateUsersActive() {
   if (!(await tableExists('users'))) return;
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
   await pool.query(`UPDATE users SET active = TRUE WHERE active IS NULL`);
+}
+
+async function migrateEnsureAdminUser() {
+  if (!(await tableExists('users'))) return;
+
+  const [adminRows] = await pool.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+  if (adminRows.length > 0) return;
+
+  const [users] = await pool.query(`SELECT id FROM users ORDER BY id ASC LIMIT 1`);
+  if (users.length === 0) return;
+
+  await pool.query(`UPDATE users SET role = 'admin' WHERE id = ?`, [users[0].id]);
+  console.log(`Migration: usuário #${users[0].id} promovido a administrador (nenhum admin existia)`);
 }
 
 async function migrateWhatsappMetaColumns() {
