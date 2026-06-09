@@ -639,7 +639,7 @@ export async function listChats(userId) {
             ct.nome AS contactName
      FROM whatsapp_chats c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
-     WHERE c.user_id = ?
+     WHERE c.user_id = ? AND COALESCE(c.attendance_status, 'open') = 'open'
      ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`,
     [userId]
   );

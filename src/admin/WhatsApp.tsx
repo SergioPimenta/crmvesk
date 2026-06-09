@@ -187,14 +187,20 @@ const WhatsApp = () => {
 
   const toggleAttendance = async () => {
     if (!active) return;
-    const next = isClosed ? 'open' : 'closed';
+    const closing = !isClosed;
+    const closedId = active.id;
     setFinishing(true);
     try {
-      await api.post(`/whatsapp/chats/${active.id}/attendance`, { status: next });
-      setConversations((prev) =>
-        prev.map((c) => (c.id === active.id ? { ...c, attendanceStatus: next } : c))
-      );
-      await loadChats();
+      await api.post(`/whatsapp/chats/${active.id}/attendance`, {
+        status: closing ? 'closed' : 'open',
+      });
+      if (closing) {
+        setConversations((prev) => prev.filter((c) => c.id !== closedId));
+        setActiveId(null);
+        setMessages([]);
+      } else {
+        await loadChats();
+      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Não foi possível atualizar o atendimento');
     } finally {
