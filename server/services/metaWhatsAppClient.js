@@ -144,10 +144,14 @@ export function parseWebhookStatuses(payload) {
 }
 
 /** Inscreve o app na conta WhatsApp Business (necessário para receber webhooks). */
+export async function getWabaId(phoneNumberId, accessToken) {
+  const data = await metaRequest(accessToken, 'GET', `/${phoneNumberId}?fields=whatsapp_business_account`);
+  return data?.whatsapp_business_account?.id || null;
+}
+
 export async function subscribeAppToWaba(phoneNumberId, accessToken) {
   try {
-    const data = await metaRequest(accessToken, 'GET', `/${phoneNumberId}?fields=whatsapp_business_account`);
-    const wabaId = data?.whatsapp_business_account?.id;
+    const wabaId = await getWabaId(phoneNumberId, accessToken);
     if (!wabaId) return null;
     await metaRequest(accessToken, 'POST', `/${wabaId}/subscribed_apps`);
     return wabaId;
@@ -169,4 +173,60 @@ export function verifySignature(appSecret, rawBody, signatureHeader) {
   } catch {
     return false;
   }
+}
+
+function extractTemplateBody(components = []) {
+  const body = components.find((c) => c.type === 'BODY');
+  return body?.text || '';
+}
+
+function mapMessageTemplate(row) {
+  return {
+    id: String(row.id || ''),
+    name: row.name || '',
+    status: row.status || '',
+    category: row.category || '',
+    language: row.language || '',
+    body: extractTemplateBody(row.components),
+    rejectedReason: row.rejected_reason || '',
+    qualityScore:
+      typeof row.quality_score === 'object' ? row.quality_score?.score || null : row.quality_score || null,
+  };
+}
+
+/** Lista modelos de mensagem da conta WABA (aprovados, rejeitados, pendentes, etc.). */
+export async function listMessageTemplates(phoneNumberId, accessToken) {
+  const wabaId = await getWabaId(phoneNumberId, accessToken);
+  if (!wabaId) {
+    throw new Error('Não foi possível identificar a conta WhatsApp Business (WABA)');
+  }
+
+  const fields = 'id,name,status,category,language,components,rejected_reason,quality_score';
+  const templates = [];
+  let after = null;
+
+  for (;;) {
+    const qs = new URLSearchParams({ limit: '100', fields });
+    if (after) qs.set('after', after);
+    const data = await metaRequest(accessToken, 'GET', `/${wabaId}/message_templates?${qs.toString()}`);
+    for (const row of data?.data || []) {
+      templates.push(mapMessageTemplate(row));
+    }
+    after = data?.paging?.cursors?.after;
+    if (!after) break;
+  }
+
+  const approved = templates.filter((t) => t.status === 'APPROVED');
+  const rejected = templates.filter((t) => t.status === 'REJECTED');
+  const pending = templates.filter((t) => t.status === 'PENDING' || t.status === 'IN_APPEAL');
+  const other = templates.filter(
+    (t) => !['APPROVED', 'REJECTED', 'PENDING', 'IN_APPEAL'].includes(t.status)
+  );
+
+  return {
+    wabaId,
+    total: templates.length,
+    groups: { approved, rejected, pending, other },
+    templates,
+  };
 }

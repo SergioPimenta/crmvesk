@@ -19,6 +19,7 @@ import {
   syncChatsFromProvider,
   verifyMetaWebhook,
   getWebhookDiagnostics,
+  getMessageTemplates,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
@@ -126,6 +127,15 @@ router.get('/status', async (req, res) => {
   try {
     const view = await getConnectionView(req.userId);
     res.json(view);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.get('/templates', async (req, res) => {
+  try {
+    const data = await getMessageTemplates(req.userId);
+    res.json(data);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

@@ -2772,6 +2772,44 @@ body.vesk-app {
   color: var(--vesk-muted);
 }
 
+.wa-templates-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wa-templates-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wa-templates-tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-templates-list {
+  padding: 0;
+  overflow: auto;
+}
+
+.wa-template-body {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wa-templates-footnote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vesk-muted);
+}
+
 .wa-widget-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

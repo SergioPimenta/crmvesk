@@ -23,6 +23,7 @@ import {
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
+  listMessageTemplates,
 } from './metaWhatsAppClient.js';
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
@@ -821,4 +822,19 @@ function formatWhenLocal(date) {
   if (dDay === dayFmt.format(yesterday)) return 'Ontem';
 
   return new Intl.DateTimeFormat('pt-BR', { timeZone: TZ_BR, day: '2-digit', month: '2-digit' }).format(d);
+}
+
+export async function getMessageTemplates(userId) {
+  const settings = await getSettings(userId);
+  if (!settings) {
+    throw new Error('WhatsApp não configurado');
+  }
+  if (settings.provider !== 'meta') {
+    throw new Error('Modelos disponíveis apenas com a API oficial Meta');
+  }
+  if (settings.status !== 'connected') {
+    throw new Error('Conecte o WhatsApp antes de consultar os modelos');
+  }
+
+  return listMessageTemplates(settings.instanceName, settings.apiKey);
 }

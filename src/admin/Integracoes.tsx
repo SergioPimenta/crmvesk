@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
 import ContactFormTab from '../components/integrations/ContactFormTab';
 import WhatsAppButtonTab from '../components/integrations/WhatsAppButtonTab';
+import MessageTemplatesModal from '../components/integrations/MessageTemplatesModal';
 import { api } from '../services/api';
 
 type IntegrationTab = 'whatsapp' | 'formulario' | 'botao';
@@ -38,6 +39,7 @@ const Integracoes = () => {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
   const [copiedField, setCopiedField] = useState<'webhook' | 'token' | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [apiToken, setApiToken] = useState('');
@@ -349,9 +351,15 @@ const Integracoes = () => {
                   </button>
                 ) : null}
                 {isLocked ? (
-                  <button type="button" className="crm-btn-secondary crm-btn-danger" onClick={() => void handleDisconnect()}>
-                    Desconectar
-                  </button>
+                  <>
+                    <button type="button" className="crm-btn-secondary" onClick={() => setTemplatesOpen(true)}>
+                      <i className="ti ti-template" aria-hidden="true" />
+                      Modelos de mensagem
+                    </button>
+                    <button type="button" className="crm-btn-secondary crm-btn-danger" onClick={() => void handleDisconnect()}>
+                      Desconectar
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
@@ -397,6 +405,8 @@ const Integracoes = () => {
           <WhatsAppButtonTab />
         ) : null}
       </div>
+
+      <MessageTemplatesModal open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
     </CrmLayout>
   );
 };
