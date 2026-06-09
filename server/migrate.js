@@ -117,8 +117,15 @@ export async function runMigrations() {
   await migrateContactFormWidgets();
   await migrateDealsContactId();
   await migrateContactsSite();
+  await migrateUsersActive();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
+}
+
+async function migrateUsersActive() {
+  if (!(await tableExists('users'))) return;
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
+  await pool.query(`UPDATE users SET active = TRUE WHERE active IS NULL`);
 }
 
 async function migrateWhatsappMetaColumns() {

@@ -39,6 +39,10 @@ export const loginUser = async (email, password) => {
 
     const user = users[0];
 
+    if (user.active === false) {
+      throw new Error('Conta desativada. Entre em contato com o administrador.');
+    }
+
     // Check pass
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {

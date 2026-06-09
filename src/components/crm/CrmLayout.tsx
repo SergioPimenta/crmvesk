@@ -117,6 +117,15 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
               Integrações
             </NavLink>
           </div>
+          {user?.role === 'admin' ? (
+            <div className="crm-nav-section">
+              <div className="crm-nav-label">Administração</div>
+              <NavLink to="/admin/usuarios" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`}>
+                <i className="ti ti-user-cog" aria-hidden="true" />
+                Usuários
+              </NavLink>
+            </div>
+          ) : null}
           <div className="crm-nav-section">
             <div className="crm-nav-label">Automação</div>
             <button type="button" className="crm-nav-item">

@@ -27,3 +27,10 @@ export const verifyToken = (req, res, next) => {
     next();
   });
 };
+
+export const requireAdmin = (req, res, next) => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ message: 'Acesso restrito a administradores' });
+  }
+  return next();
+};

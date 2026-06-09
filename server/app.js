@@ -11,6 +11,7 @@ import formPublicRoutes from './routes/formPublic.js';
 import whatsappButtonRoutes from './routes/whatsappButton.js';
 import contactFormRoutes from './routes/contactForm.js';
 import scrapingRoutes from './routes/scraping.js';
+import usersRoutes from './routes/users.js';
 
 dotenv.config();
 
@@ -71,6 +72,7 @@ export async function createApp() {
   app.use('/api/whatsapp-button', whatsappButtonRoutes);
   app.use('/api/contact-form', contactFormRoutes);
   app.use('/api/scraping', scrapingRoutes);
+  app.use('/api/users', usersRoutes);
   app.use('/api/whatsapp', whatsappRoutes);
 
   app.get('/api', (req, res) => {
