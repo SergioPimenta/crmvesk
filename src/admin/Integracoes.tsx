@@ -6,12 +6,8 @@ import WhatsAppButtonTab from '../components/integrations/WhatsAppButtonTab';
 import { api } from '../services/api';
 
 type IntegrationTab = 'whatsapp' | 'formulario' | 'botao';
-type WaProvider = 'meta' | 'evolution';
 
 type WaSettings = {
-  provider: WaProvider;
-  baseUrl: string;
-  instanceName: string;
   phoneNumberId?: string;
   phone: string;
   status: string;
@@ -33,19 +29,16 @@ const Integracoes = () => {
   const tabParam = searchParams.get('tab') as IntegrationTab | null;
   const activeTab: IntegrationTab = TABS.some((t) => t.id === tabParam) ? tabParam! : 'whatsapp';
 
-  const [provider, setProvider] = useState<WaProvider>('meta');
   const [configured, setConfigured] = useState(false);
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
-  const [qrcode, setQrcode] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
+  const [copiedField, setCopiedField] = useState<'webhook' | 'token' | null>(null);
 
-  const [baseUrl, setBaseUrl] = useState('');
-  const [instanceName, setInstanceName] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [apiToken, setApiToken] = useState('');
   const [appSecret, setAppSecret] = useState('');
@@ -59,10 +52,7 @@ const Integracoes = () => {
     const data = await api.get<{ configured: boolean; settings: WaSettings | null }>('/whatsapp/config');
     setConfigured(data.configured);
     if (data.settings) {
-      setProvider(data.settings.provider === 'evolution' ? 'evolution' : 'meta');
-      setBaseUrl(data.settings.baseUrl || '');
-      setInstanceName(data.settings.instanceName || '');
-      setPhoneNumberId(data.settings.phoneNumberId || data.settings.instanceName || '');
+      setPhoneNumberId(data.settings.phoneNumberId || '');
       setPhone(data.settings.phone || '');
       setWebhookUrl(data.settings.webhookUrl || '');
       setVerifyToken(data.settings.verifyToken || '');
@@ -75,13 +65,11 @@ const Integracoes = () => {
       const data = await api.get<{
         configured: boolean;
         status: typeof status;
-        qrcode?: string | null;
         webhookUrl?: string;
         error?: string;
       }>('/whatsapp/status');
       setConfigured(data.configured);
       setStatus(data.status || 'disconnected');
-      setQrcode(data.qrcode ?? null);
       if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
       if (data.error) setError(data.error);
     } catch (err: unknown) {
@@ -101,21 +89,17 @@ const Integracoes = () => {
     })();
   }, [loadConfig, loadStatus]);
 
-  useEffect(() => {
-    if (provider !== 'evolution' || status !== 'connecting') return undefined;
-    const id = window.setInterval(() => void loadStatus(), 4000);
-    return () => window.clearInterval(id);
-  }, [provider, status, loadStatus]);
-
   const statusLabel = useMemo(() => {
     if (status === 'connected') return 'Conectado';
-    if (status === 'connecting') return 'Aguardando QR Code';
+    if (status === 'connecting') return 'Conectando…';
     return 'Desconectado';
   }, [status]);
 
-  const copyText = async (text: string) => {
+  const copyText = async (text: string, field: 'webhook' | 'token') => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(null), 2000);
     } catch {
       /* ignore */
     }
@@ -126,23 +110,13 @@ const Integracoes = () => {
     setSaving(true);
     setError('');
     try {
-      if (provider === 'meta') {
-        await api.put('/whatsapp/config', {
-          provider: 'meta',
-          phoneNumberId: phoneNumberId.trim(),
-          accessToken: apiToken.trim() || undefined,
-          appSecret: appSecret.trim() || undefined,
-          phone: phone.trim(),
-        });
-      } else {
-        await api.put('/whatsapp/config', {
-          provider: 'evolution',
-          baseUrl: baseUrl.trim(),
-          instanceName: instanceName.trim(),
-          apiKey: apiToken.trim() || undefined,
-          phone: phone.trim(),
-        });
-      }
+      await api.put('/whatsapp/config', {
+        provider: 'meta',
+        phoneNumberId: phoneNumberId.trim(),
+        accessToken: apiToken.trim() || undefined,
+        appSecret: appSecret.trim() || undefined,
+        phone: phone.trim(),
+      });
       setApiToken('');
       setAppSecret('');
       await loadConfig();
@@ -158,30 +132,19 @@ const Integracoes = () => {
     setError('');
     try {
       if (!configured) {
-        if (provider === 'meta') {
-          await api.put('/whatsapp/config', {
-            provider: 'meta',
-            phoneNumberId: phoneNumberId.trim(),
-            accessToken: apiToken.trim(),
-            appSecret: appSecret.trim() || undefined,
-            phone: phone.trim(),
-          });
-        } else {
-          await api.put('/whatsapp/config', {
-            provider: 'evolution',
-            baseUrl: baseUrl.trim(),
-            instanceName: instanceName.trim(),
-            apiKey: apiToken.trim(),
-            phone: phone.trim(),
-          });
-        }
+        await api.put('/whatsapp/config', {
+          provider: 'meta',
+          phoneNumberId: phoneNumberId.trim(),
+          accessToken: apiToken.trim(),
+          appSecret: appSecret.trim() || undefined,
+          phone: phone.trim(),
+        });
         setConfigured(true);
         setApiToken('');
         setAppSecret('');
       }
-      const data = await api.post<{ status: string; qrcode?: string; webhookUrl?: string }>('/whatsapp/connect', {});
+      const data = await api.post<{ status: string; webhookUrl?: string }>('/whatsapp/connect', {});
       setStatus((data.status as typeof status) || 'connecting');
-      setQrcode(data.qrcode ?? null);
       if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
       void loadStatus();
     } catch (err: unknown) {
@@ -197,25 +160,15 @@ const Integracoes = () => {
       await api.delete('/whatsapp/config');
       setConfigured(false);
       setStatus('disconnected');
-      setQrcode(null);
       setApiToken('');
       setAppSecret('');
       setWebhookUrl('');
+      setVerifyToken('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao desconectar');
     }
   };
 
-  const handleSync = async () => {
-    try {
-      await api.post('/whatsapp/sync', {});
-      await loadStatus();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao sincronizar conversas');
-    }
-  };
-
-  const isMeta = provider === 'meta';
   const isLocked = status === 'connected';
 
   return (
@@ -265,23 +218,9 @@ const Integracoes = () => {
             </div>
 
             <div className="wa-provider-toggle" role="radiogroup" aria-label="Provedor WhatsApp">
-              <button
-                type="button"
-                className={`wa-provider-btn${isMeta ? ' active' : ''}`}
-                onClick={() => !isLocked && setProvider('meta')}
-                disabled={isLocked && provider !== 'meta'}
-              >
+              <button type="button" className="wa-provider-btn active" disabled>
                 <i className="ti ti-cloud" aria-hidden="true" />
                 API Oficial Meta
-              </button>
-              <button
-                type="button"
-                className={`wa-provider-btn${!isMeta ? ' active' : ''}`}
-                onClick={() => !isLocked && setProvider('evolution')}
-                disabled={isLocked && provider !== 'evolution'}
-              >
-                <i className="ti ti-qrcode" aria-hidden="true" />
-                Evolution API
               </button>
             </div>
 
@@ -295,174 +234,111 @@ const Integracoes = () => {
             {loading ? <div className="kanban-empty">Carregando…</div> : null}
 
             <form className="crm-form integration-form" onSubmit={saveConfig} autoComplete="off">
-              {isMeta ? (
-                <>
-                  <div className="crm-field">
-                    <label htmlFor="wa_phone_id">Phone Number ID</label>
-                    <input
-                      id="wa_phone_id"
-                      name="meta_phone_number_id"
-                      value={phoneNumberId}
-                      onChange={(e) => setPhoneNumberId(e.target.value)}
-                      placeholder="Ex: 123456789012345"
-                      disabled={isLocked}
-                      required
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                  <div className="crm-field">
-                    <label htmlFor="wa_token">Access Token (permanente)</label>
-                    <input
-                      id="wa_token"
-                      name="meta_access_token"
-                      type="password"
-                      value={apiToken}
-                      onChange={(e) => setApiToken(e.target.value)}
-                      placeholder={configured ? 'Deixe em branco para manter o atual' : 'Token da Meta Graph API'}
-                      disabled={isLocked}
-                      autoComplete="new-password"
-                      data-lpignore="true"
-                      data-1p-ignore
-                      required={!configured}
-                    />
-                  </div>
-                  <div className="crm-field">
-                    <label htmlFor="wa_app_secret">App Secret (recomendado)</label>
-                    <input
-                      id="wa_app_secret"
-                      name="meta_app_secret"
-                      type="password"
-                      value={appSecret}
-                      onChange={(e) => setAppSecret(e.target.value)}
-                      placeholder={configured ? 'Deixe em branco para manter o atual' : 'Segredo do app Meta'}
-                      disabled={isLocked}
-                      autoComplete="new-password"
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                  <div className="crm-field">
-                    <label htmlFor="wa_phone">Número exibido (opcional)</label>
-                    <input
-                      id="wa_phone"
-                      name="meta_display_phone"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Ex: 5511999998888"
-                      disabled={isLocked}
-                      autoComplete="off"
-                      inputMode="tel"
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
-                    <label htmlFor="wa_base">URL da API</label>
-                    <input
-                      id="wa_base"
-                      name="evolution_api_url"
-                      value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
-                      placeholder="Ex: https://sua-evolution.com"
-                      disabled={isLocked}
-                      required
-                      autoComplete="off"
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                  <div className="crm-field">
-                    <label htmlFor="wa_instance">Nome da instância</label>
-                    <input
-                      id="wa_instance"
-                      name="evolution_instance_name"
-                      value={instanceName}
-                      onChange={(e) => setInstanceName(e.target.value)}
-                      placeholder="Ex: crmvesk"
-                      disabled={isLocked}
-                      required
-                      autoComplete="off"
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                  <div className="crm-field">
-                    <label htmlFor="wa_token_evo">API Key</label>
-                    <input
-                      id="wa_token_evo"
-                      name="evolution_api_key"
-                      type="password"
-                      value={apiToken}
-                      onChange={(e) => setApiToken(e.target.value)}
-                      placeholder={configured ? 'Deixe em branco para manter a atual' : 'Sua chave global'}
-                      disabled={isLocked}
-                      autoComplete="new-password"
-                      data-lpignore="true"
-                      data-1p-ignore
-                      required={!configured}
-                    />
-                  </div>
-                  <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
-                    <label htmlFor="wa_phone_evo">Número (opcional, com DDI)</label>
-                    <input
-                      id="wa_phone_evo"
-                      name="evolution_display_phone"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Ex: 5511999998888"
-                      disabled={isLocked}
-                      autoComplete="off"
-                      inputMode="tel"
-                      data-lpignore="true"
-                      data-1p-ignore
-                    />
-                  </div>
-                </>
-              )}
+              <div className="crm-field">
+                <label htmlFor="wa_phone_id">Phone Number ID</label>
+                <input
+                  id="wa_phone_id"
+                  name="meta_phone_number_id"
+                  value={phoneNumberId}
+                  onChange={(e) => setPhoneNumberId(e.target.value)}
+                  placeholder="Ex: 123456789012345"
+                  disabled={isLocked}
+                  required
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore
+                />
+              </div>
+              <div className="crm-field">
+                <label htmlFor="wa_token">Access Token (permanente)</label>
+                <input
+                  id="wa_token"
+                  name="meta_access_token"
+                  type="password"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  placeholder={configured ? 'Deixe em branco para manter o atual' : 'Token da Meta Graph API'}
+                  disabled={isLocked}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore
+                  required={!configured}
+                />
+              </div>
+              <div className="crm-field">
+                <label htmlFor="wa_app_secret">App Secret (recomendado)</label>
+                <input
+                  id="wa_app_secret"
+                  name="meta_app_secret"
+                  type="password"
+                  value={appSecret}
+                  onChange={(e) => setAppSecret(e.target.value)}
+                  placeholder={configured ? 'Deixe em branco para manter o atual' : 'Segredo do app Meta'}
+                  disabled={isLocked}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore
+                />
+              </div>
+              <div className="crm-field">
+                <label htmlFor="wa_phone">Número exibido (opcional)</label>
+                <input
+                  id="wa_phone"
+                  name="meta_display_phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Ex: 5511999998888"
+                  disabled={isLocked}
+                  autoComplete="off"
+                  inputMode="tel"
+                  data-lpignore="true"
+                  data-1p-ignore
+                />
+              </div>
 
-              {isMeta && webhookUrl ? (
+              {webhookUrl ? (
                 <div className="integration-hint" style={{ gridColumn: '1 / -1' }}>
                   <i className="ti ti-webhook" aria-hidden="true" />
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <strong>Webhook (configure no Meta for Developers)</strong>
-                    <div style={{ marginTop: 6, fontSize: 12 }}>
-                      URL:{' '}
-                      <code style={{ wordBreak: 'break-all' }}>{webhookUrl}</code>{' '}
-                      <button type="button" className="crm-btn-link" onClick={() => void copyText(webhookUrl)}>
-                        Copiar
-                      </button>
-                    </div>
-                    {verifyToken ? (
-                      <div style={{ marginTop: 4, fontSize: 12 }}>
-                        Verify Token: <code>{verifyToken}</code>{' '}
-                        <button type="button" className="crm-btn-link" onClick={() => void copyText(verifyToken)}>
-                          Copiar
+                    <div className="wa-widget-field" style={{ marginTop: 10 }}>
+                      <label>URL</label>
+                      <div className="wa-widget-copy-row">
+                        <code>{webhookUrl}</code>
+                        <button
+                          type="button"
+                          className="crm-btn-secondary wa-widget-btn"
+                          onClick={() => void copyText(webhookUrl, 'webhook')}
+                        >
+                          <i className="ti ti-copy" aria-hidden="true" />
+                          {copiedField === 'webhook' ? 'Copiado!' : 'Copiar'}
                         </button>
                       </div>
+                    </div>
+                    {verifyToken ? (
+                      <div className="wa-widget-field" style={{ marginTop: 10 }}>
+                        <label>Verify Token</label>
+                        <div className="wa-widget-copy-row">
+                          <code>{verifyToken}</code>
+                          <button
+                            type="button"
+                            className="crm-btn-secondary wa-widget-btn"
+                            onClick={() => void copyText(verifyToken, 'token')}
+                          >
+                            <i className="ti ti-copy" aria-hidden="true" />
+                            {copiedField === 'token' ? 'Copiado!' : 'Copiar'}
+                          </button>
+                        </div>
+                      </div>
                     ) : null}
-                    <div style={{ marginTop: 6, fontSize: 12, color: 'var(--vesk-muted)' }}>
+                    <div style={{ marginTop: 10, fontSize: 12, color: 'var(--vesk-muted)' }}>
                       Assine o campo <strong>messages</strong>. Defina <code>WHATSAPP_WEBHOOK_PUBLIC_URL</code> no
                       servidor (ex.: https://crm.vesk.com.br).
                     </div>
                   </div>
-                </div>
-              ) : null}
-
-              {!isMeta ? (
-                <div className="integration-hint" style={{ gridColumn: '1 / -1' }}>
-                  <i className="ti ti-info-circle" aria-hidden="true" />
-                  <span>
-                    Configure <code>WHATSAPP_WEBHOOK_PUBLIC_URL</code> no servidor com a URL pública acessível pela
-                    Evolution. O webhook é registrado automaticamente ao conectar.
-                  </span>
                 </div>
               ) : null}
 
@@ -473,16 +349,9 @@ const Integracoes = () => {
                   </button>
                 ) : null}
                 {isLocked ? (
-                  <>
-                    {!isMeta ? (
-                      <button type="button" className="crm-btn-secondary" onClick={() => void handleSync()}>
-                        Sincronizar conversas
-                      </button>
-                    ) : null}
-                    <button type="button" className="crm-btn-secondary crm-btn-danger" onClick={() => void handleDisconnect()}>
-                      Desconectar
-                    </button>
-                  </>
+                  <button type="button" className="crm-btn-secondary crm-btn-danger" onClick={() => void handleDisconnect()}>
+                    Desconectar
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -492,24 +361,11 @@ const Integracoes = () => {
                     disabled={connecting}
                   >
                     <i className="ti ti-plug-connected" aria-hidden="true" />
-                    {connecting
-                      ? 'Conectando…'
-                      : isMeta
-                        ? 'Validar e conectar'
-                        : 'Conectar e exibir QR Code'}
+                    {connecting ? 'Conectando…' : 'Validar e conectar'}
                   </button>
                 )}
               </div>
             </form>
-
-            {!isMeta && status === 'connecting' && qrcode ? (
-              <div className="wa-qr-panel">
-                <p style={{ fontSize: 12, color: 'var(--vesk-muted)', marginBottom: 10 }}>
-                  Escaneie o QR Code no WhatsApp → Aparelhos conectados → Conectar aparelho
-                </p>
-                <img src={qrcode} alt="QR Code WhatsApp" className="wa-qr-image" />
-              </div>
-            ) : null}
 
             <div className="integration-features">
               <div className="integration-feature">
