@@ -274,21 +274,6 @@ const WhatsAppButtonTab = () => {
                 )}
 
                 <div className="wa-widget-field">
-                  <label>Código de monitoramento</label>
-                  <div className="wa-widget-copy-row">
-                    <code>{widget.monitorCode}</code>
-                    <button
-                      type="button"
-                      className="crm-btn-secondary wa-widget-btn"
-                      onClick={() => void handleCopy(widget, 'code')}
-                    >
-                      <i className="ti ti-copy" aria-hidden="true" />
-                      {copiedId === `${widget.id}-code` ? 'Copiado!' : 'Copiar'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="wa-widget-field">
                   <label>Código para o &lt;head&gt; do site</label>
                   <pre className="wa-widget-snippet">{widget.embedSnippet}</pre>
                   <button
