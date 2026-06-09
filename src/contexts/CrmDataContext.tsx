@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { enrichDealWithContact, mapDealRow } from '../utils/apiRow';
+import { useAuth } from './AuthContext';
 
 export type ContactStage = 'Prospecção' | 'Qualificação' | 'Proposta' | 'Negociação' | 'Fechado';
 export type ContactType = 'Lead' | 'Cliente' | 'Prospect';
@@ -159,7 +160,8 @@ type CrmDataContextType = {
 
 const CrmDataContext = createContext<CrmDataContextType>({} as CrmDataContextType);
 
-const ACTIVE_PIPELINE_KEY = 'crm_active_pipeline_id';
+const activePipelineKey = (userId: number | string) => `crm_active_pipeline_id_${userId}`;
+const LEGACY_ACTIVE_PIPELINE_KEY = 'crm_active_pipeline_id';
 
 const mapStageRow = (s: Record<string, unknown>) => ({
   id: String(s.id),
@@ -176,6 +178,7 @@ const genId = (prefix: string) =>
     : `${prefix}_${Date.now()}_${Math.round(Math.random() * 1e9)}`) as string;
 
 export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [activePipelineId, setActivePipelineIdState] = useState<string | null>(null);
@@ -183,8 +186,12 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const setActivePipelineId = (id: string | null | ((prev: string | null) => string | null)) => {
     setActivePipelineIdState((prev) => {
       const next = typeof id === 'function' ? id(prev) : id;
-      if (next) localStorage.setItem(ACTIVE_PIPELINE_KEY, next);
-      else localStorage.removeItem(ACTIVE_PIPELINE_KEY);
+      const uid = user?.id;
+      if (uid) {
+        const key = activePipelineKey(uid);
+        if (next) localStorage.setItem(key, next);
+        else localStorage.removeItem(key);
+      }
       return next;
     });
   };
@@ -200,12 +207,21 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+  const clearCrmState = useCallback(() => {
+    setPipelines([]);
+    setStages([]);
+    setActivePipelineIdState(null);
+    setCompanies([]);
+    setContacts([]);
+    setDeals([]);
+    setActivities([]);
+    setEmails([]);
+    setProposals([]);
+  }, []);
 
-    const load = async () => {
-      const [pipelinesData, companiesData, contactsData, dealsData, activitiesData, emailsData, proposalsData] = await Promise.all([
+  const loadCrmData = useCallback(async (userId: number) => {
+    const [pipelinesData, companiesData, contactsData, dealsData, activitiesData, emailsData, proposalsData] =
+      await Promise.all([
         api.get<any[]>('/crm/pipelines'),
         api.get<Company[]>('/crm/companies'),
         api.get<Contact[]>('/crm/contacts'),
@@ -215,69 +231,93 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         api.get<Proposal[]>('/crm/proposals'),
       ]);
 
-      const normalizedPipelines = pipelinesData.map((p) => ({
-        id: String(p.id),
-        nome: p.nome,
-        isDefault: Boolean(p.isDefault ?? p.isdefault),
-      }));
-      setPipelines(normalizedPipelines);
-      const savedId = localStorage.getItem(ACTIVE_PIPELINE_KEY);
-      const defaultId =
-        (savedId && normalizedPipelines.some((p) => p.id === savedId) ? savedId : null) ??
-        normalizedPipelines.find((p) => p.isDefault)?.id ??
-        normalizedPipelines[0]?.id ??
-        null;
-      setActivePipelineId(defaultId);
+    const normalizedPipelines = pipelinesData.map((p) => ({
+      id: String(p.id),
+      nome: p.nome,
+      isDefault: Boolean(p.isDefault ?? p.isdefault),
+    }));
+    setPipelines(normalizedPipelines);
 
-      setCompanies(companiesData.map((c) => ({ ...c, id: String((c as any).id) })));
-      const normalizedContacts = contactsData.map((c) => ({
-        ...c,
-        id: String((c as any).id),
-        empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined,
-      }));
-      setContacts(normalizedContacts);
-      setDeals(
-        (dealsData as Record<string, unknown>[])
-          .map(mapDealRow)
-          .map((deal) => enrichDealWithContact(deal, normalizedContacts))
-      );
-      setActivities(
-        activitiesData.map((a) => ({
-          ...a,
-          id: String((a as any).id),
-          contatoId: (a as any).contatoId ? String((a as any).contatoId) : undefined,
-          empresaId: (a as any).empresaId ? String((a as any).empresaId) : undefined,
-        }))
-      );
-      setEmails(
-        emailsData.map((m) => ({
-          ...m,
-          id: String((m as any).id),
-          contatoId: (m as any).contatoId ? String((m as any).contatoId) : undefined,
-          empresaId: (m as any).empresaId ? String((m as any).empresaId) : undefined,
-        }))
-      );
-      setProposals(
-        proposalsData.map((p) => ({
-          ...p,
-          id: String((p as any).id),
-          contatoId: (p as any).contatoId ? String((p as any).contatoId) : undefined,
-          empresaId: (p as any).empresaId ? String((p as any).empresaId) : undefined,
-          dealId: (p as any).dealId ? String((p as any).dealId) : undefined,
-        }))
-      );
-    };
+    localStorage.removeItem(LEGACY_ACTIVE_PIPELINE_KEY);
+    const savedId = localStorage.getItem(activePipelineKey(userId));
+    const defaultId =
+      (savedId && normalizedPipelines.some((p) => p.id === savedId) ? savedId : null) ??
+      normalizedPipelines.find((p) => p.isDefault)?.id ??
+      normalizedPipelines[0]?.id ??
+      null;
+    setActivePipelineIdState(defaultId);
+    if (defaultId) localStorage.setItem(activePipelineKey(userId), defaultId);
 
-    void load();
+    setCompanies(companiesData.map((c) => ({ ...c, id: String((c as any).id) })));
+    const normalizedContacts = contactsData.map((c) => ({
+      ...c,
+      id: String((c as any).id),
+      empresaId: (c as any).empresaId ? String((c as any).empresaId) : undefined,
+    }));
+    setContacts(normalizedContacts);
+    setDeals(
+      (dealsData as Record<string, unknown>[])
+        .map(mapDealRow)
+        .map((deal) => enrichDealWithContact(deal, normalizedContacts))
+    );
+    setActivities(
+      activitiesData.map((a) => ({
+        ...a,
+        id: String((a as any).id),
+        contatoId: (a as any).contatoId ? String((a as any).contatoId) : undefined,
+        empresaId: (a as any).empresaId ? String((a as any).empresaId) : undefined,
+      }))
+    );
+    setEmails(
+      emailsData.map((m) => ({
+        ...m,
+        id: String((m as any).id),
+        contatoId: (m as any).contatoId ? String((m as any).contatoId) : undefined,
+        empresaId: (m as any).empresaId ? String((m as any).empresaId) : undefined,
+      }))
+    );
+    setProposals(
+      proposalsData.map((p) => ({
+        ...p,
+        id: String((p as any).id),
+        contatoId: (p as any).contatoId ? String((p as any).contatoId) : undefined,
+        empresaId: (p as any).empresaId ? String((p as any).empresaId) : undefined,
+        dealId: (p as any).dealId ? String((p as any).dealId) : undefined,
+      }))
+    );
   }, []);
 
   useEffect(() => {
-    if (!activePipelineId) {
+    if (!user?.id) {
+      clearCrmState();
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      clearCrmState();
+      try {
+        await loadCrmData(user.id);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Erro ao carregar dados do CRM:', err);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, clearCrmState, loadCrmData]);
+
+  useEffect(() => {
+    if (!activePipelineId || !user?.id) {
       setStages([]);
       return;
     }
-    const token = localStorage.getItem('token');
-    if (!token) return;
     void (async () => {
       try {
         await fetchStagesForPipeline(activePipelineId);
@@ -285,7 +325,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.error('Erro ao carregar etapas:', err);
       }
     })();
-  }, [activePipelineId]);
+  }, [activePipelineId, user?.id]);
 
   const getCompanyName = (id?: string) => (id ? companies.find((c) => c.id === String(id))?.nome ?? '—' : '—');
   const getContactName = (id?: string) => (id ? contacts.find((c) => c.id === String(id))?.nome ?? '—' : '—');

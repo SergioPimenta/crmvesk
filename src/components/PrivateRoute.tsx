@@ -14,7 +14,7 @@ const PrivateRoute = () => {
     return <Navigate to="/" replace />;
   }
 
-  return <Outlet />;
+  return <Outlet key={user.id} />;
 };
 
 export default PrivateRoute;
