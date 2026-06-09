@@ -579,6 +579,59 @@ export async function syncChatsFromProvider(userId) {
   return listChats(userId);
 }
 
+function digitsOnly(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+export async function openChatFromContact(userId, { phone, contactId, name }) {
+  const digits = digitsOnly(phone);
+  if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
+
+  const remoteJid = phoneToJid(digits);
+  const [existing] = await pool.query(
+    'SELECT id FROM whatsapp_chats WHERE user_id = ? AND remote_jid = ?',
+    [userId, remoteJid]
+  );
+
+  let chatId;
+  if (existing.length > 0) {
+    chatId = existing[0].id;
+    await pool.query(
+      `UPDATE whatsapp_chats SET
+         name = COALESCE(NULLIF(?, ''), name),
+         contact_id = COALESCE(?, contact_id),
+         attendance_status = 'open',
+         updated_at = NOW()
+       WHERE id = ? AND user_id = ?`,
+      [name || '', contactId || null, chatId, userId]
+    );
+  } else {
+    chatId = await upsertChat(userId, {
+      remoteJid,
+      name: name || digits,
+      lastMessage: '',
+      lastMessageAt: new Date(),
+      incrementUnread: false,
+    });
+    if (contactId) {
+      await pool.query('UPDATE whatsapp_chats SET contact_id = ? WHERE id = ? AND user_id = ?', [
+        contactId,
+        chatId,
+        userId,
+      ]);
+    }
+    await pool.query("UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?", [
+      chatId,
+      userId,
+    ]);
+  }
+
+  const chats = await listChats(userId);
+  const chat = chats.find((c) => c.id === String(chatId));
+  if (!chat) throw new Error('Não foi possível abrir a conversa');
+  return chat;
+}
+
 export async function listChats(userId) {
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,

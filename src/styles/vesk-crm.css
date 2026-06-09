@@ -1370,6 +1370,106 @@ body.vesk-app {
   flex-direction: column;
 }
 
+.wa-list-header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wa-list-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wa-list-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--vesk-muted);
+}
+
+.wa-list-icon-btn:hover {
+  color: var(--vesk-text);
+  border-color: var(--vesk-orange);
+}
+
+.wa-list-icon-btn--primary {
+  color: #25d366;
+  border-color: #25d36640;
+  background: #25d36612;
+}
+
+.wa-list-icon-btn--primary:hover {
+  color: #25d366;
+  background: #25d36622;
+}
+
+.wa-contact-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.wa-contact-picker-list {
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wa-contact-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  background: var(--vesk-surface2);
+  color: var(--vesk-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wa-contact-picker-item:hover:not(:disabled) {
+  border-color: var(--vesk-orange);
+  background: var(--vesk-bg);
+}
+
+.wa-contact-picker-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wa-contact-picker-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-contact-picker-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wa-contact-picker-meta {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wa-contact-picker-item .ti-chevron-right {
+  color: var(--vesk-muted);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
 .wa-layout .inbox-items {
   overflow-y: auto;
   flex: 1;

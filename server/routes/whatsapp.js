@@ -8,6 +8,7 @@ import {
   listMessages,
   loadMessagesFromProvider,
   maskSettings,
+  openChatFromContact,
   processWebhook,
   refreshConnectionStatus,
   saveSettings,
@@ -158,6 +159,20 @@ router.get('/chats', async (req, res) => {
   }
   const chats = await listChats(req.userId);
   res.json({ configured: true, status: status.status, provider: status.provider, chats });
+});
+
+router.post('/chats', async (req, res) => {
+  const { phone, contactId, name } = req.body ?? {};
+  try {
+    const chat = await openChatFromContact(req.userId, {
+      phone,
+      contactId: contactId ? Number(contactId) : undefined,
+      name,
+    });
+    res.status(201).json({ chat });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 router.get('/chats/:id/messages', async (req, res) => {

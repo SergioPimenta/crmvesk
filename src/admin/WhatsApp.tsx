@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
-import { useCrmData } from '../contexts/CrmDataContext';
+import Modal from '../components/crm/Modal';
+import { useCrmData, type Contact } from '../contexts/CrmDataContext';
 import { api } from '../services/api';
 import {
   buildChatTimeline,
@@ -60,7 +61,13 @@ const WhatsApp = () => {
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState('');
+  const [contactPicker, setContactPicker] = useState<'list' | 'new' | null>(null);
+  const [contactSearch, setContactSearch] = useState('');
+  const [openingChat, setOpeningChat] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevActiveIdRef = useRef<string | null>(null);
+  const scrollOnNextMessagesRef = useRef(false);
 
   const loadChats = useCallback(async () => {
     try {
@@ -109,9 +116,26 @@ const WhatsApp = () => {
     return () => window.clearInterval(id);
   }, [activeId, loadMessages]);
 
+  const scrollMessagesToBottom = useCallback((smooth: boolean) => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, activeId]);
+    const switchedChat = prevActiveIdRef.current !== activeId;
+    prevActiveIdRef.current = activeId;
+
+    if (switchedChat) {
+      scrollOnNextMessagesRef.current = false;
+      return;
+    }
+
+    if (scrollOnNextMessagesRef.current) {
+      scrollMessagesToBottom(true);
+      scrollOnNextMessagesRef.current = false;
+    }
+  }, [messages, activeId, scrollMessagesToBottom]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -150,6 +174,7 @@ const WhatsApp = () => {
     setSending(true);
     try {
       const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/messages`, { text });
+      scrollOnNextMessagesRef.current = true;
       setMessages(data.messages || []);
       setDraft('');
       await loadChats();
@@ -180,6 +205,42 @@ const WhatsApp = () => {
   const contactCompany = active?.contatoId
     ? getCompanyName(contacts.find((c) => c.id === active.contatoId)?.empresaId)
     : null;
+
+  const pickerContacts = useMemo(() => {
+    const q = contactSearch.trim().toLowerCase();
+    const sorted = [...contacts].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    if (!q) return sorted;
+    return sorted.filter(
+      (c) =>
+        c.nome.toLowerCase().includes(q) ||
+        c.telefone.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q)
+    );
+  }, [contacts, contactSearch]);
+
+  const openContactChat = async (contact: Contact) => {
+    const phone = contact.telefone?.replace(/\D/g, '') || '';
+    if (phone.length < 10) {
+      alert('Este contato não possui telefone válido para WhatsApp.');
+      return;
+    }
+    setOpeningChat(true);
+    try {
+      const data = await api.post<{ chat: WaConversation }>('/whatsapp/chats', {
+        phone,
+        contactId: contact.id,
+        name: contact.nome,
+      });
+      await loadChats();
+      setActiveId(data.chat.id);
+      setContactPicker(null);
+      setContactSearch('');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível abrir a conversa');
+    } finally {
+      setOpeningChat(false);
+    }
+  };
 
   return (
     <CrmLayout>
@@ -240,10 +301,36 @@ const WhatsApp = () => {
       ) : (
         <div className="wa-layout inbox" aria-label="Chat WhatsApp">
           <div className="wa-list crm-card inbox-list" aria-label="Lista de conversas">
-            <div className="crm-card-header" style={{ marginBottom: 10 }}>
+            <div className="crm-card-header wa-list-header" style={{ marginBottom: 10 }}>
               <i className="ti ti-brand-whatsapp" style={{ color: '#25d366', fontSize: 18 }} aria-hidden="true" />
               <div className="crm-card-title">Conversas</div>
               <span className="pipeline-badge">{filtered.length} chats</span>
+              <div className="wa-list-header-actions">
+                <button
+                  type="button"
+                  className="crm-icon-btn wa-list-icon-btn"
+                  title="Listagem de contatos"
+                  aria-label="Abrir listagem de contatos"
+                  onClick={() => {
+                    setContactSearch('');
+                    setContactPicker('list');
+                  }}
+                >
+                  <i className="ti ti-address-book" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="crm-icon-btn wa-list-icon-btn wa-list-icon-btn--primary"
+                  title="Iniciar novo atendimento"
+                  aria-label="Iniciar novo atendimento"
+                  onClick={() => {
+                    setContactSearch('');
+                    setContactPicker('new');
+                  }}
+                >
+                  <i className="ti ti-message-plus" aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             {loading ? <div className="kanban-empty">Carregando…</div> : null}
@@ -316,7 +403,7 @@ const WhatsApp = () => {
                   </div>
                 </div>
 
-                <div className="wa-messages" role="log" aria-live="polite">
+                <div className="wa-messages" ref={messagesContainerRef} role="log" aria-live="polite">
                   {chatTimeline.map((item) =>
                     item.type === 'day' ? (
                       <div key={item.key} className="wa-day-separator" role="separator">
@@ -376,6 +463,62 @@ const WhatsApp = () => {
           </div>
         </div>
       )}
+
+      <Modal
+        open={contactPicker !== null}
+        title={contactPicker === 'new' ? 'Novo atendimento' : 'Contatos'}
+        description={
+          contactPicker === 'new'
+            ? 'Selecione um contato para iniciar um atendimento pelo WhatsApp.'
+            : 'Selecione um contato para abrir ou criar a conversa.'
+        }
+        wide
+        onClose={() => {
+          setContactPicker(null);
+          setContactSearch('');
+        }}
+      >
+        <div className="wa-contact-picker">
+          <div className="crm-inline-search" role="search">
+            <i className="ti ti-search si" aria-hidden="true" />
+            <input
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+              placeholder="Buscar por nome, telefone ou e-mail…"
+              aria-label="Buscar contatos"
+              autoFocus
+            />
+          </div>
+          <div className="wa-contact-picker-list" role="list">
+            {pickerContacts.map((c) => {
+              const hasPhone = (c.telefone?.replace(/\D/g, '') || '').length >= 10;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="wa-contact-picker-item"
+                  disabled={!hasPhone || openingChat}
+                  onClick={() => void openContactChat(c)}
+                  role="listitem"
+                >
+                  <div className="wa-avatar">{initials(c.nome)}</div>
+                  <div className="wa-contact-picker-body">
+                    <div className="wa-contact-picker-name">{c.nome}</div>
+                    <div className="wa-contact-picker-meta">
+                      {c.telefone || 'Sem telefone'}
+                      {c.email ? ` · ${c.email}` : ''}
+                    </div>
+                  </div>
+                  <i className="ti ti-chevron-right" aria-hidden="true" />
+                </button>
+              );
+            })}
+            {pickerContacts.length === 0 ? (
+              <div className="kanban-empty">Nenhum contato encontrado.</div>
+            ) : null}
+          </div>
+        </div>
+      </Modal>
     </CrmLayout>
   );
 };
