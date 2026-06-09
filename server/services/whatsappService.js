@@ -25,6 +25,7 @@ import {
 
 const webhookPublicBase = () =>
   process.env.WHATSAPP_WEBHOOK_PUBLIC_URL ||
+  process.env.PRODUCTION_APP_URL ||
   process.env.PUBLIC_URL ||
   `http://localhost:${process.env.PORT || 3001}`;
 

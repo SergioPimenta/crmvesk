@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+const PRODUCTION_APP_URL = process.env.PRODUCTION_APP_URL || 'https://crm.vesk.com.br';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const VERCEL = 'npx --yes vercel@latest';
@@ -115,10 +116,11 @@ async function main() {
       console.log('\nDefina WHATSAPP_WEBHOOK_PUBLIC_URL manualmente com a URL do deploy no painel.');
     }
   } else {
-    console.log(`\n✓ URL do app: ${appUrl}`);
+    const webhookBase = PRODUCTION_APP_URL;
+    console.log(`\n✓ URL de produção: ${webhookBase}`);
     for (const env of ['production', 'preview']) {
-      pipeEnv('WHATSAPP_WEBHOOK_PUBLIC_URL', appUrl, env);
-      pipeEnv('FRONTEND_URL', `${appUrl},http://localhost:5173`, env);
+      pipeEnv('WHATSAPP_WEBHOOK_PUBLIC_URL', webhookBase, env);
+      pipeEnv('FRONTEND_URL', `${webhookBase},http://localhost:5173`, env);
     }
     console.log('\n--- Redeploy (aplicar env) ---');
     run(`${VERCEL} deploy --prod --yes`);
