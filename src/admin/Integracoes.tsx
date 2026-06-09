@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
 import ContactFormTab from '../components/integrations/ContactFormTab';
+import WhatsAppButtonTab from '../components/integrations/WhatsAppButtonTab';
 import { api } from '../services/api';
 
-type IntegrationTab = 'whatsapp' | 'formulario';
+type IntegrationTab = 'whatsapp' | 'formulario' | 'botao';
 type WaProvider = 'meta' | 'evolution';
 
 type WaSettings = {
@@ -24,6 +25,7 @@ type WaSettings = {
 const TABS: { id: IntegrationTab; label: string; icon: string }[] = [
   { id: 'whatsapp', label: 'WhatsApp', icon: 'ti-brand-whatsapp' },
   { id: 'formulario', label: 'Formulário de contato', icon: 'ti-forms' },
+  { id: 'botao', label: 'Botão WhatsApp', icon: 'ti-click' },
 ];
 
 const Integracoes = () => {
@@ -501,6 +503,8 @@ const Integracoes = () => {
           </div>
         ) : activeTab === 'formulario' ? (
           <ContactFormTab />
+        ) : activeTab === 'botao' ? (
+          <WhatsAppButtonTab />
         ) : null}
       </div>
     </CrmLayout>

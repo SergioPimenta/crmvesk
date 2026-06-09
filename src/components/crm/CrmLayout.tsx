@@ -97,10 +97,6 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
               <i className="ti ti-brand-whatsapp" aria-hidden="true" />
               WhatsApp
             </NavLink>
-            <NavLink to="/admin/botao-whatsapp" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`}>
-              <i className="ti ti-click" aria-hidden="true" />
-              Botão WhatsApp
-            </NavLink>
             <NavLink to="/admin/relatorios" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`}>
               <i className="ti ti-chart-bar" aria-hidden="true" />
               Relatórios
