@@ -15,6 +15,7 @@ import {
   startConnection,
   syncChatsFromProvider,
   verifyMetaWebhook,
+  getWebhookDiagnostics,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
@@ -59,6 +60,15 @@ router.post('/webhook/:userId/:secret', async (req, res) => {
 });
 
 router.use(verifyToken);
+
+router.get('/diagnostics', async (req, res) => {
+  try {
+    const data = await getWebhookDiagnostics(req.userId);
+    res.json(data);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
 
 router.get('/config', async (req, res) => {
   const settings = await getSettings(req.userId);

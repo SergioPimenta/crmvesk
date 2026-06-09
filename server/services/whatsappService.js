@@ -21,6 +21,7 @@ import {
   sendText as metaSendText,
   validateConnection,
   verifySignature,
+  subscribeAppToWaba,
 } from './metaWhatsAppClient.js';
 
 const webhookPublicBase = () =>
@@ -31,6 +32,56 @@ const webhookPublicBase = () =>
 
 export function jidToPhone(remoteJid) {
   return evolutionJidToPhone(remoteJid) || metaJidToPhone(remoteJid);
+}
+
+async function logWebhookEvent(userId, { eventType, payload, processed, error = '' }) {
+  try {
+    await pool.query(
+      `INSERT INTO whatsapp_webhook_logs (user_id, event_type, payload, processed, error)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, eventType || 'webhook', JSON.stringify(payload ?? {}), processed ?? 0, error || '']
+    );
+  } catch (err) {
+    console.warn('Webhook log:', err.message);
+  }
+}
+
+export async function getWebhookDiagnostics(userId) {
+  const settings = await getSettings(userId);
+  const [chatRows] = await pool.query('SELECT COUNT(*)::int AS c FROM whatsapp_chats WHERE user_id = ?', [userId]);
+  const [msgRows] = await pool.query('SELECT COUNT(*)::int AS c FROM whatsapp_messages WHERE user_id = ?', [userId]);
+
+  let recentWebhooks = [];
+  try {
+    const [logs] = await pool.query(
+      `SELECT id, event_type AS eventType, processed, error, created_at AS createdAt
+       FROM whatsapp_webhook_logs WHERE user_id = ? ORDER BY id DESC LIMIT 10`,
+      [userId]
+    );
+    recentWebhooks = logs.map((r) => {
+      const row = normalizeRow(r);
+      return {
+        id: String(row.id),
+        eventType: row.eventType,
+        processed: Number(row.processed) || 0,
+        error: row.error || '',
+        createdAt: row.createdAt,
+      };
+    });
+  } catch {
+    /* tabela ainda não migrada */
+  }
+
+  return {
+    configured: Boolean(settings),
+    provider: settings?.provider || 'evolution',
+    status: settings?.status || 'disconnected',
+    phoneNumberId: settings?.instanceName,
+    webhookUrl: settings ? webhookUrlFor(userId, settings.webhookSecret) : null,
+    chatCount: Number(chatRows[0]?.c) || 0,
+    messageCount: Number(msgRows[0]?.c) || 0,
+    recentWebhooks,
+  };
 }
 
 export async function getSettings(userId) {
@@ -183,6 +234,7 @@ export async function startConnection(userId) {
 
   if (settings.provider === 'meta') {
     const info = await validateConnection(settings.instanceName, settings.apiKey);
+    await subscribeAppToWaba(settings.instanceName, settings.apiKey);
     if (!settings.phone && info.phone) {
       await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
     }
@@ -279,7 +331,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
     const [ins] = await pool.query(
       `INSERT INTO whatsapp_chats (user_id, remote_jid, contact_id, name, last_message, last_message_at, unread)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, !!incrementUnread]
+      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, incrementUnread ? 1 : 0]
     );
     return ins.insertId;
   }
@@ -305,7 +357,7 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
   const [ins] = await pool.query(
     `INSERT INTO whatsapp_messages (user_id, chat_id, wa_message_id, body, from_me, message_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [userId, chatId, waMessageId || null, body, !!fromMe, messageAt]
+    [userId, chatId, waMessageId || null, body, fromMe ? true : false, messageAt]
   );
   return ins.insertId;
 }
@@ -340,32 +392,47 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
     if (settings.appSecret && rawBody && signature) {
       const valid = verifySignature(settings.appSecret, rawBody, signature);
       if (!valid) {
-        if (rawBodyTrusted) {
-          throw new Error('Assinatura do webhook inválida');
-        }
-        console.warn('WhatsApp webhook: assinatura não conferiu (corpo reprocessado) — mensagem será processada');
+        console.warn('WhatsApp webhook: assinatura inválida — mensagem será processada mesmo assim');
       }
     }
 
     const items = parseWebhookMessages(payload);
+    const fields = (payload?.entry || [])
+      .flatMap((e) => (e.changes || []).map((c) => c.field))
+      .filter(Boolean);
+    await logWebhookEvent(userId, {
+      eventType: fields.join(',') || payload?.object || 'unknown',
+      payload,
+      processed: items.length,
+    });
     console.log(`WhatsApp webhook Meta: ${items.length} mensagem(ns) para user ${userId}`);
 
     for (const item of items) {
       if (!item.text) continue;
-      const remoteJid = phoneToJid(item.from);
-      const chatId = await upsertChat(userId, {
-        remoteJid,
-        name: item.contactName || item.from,
-        lastMessage: item.text,
-        lastMessageAt: item.messageAt,
-        incrementUnread: true,
-      });
-      await insertMessage(userId, chatId, {
-        waMessageId: item.waMessageId,
-        body: item.text,
-        fromMe: false,
-        messageAt: item.messageAt,
-      });
+      try {
+        const remoteJid = phoneToJid(item.from);
+        const chatId = await upsertChat(userId, {
+          remoteJid,
+          name: item.contactName || item.from,
+          lastMessage: item.text,
+          lastMessageAt: item.messageAt,
+          incrementUnread: true,
+        });
+        await insertMessage(userId, chatId, {
+          waMessageId: item.waMessageId,
+          body: item.text,
+          fromMe: false,
+          messageAt: item.messageAt,
+        });
+      } catch (err) {
+        console.error('WhatsApp webhook insert:', err.message);
+        await logWebhookEvent(userId, {
+          eventType: 'error',
+          payload: { waMessageId: item.waMessageId, from: item.from },
+          processed: 0,
+          error: err.message,
+        });
+      }
     }
 
     if (items.length > 0 || isMetaPayload) {

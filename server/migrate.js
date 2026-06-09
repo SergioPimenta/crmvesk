@@ -110,6 +110,7 @@ export async function runMigrations() {
   }
 
   await migrateWhatsappMetaColumns();
+  await migrateWhatsappWebhookLogs();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
@@ -138,6 +139,23 @@ async function migrateWhatsappMetaColumns() {
   } catch {
     /* tipo já ampliado */
   }
+}
+
+async function migrateWhatsappWebhookLogs() {
+  if (await tableExists('whatsapp_webhook_logs')) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_webhook_logs (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      event_type VARCHAR(64) DEFAULT '',
+      payload TEXT DEFAULT '',
+      processed INT DEFAULT 0,
+      error TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_webhook_logs_user ON whatsapp_webhook_logs(user_id)');
 }
 
 async function migrateWhatsappButtonWidgets() {

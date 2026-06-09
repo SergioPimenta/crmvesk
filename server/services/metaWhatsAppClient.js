@@ -122,7 +122,20 @@ export function parseWebhookMessages(payload) {
   return items;
 }
 
-/** Verifica assinatura X-Hub-Signature-256 (opcional mas recomendado). */
+/** Inscreve o app na conta WhatsApp Business (necessário para receber webhooks). */
+export async function subscribeAppToWaba(phoneNumberId, accessToken) {
+  try {
+    const data = await metaRequest(accessToken, 'GET', `/${phoneNumberId}?fields=whatsapp_business_account`);
+    const wabaId = data?.whatsapp_business_account?.id;
+    if (!wabaId) return null;
+    await metaRequest(accessToken, 'POST', `/${wabaId}/subscribed_apps`);
+    return wabaId;
+  } catch (err) {
+    console.warn('WhatsApp WABA subscribe:', err.message);
+    return null;
+  }
+}
+
 export function verifySignature(appSecret, rawBody, signatureHeader) {
   if (!appSecret?.trim()) return true;
   if (!signatureHeader?.startsWith('sha256=')) return false;
