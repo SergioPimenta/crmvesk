@@ -29,6 +29,9 @@ function prepareSql(text) {
   if (/^\s*DELETE\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
     pg = pg.replace(/;?\s*$/i, ' RETURNING *');
   }
+  if (/^\s*UPDATE\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
+    pg = pg.replace(/;?\s*$/i, ' RETURNING *');
+  }
   return pg;
 }
 

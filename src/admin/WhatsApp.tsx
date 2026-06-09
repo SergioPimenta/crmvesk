@@ -189,20 +189,22 @@ const WhatsApp = () => {
     if (!active) return;
     const closing = !isClosed;
     const closedId = active.id;
+
+    if (closing) {
+      setConversations((prev) => prev.filter((c) => c.id !== closedId));
+      setActiveId(null);
+      setMessages([]);
+    }
+
     setFinishing(true);
     try {
       await api.post(`/whatsapp/chats/${active.id}/attendance`, {
         status: closing ? 'closed' : 'open',
       });
-      if (closing) {
-        setConversations((prev) => prev.filter((c) => c.id !== closedId));
-        setActiveId(null);
-        setMessages([]);
-      } else {
-        await loadChats();
-      }
+      if (!closing) await loadChats();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Não foi possível atualizar o atendimento');
+      if (closing) await loadChats();
+      else alert(err instanceof Error ? err.message : 'Não foi possível atualizar o atendimento');
     } finally {
       setFinishing(false);
     }
