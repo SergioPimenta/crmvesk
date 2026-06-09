@@ -99,18 +99,26 @@ export async function getSettings(userId) {
   const [rows] = await pool.query(
     `SELECT user_id AS userId, provider, base_url AS baseUrl, instance_name AS instanceName,
             api_key AS apiKey, phone, status, webhook_secret AS webhookSecret,
-            app_secret AS appSecret, waba_id AS wabaId
+            app_secret AS appSecret, waba_id AS wabaId, meta_app_id AS metaAppId
      FROM whatsapp_settings WHERE user_id = ?`,
     [userId]
   );
   return rows[0] ? normalizeRow(rows[0]) : null;
 }
 
+function metaResolveOptions(settings) {
+  return {
+    cachedWabaId: settings?.wabaId,
+    appId: settings?.metaAppId || process.env.META_APP_ID,
+    appSecret: settings?.appSecret || process.env.META_APP_SECRET,
+  };
+}
+
 async function ensureWabaIdPersisted(userId, settings) {
   if (!settings || settings.provider !== 'meta') return settings?.wabaId || '';
   if (settings.wabaId) return settings.wabaId;
 
-  const wabaId = await resolveWabaId(settings.instanceName, settings.apiKey);
+  const wabaId = await resolveWabaId(settings.instanceName, settings.apiKey, metaResolveOptions(settings));
   if (wabaId) {
     await pool.query('UPDATE whatsapp_settings SET waba_id = ? WHERE user_id = ?', [wabaId, userId]);
     return wabaId;
@@ -124,10 +132,14 @@ export async function saveSettings(userId, payload) {
   const webhookSecret = existing?.webhookSecret || crypto.randomBytes(24).toString('hex');
 
   if (provider === 'meta') {
-    const phoneNumberId = String(payload.phoneNumberId || payload.instanceName || '').trim();
+    const phoneNumberId = String(
+      payload.phoneNumberId || payload.instanceName || existing?.instanceName || ''
+    ).trim();
     const accessToken = String(payload.accessToken || payload.apiKey || existing?.apiKey || '').trim();
-    const phone = String(payload.phone || '').trim();
+    const phone = String(payload.phone ?? existing?.phone ?? '').trim();
     const appSecret = String(payload.appSecret ?? existing?.appSecret ?? '').trim();
+    const wabaId = String(payload.wabaId ?? existing?.wabaId ?? '').trim();
+    const metaAppId = String(payload.metaAppId ?? payload.appId ?? existing?.metaAppId ?? '').trim();
 
     if (!phoneNumberId || !accessToken) {
       throw new Error('Phone Number ID e Access Token são obrigatórios');
@@ -135,8 +147,8 @@ export async function saveSettings(userId, payload) {
 
     await pool.query(
       `INSERT INTO whatsapp_settings
-         (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret, app_secret)
-       VALUES (?, 'meta', '', ?, ?, ?, 'disconnected', ?, ?)
+         (user_id, provider, base_url, instance_name, api_key, phone, status, webhook_secret, app_secret, waba_id, meta_app_id)
+       VALUES (?, 'meta', '', ?, ?, ?, 'disconnected', ?, ?, ?, ?)
        ON CONFLICT (user_id) DO UPDATE SET
          provider = 'meta',
          base_url = '',
@@ -144,8 +156,10 @@ export async function saveSettings(userId, payload) {
          api_key = EXCLUDED.api_key,
          phone = EXCLUDED.phone,
          app_secret = EXCLUDED.app_secret,
+         waba_id = EXCLUDED.waba_id,
+         meta_app_id = EXCLUDED.meta_app_id,
          status = CASE WHEN whatsapp_settings.status = 'connected' THEN whatsapp_settings.status ELSE 'disconnected' END`,
-      [userId, phoneNumberId, accessToken, phone, webhookSecret, appSecret]
+      [userId, phoneNumberId, accessToken, phone, webhookSecret, appSecret, wabaId, metaAppId]
     );
   } else {
     const baseUrl = String(payload.baseUrl || '').trim();
@@ -193,7 +207,9 @@ export async function refreshConnectionStatus(userId) {
   if (settings.provider === 'meta') {
     try {
       const info = await validateConnection(settings.instanceName, settings.apiKey);
-      const wabaId = await resolveWabaId(settings.instanceName, settings.apiKey);
+      const wabaId =
+        settings.wabaId ||
+        (await resolveWabaId(settings.instanceName, settings.apiKey, metaResolveOptions(settings)));
       if (!settings.phone && info.phone) {
         await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
       }
@@ -249,6 +265,9 @@ export function maskSettings(settings) {
     status: settings.status,
     hasApiKey: Boolean(settings.apiKey),
     hasAppSecret: Boolean(settings.appSecret),
+    wabaId: settings.wabaId || '',
+    metaAppId: settings.metaAppId || '',
+    hasWabaId: Boolean(settings.wabaId),
     apiKeyPreview: settings.apiKey ? `${settings.apiKey.slice(0, 4)}…${settings.apiKey.slice(-4)}` : '',
     webhookUrl: webhookUrlFor(settings.userId, settings.webhookSecret),
     verifyToken: settings.webhookSecret,
@@ -261,8 +280,11 @@ export async function startConnection(userId) {
 
   if (settings.provider === 'meta') {
     const info = await validateConnection(settings.instanceName, settings.apiKey);
-    const wabaId = (await subscribeAppToWaba(settings.instanceName, settings.apiKey)) ||
-      (await resolveWabaId(settings.instanceName, settings.apiKey));
+    const resolveOpts = metaResolveOptions(settings);
+    const wabaId =
+      settings.wabaId ||
+      (await subscribeAppToWaba(settings.instanceName, settings.apiKey, resolveOpts)) ||
+      (await resolveWabaId(settings.instanceName, settings.apiKey, resolveOpts));
     if (!settings.phone && info.phone) {
       await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
     }
@@ -459,6 +481,17 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       const valid = verifySignature(settings.appSecret, rawBody, signature);
       if (!valid) {
         console.warn('WhatsApp webhook: assinatura inválida — mensagem será processada mesmo assim');
+      }
+    }
+
+    for (const entry of payload?.entry || []) {
+      const entryWabaId = entry?.id ? String(entry.id).trim() : '';
+      if (entryWabaId && payload?.object === 'whatsapp_business_account') {
+        await pool.query(
+          `UPDATE whatsapp_settings SET waba_id = ? WHERE user_id = ? AND COALESCE(waba_id, '') = ''`,
+          [entryWabaId, userId]
+        );
+        break;
       }
     }
 
@@ -858,5 +891,5 @@ export async function getMessageTemplates(userId) {
   }
 
   const wabaId = await ensureWabaIdPersisted(userId, settings);
-  return listMessageTemplates(settings.instanceName, settings.apiKey, wabaId);
+  return listMessageTemplates(settings.instanceName, settings.apiKey, wabaId, metaResolveOptions(settings));
 }

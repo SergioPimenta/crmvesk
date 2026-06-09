@@ -133,6 +133,7 @@ async function migrateUsersActive() {
 async function migrateWhatsappWabaId() {
   if (!(await tableExists('whatsapp_settings'))) return;
   await pool.query(`ALTER TABLE whatsapp_settings ADD COLUMN IF NOT EXISTS waba_id VARCHAR(64) DEFAULT ''`);
+  await pool.query(`ALTER TABLE whatsapp_settings ADD COLUMN IF NOT EXISTS meta_app_id VARCHAR(64) DEFAULT ''`);
 }
 
 async function migrateEnsureAdminUser() {

@@ -14,6 +14,9 @@ type WaSettings = {
   status: string;
   hasApiKey: boolean;
   hasAppSecret?: boolean;
+  wabaId?: string;
+  metaAppId?: string;
+  hasWabaId?: boolean;
   apiKeyPreview: string;
   webhookUrl?: string;
   verifyToken?: string;
@@ -44,6 +47,8 @@ const Integracoes = () => {
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [apiToken, setApiToken] = useState('');
   const [appSecret, setAppSecret] = useState('');
+  const [metaAppId, setMetaAppId] = useState('');
+  const [wabaId, setWabaId] = useState('');
   const [phone, setPhone] = useState('');
 
   const setTab = (tab: IntegrationTab) => {
@@ -56,6 +61,8 @@ const Integracoes = () => {
     if (data.settings) {
       setPhoneNumberId(data.settings.phoneNumberId || '');
       setPhone(data.settings.phone || '');
+      setMetaAppId(data.settings.metaAppId || '');
+      setWabaId(data.settings.wabaId || '');
       setWebhookUrl(data.settings.webhookUrl || '');
       setVerifyToken(data.settings.verifyToken || '');
       setStatus((data.settings.status as typeof status) || 'disconnected');
@@ -117,6 +124,8 @@ const Integracoes = () => {
         phoneNumberId: phoneNumberId.trim(),
         accessToken: apiToken.trim() || undefined,
         appSecret: appSecret.trim() || undefined,
+        metaAppId: metaAppId.trim() || undefined,
+        wabaId: wabaId.trim() || undefined,
         phone: phone.trim(),
       });
       setApiToken('');
@@ -139,6 +148,8 @@ const Integracoes = () => {
           phoneNumberId: phoneNumberId.trim(),
           accessToken: apiToken.trim(),
           appSecret: appSecret.trim() || undefined,
+          metaAppId: metaAppId.trim() || undefined,
+          wabaId: wabaId.trim() || undefined,
           phone: phone.trim(),
         });
         setConfigured(true);
@@ -168,6 +179,24 @@ const Integracoes = () => {
       setVerifyToken('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao desconectar');
+    }
+  };
+
+  const saveMetaIds = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await api.put('/whatsapp/config', {
+        provider: 'meta',
+        phoneNumberId: phoneNumberId.trim(),
+        metaAppId: metaAppId.trim() || undefined,
+        wabaId: wabaId.trim() || undefined,
+      });
+      await loadConfig();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar identificadores Meta');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -286,6 +315,44 @@ const Integracoes = () => {
                 />
               </div>
               <div className="crm-field">
+                <label htmlFor="wa_app_id">App ID (Meta)</label>
+                <input
+                  id="wa_app_id"
+                  name="meta_app_id"
+                  value={metaAppId}
+                  onChange={(e) => setMetaAppId(e.target.value)}
+                  placeholder="Ex: 1234567890123456"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore
+                />
+                <div style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4 }}>
+                  Usado com o App Secret para localizar a conta WABA automaticamente.
+                </div>
+              </div>
+              <div className="crm-field">
+                <label htmlFor="wa_waba_id">WABA ID (WhatsApp Business Account)</label>
+                <input
+                  id="wa_waba_id"
+                  name="meta_waba_id"
+                  value={wabaId}
+                  onChange={(e) => setWabaId(e.target.value)}
+                  placeholder="Ex: 102289599326934"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-1p-ignore
+                />
+                <div style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4 }}>
+                  Meta Business Suite → Configurações → Contas do WhatsApp → ID da conta. Necessário para listar modelos.
+                </div>
+              </div>
+              <div className="crm-field">
                 <label htmlFor="wa_phone">Número exibido (opcional)</label>
                 <input
                   id="wa_phone"
@@ -348,6 +415,11 @@ const Integracoes = () => {
                 {!isLocked ? (
                   <button type="submit" className="crm-btn-secondary" disabled={saving}>
                     Salvar configuração
+                  </button>
+                ) : null}
+                {isLocked ? (
+                  <button type="button" className="crm-btn-secondary" disabled={saving} onClick={() => void saveMetaIds()}>
+                    Salvar WABA / App ID
                   </button>
                 ) : null}
                 {isLocked ? (

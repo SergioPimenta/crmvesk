@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_settings (
   webhook_secret VARCHAR(64) NOT NULL,
   app_secret VARCHAR(255) DEFAULT '',
   waba_id VARCHAR(64) DEFAULT '',
+  meta_app_id VARCHAR(64) DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -92,10 +92,12 @@ router.put('/config', async (req, res) => {
       }
       await saveSettings(req.userId, {
         provider: 'meta',
-        phoneNumberId: body.phoneNumberId || body.instanceName,
+        phoneNumberId: body.phoneNumberId || body.instanceName || existing?.instanceName,
         accessToken: mergedToken,
         phone: body.phone,
         appSecret: body.appSecret,
+        wabaId: body.wabaId,
+        metaAppId: body.metaAppId || body.appId,
       });
     } else {
       const mergedKey = body.apiKey?.trim() || existing?.apiKey;
