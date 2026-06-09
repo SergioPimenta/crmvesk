@@ -314,7 +314,9 @@ const WhatsApp = () => {
             WhatsApp <span>({totalUnread} não lidas)</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            {waStatus === 'connected' ? (
+            {loading ? (
+              'Carregando…'
+            ) : waStatus === 'connected' ? (
               waProvider === 'meta' ? 'Conectado à API oficial Meta' : 'Conectado à Evolution API'
             ) : (
               <>
@@ -352,7 +354,12 @@ const WhatsApp = () => {
         </div>
       ) : null}
 
-      {!configured || waStatus !== 'connected' ? (
+      {loading ? (
+        <div className="wa-layout inbox wa-loading-shell" aria-busy="true" aria-label="Carregando WhatsApp">
+          <div className="crm-card wa-list-skeleton" />
+          <div className="crm-card wa-chat-skeleton" />
+        </div>
+      ) : !configured || waStatus !== 'connected' ? (
         <div className="crm-card" style={{ padding: 24, textAlign: 'center' }}>
           <i className="ti ti-brand-whatsapp" style={{ fontSize: 40, color: '#25d36655' }} aria-hidden="true" />
           <p style={{ color: 'var(--vesk-muted)', fontSize: 13, marginTop: 12 }}>

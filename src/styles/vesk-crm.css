@@ -1364,6 +1364,21 @@ body.vesk-app {
 }
 
 /* WhatsApp chat */
+.wa-loading-shell .wa-list-skeleton,
+.wa-loading-shell .wa-chat-skeleton {
+  min-height: calc(100vh - 180px);
+  animation: wa-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.wa-loading-shell .wa-list-skeleton {
+  min-width: 0;
+}
+
+@keyframes wa-skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.75; }
+}
+
 .wa-layout .inbox-list {
   max-height: calc(100vh - 180px);
   display: flex;
