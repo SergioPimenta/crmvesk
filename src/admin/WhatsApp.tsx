@@ -36,6 +36,7 @@ const WhatsApp = () => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [configured, setConfigured] = useState(false);
+  const [waProvider, setWaProvider] = useState<'meta' | 'evolution'>('meta');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -46,10 +47,12 @@ const WhatsApp = () => {
       const data = await api.get<{
         configured: boolean;
         status: typeof waStatus;
+        provider?: 'meta' | 'evolution';
         chats: WaConversation[];
       }>('/whatsapp/chats');
       setConfigured(data.configured);
       setWaStatus(data.status || 'disconnected');
+      setWaProvider(data.provider === 'evolution' ? 'evolution' : 'meta');
       setConversations(data.chats || []);
       setError('');
     } catch (err: unknown) {
@@ -145,7 +148,7 @@ const WhatsApp = () => {
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
             {waStatus === 'connected' ? (
-              'Conectado à Evolution API'
+              waProvider === 'meta' ? 'Conectado à API oficial Meta' : 'Conectado à Evolution API'
             ) : (
               <>
                 Não conectado — configure em{' '}
@@ -186,7 +189,7 @@ const WhatsApp = () => {
         <div className="crm-card" style={{ padding: 24, textAlign: 'center' }}>
           <i className="ti ti-brand-whatsapp" style={{ fontSize: 40, color: '#25d36655' }} aria-hidden="true" />
           <p style={{ color: 'var(--vesk-muted)', fontSize: 13, marginTop: 12 }}>
-            Conecte sua instância da Evolution API para ver e enviar mensagens.
+            Conecte o WhatsApp em Integrações (API Meta ou Evolution) para ver e enviar mensagens.
           </p>
           <Link to="/admin/integracoes?tab=whatsapp" className="crm-btn-primary" style={{ display: 'inline-flex', marginTop: 12 }}>
             Ir para Integrações

@@ -123,6 +123,9 @@ async function migrateWhatsappMetaColumns() {
   if (!(await tableExists('whatsapp_settings'))) return;
 
   await pool.query(
+    `ALTER TABLE whatsapp_settings ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'evolution'`
+  );
+  await pool.query(
     `ALTER TABLE whatsapp_settings ADD COLUMN IF NOT EXISTS app_secret VARCHAR(255) DEFAULT ''`
   );
   try {

@@ -327,19 +327,29 @@ export async function verifyMetaWebhook(userId, webhookSecret, query) {
   throw new Error('Verificação do webhook falhou');
 }
 
-export async function processWebhook(userId, webhookSecret, payload, { rawBody, signature } = {}) {
+export async function processWebhook(userId, webhookSecret, payload, { rawBody, signature, rawBodyTrusted = false } = {}) {
   const settings = await getSettings(userId);
   if (!settings || settings.webhookSecret !== webhookSecret) {
     throw new Error('Webhook não autorizado');
   }
 
-  if (settings.provider === 'meta') {
-    if (settings.appSecret && rawBody) {
+  const isMetaPayload = payload?.object === 'whatsapp_business_account';
+  const useMeta = settings.provider === 'meta' || isMetaPayload;
+
+  if (useMeta) {
+    if (settings.appSecret && rawBody && signature) {
       const valid = verifySignature(settings.appSecret, rawBody, signature);
-      if (!valid) throw new Error('Assinatura do webhook inválida');
+      if (!valid) {
+        if (rawBodyTrusted) {
+          throw new Error('Assinatura do webhook inválida');
+        }
+        console.warn('WhatsApp webhook: assinatura não conferiu (corpo reprocessado) — mensagem será processada');
+      }
     }
 
     const items = parseWebhookMessages(payload);
+    console.log(`WhatsApp webhook Meta: ${items.length} mensagem(ns) para user ${userId}`);
+
     for (const item of items) {
       if (!item.text) continue;
       const remoteJid = phoneToJid(item.from);
@@ -358,8 +368,10 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       });
     }
 
-    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
-    return { ok: true };
+    if (items.length > 0 || isMetaPayload) {
+      await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+    }
+    return { ok: true, processed: items.length };
   }
 
   const event = String(payload?.event || payload?.type || '').toLowerCase();

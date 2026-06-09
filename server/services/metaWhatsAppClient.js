@@ -96,15 +96,21 @@ export function parseWebhookMessages(payload) {
     for (const change of entry.changes || []) {
       if (change.field !== 'messages') continue;
       const value = change.value || {};
-      const contactName = value.contacts?.[0]?.profile?.name || '';
+      const contactsByWaId = {};
+      for (const contact of value.contacts || []) {
+        if (contact.wa_id) {
+          contactsByWaId[digitsOnly(contact.wa_id)] = contact.profile?.name || '';
+        }
+      }
 
       for (const message of value.messages || []) {
         if (!message.from) continue;
+        const from = digitsOnly(message.from);
         items.push({
-          from: digitsOnly(message.from),
+          from,
           waMessageId: message.id,
           text: extractMessageText(message),
-          contactName,
+          contactName: contactsByWaId[from] || '',
           messageAt: message.timestamp
             ? new Date(Number(message.timestamp) * 1000)
             : new Date(),

@@ -39,12 +39,22 @@ router.post('/webhook/:userId/:secret', async (req, res) => {
 
     const rawBody = req.rawBody || JSON.stringify(req.body ?? {});
     const signature = req.get('x-hub-signature-256') || req.get('X-Hub-Signature-256') || '';
+    const rawBodyTrusted = Boolean(req.rawBodyTrusted);
 
-    await processWebhook(userId, req.params.secret, req.body, { rawBody, signature });
-    res.json({ ok: true });
+    const result = await processWebhook(userId, req.params.secret, req.body, {
+      rawBody,
+      signature,
+      rawBodyTrusted,
+    });
+    res.json(result);
   } catch (err) {
     console.error('WhatsApp webhook:', err.message);
-    res.status(401).json({ message: err.message });
+    const unauthorized =
+      err.message.includes('não autorizado') || err.message.includes('Assinatura do webhook inválida');
+    if (unauthorized) {
+      return res.status(401).json({ message: err.message });
+    }
+    res.json({ ok: false, error: err.message });
   }
 });
 

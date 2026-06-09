@@ -47,11 +47,18 @@ export async function createApp() {
       credentials: true,
     })(req, res, next);
   });
+
+  const isWhatsappWebhook = (req) => {
+    const target = `${req.originalUrl || ''} ${req.url || ''} ${req.path || ''}`;
+    return target.includes('/whatsapp/webhook/');
+  };
+
   app.use(express.json({
     limit: '10mb',
     verify: (req, _res, buf) => {
-      if (req.path.includes('/api/whatsapp/webhook/')) {
+      if (isWhatsappWebhook(req)) {
         req.rawBody = buf.toString('utf8');
+        req.rawBodyTrusted = true;
       }
     },
   }));
