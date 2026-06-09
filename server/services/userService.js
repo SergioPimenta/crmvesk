@@ -144,7 +144,7 @@ export async function updateUser(id, { name, email, role, active, password }, ac
 
     params.push(userId);
 
-    const [rows] = await pool.query(
+    const [, rows] = await pool.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = ? RETURNING id, name, email, role, active, created_at AS createdAt`,
       params
     );
@@ -189,7 +189,7 @@ export async function setUserActive(id, active, actorId) {
       }
     }
 
-    const [rows] = await pool.query(
+    const [, rows] = await pool.query(
       `UPDATE users SET active = ? WHERE id = ? RETURNING id, name, email, role, active, created_at AS createdAt`,
       [active, userId]
     );

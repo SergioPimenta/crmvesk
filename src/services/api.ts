@@ -46,9 +46,17 @@ class ApiService {
         return undefined as T;
       }
 
-      const isJson = response.headers.get('content-type')?.includes('application/json');
-      const data = isJson ? await response.json() : await response.text();
-      return data as T;
+      const raw = await response.text();
+      if (!raw) {
+        return undefined as T;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return JSON.parse(raw) as T;
+      }
+
+      return raw as T;
     } catch (error: any) {
       console.error('API Error:', error);
       throw error;
