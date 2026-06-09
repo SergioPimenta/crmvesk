@@ -24,20 +24,27 @@ function toPgSql(text) {
 function prepareSql(text) {
   let pg = toPgSql(text);
   if (/^\s*INSERT\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
-    pg = pg.replace(/;?\s*$/i, ' RETURNING id');
+    pg = pg.replace(/;?\s*$/i, ' RETURNING *');
   }
   if (/^\s*DELETE\b/i.test(pg) && !/\bRETURNING\b/i.test(pg)) {
-    pg = pg.replace(/;?\s*$/i, ' RETURNING id');
+    pg = pg.replace(/;?\s*$/i, ' RETURNING *');
   }
   return pg;
 }
 
+function resolveInsertId(row) {
+  if (!row || typeof row !== 'object') return undefined;
+  if (row.id != null) return row.id;
+  if (row.user_id != null) return row.user_id;
+  return undefined;
+}
+
 function buildMeta(text, rows) {
   if (/^\s*INSERT\b/i.test(text)) {
-    return { insertId: rows[0]?.id, affectedRows: rows.length || 1 };
+    return { insertId: resolveInsertId(rows[0]), affectedRows: rows.length || 1 };
   }
   if (/^\s*(UPDATE|DELETE)\b/i.test(text)) {
-    return { insertId: rows[0]?.id, affectedRows: rows.length };
+    return { insertId: resolveInsertId(rows[0]), affectedRows: rows.length };
   }
   return { affectedRows: rows.length };
 }
