@@ -24,6 +24,7 @@ import {
   verifySignature,
   subscribeAppToWaba,
   listMessageTemplates,
+  resolveWabaId,
 } from './metaWhatsAppClient.js';
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
@@ -98,11 +99,23 @@ export async function getSettings(userId) {
   const [rows] = await pool.query(
     `SELECT user_id AS userId, provider, base_url AS baseUrl, instance_name AS instanceName,
             api_key AS apiKey, phone, status, webhook_secret AS webhookSecret,
-            app_secret AS appSecret
+            app_secret AS appSecret, waba_id AS wabaId
      FROM whatsapp_settings WHERE user_id = ?`,
     [userId]
   );
   return rows[0] ? normalizeRow(rows[0]) : null;
+}
+
+async function ensureWabaIdPersisted(userId, settings) {
+  if (!settings || settings.provider !== 'meta') return settings?.wabaId || '';
+  if (settings.wabaId) return settings.wabaId;
+
+  const wabaId = await resolveWabaId(settings.instanceName, settings.apiKey);
+  if (wabaId) {
+    await pool.query('UPDATE whatsapp_settings SET waba_id = ? WHERE user_id = ?', [wabaId, userId]);
+    return wabaId;
+  }
+  return '';
 }
 
 export async function saveSettings(userId, payload) {
@@ -180,10 +193,14 @@ export async function refreshConnectionStatus(userId) {
   if (settings.provider === 'meta') {
     try {
       const info = await validateConnection(settings.instanceName, settings.apiKey);
+      const wabaId = await resolveWabaId(settings.instanceName, settings.apiKey);
       if (!settings.phone && info.phone) {
         await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
       }
-      await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+      await pool.query(
+        'UPDATE whatsapp_settings SET status = ?, waba_id = COALESCE(NULLIF(?, \'\'), waba_id) WHERE user_id = ?',
+        ['connected', wabaId || '', userId]
+      );
       return {
         configured: true,
         status: 'connected',
@@ -244,11 +261,15 @@ export async function startConnection(userId) {
 
   if (settings.provider === 'meta') {
     const info = await validateConnection(settings.instanceName, settings.apiKey);
-    await subscribeAppToWaba(settings.instanceName, settings.apiKey);
+    const wabaId = (await subscribeAppToWaba(settings.instanceName, settings.apiKey)) ||
+      (await resolveWabaId(settings.instanceName, settings.apiKey));
     if (!settings.phone && info.phone) {
       await pool.query('UPDATE whatsapp_settings SET phone = ? WHERE user_id = ?', [info.phone, userId]);
     }
-    await pool.query('UPDATE whatsapp_settings SET status = ? WHERE user_id = ?', ['connected', userId]);
+    await pool.query(
+      'UPDATE whatsapp_settings SET status = ?, waba_id = COALESCE(NULLIF(?, \'\'), waba_id) WHERE user_id = ?',
+      ['connected', wabaId || '', userId]
+    );
     return {
       status: 'connected',
       provider: 'meta',
@@ -836,5 +857,6 @@ export async function getMessageTemplates(userId) {
     throw new Error('Conecte o WhatsApp antes de consultar os modelos');
   }
 
-  return listMessageTemplates(settings.instanceName, settings.apiKey);
+  const wabaId = await ensureWabaIdPersisted(userId, settings);
+  return listMessageTemplates(settings.instanceName, settings.apiKey, wabaId);
 }

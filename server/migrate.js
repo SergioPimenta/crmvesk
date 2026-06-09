@@ -119,6 +119,7 @@ export async function runMigrations() {
   await migrateContactsSite();
   await migrateUsersActive();
   await migrateEnsureAdminUser();
+  await migrateWhatsappWabaId();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -127,6 +128,11 @@ async function migrateUsersActive() {
   if (!(await tableExists('users'))) return;
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
   await pool.query(`UPDATE users SET active = TRUE WHERE active IS NULL`);
+}
+
+async function migrateWhatsappWabaId() {
+  if (!(await tableExists('whatsapp_settings'))) return;
+  await pool.query(`ALTER TABLE whatsapp_settings ADD COLUMN IF NOT EXISTS waba_id VARCHAR(64) DEFAULT ''`);
 }
 
 async function migrateEnsureAdminUser() {

@@ -144,14 +144,114 @@ export function parseWebhookStatuses(payload) {
 }
 
 /** Inscreve o app na conta WhatsApp Business (necessário para receber webhooks). */
+async function wabaOwnsPhoneNumber(wabaId, phoneNumberId, accessToken) {
+  try {
+    let after = null;
+    for (;;) {
+      const qs = new URLSearchParams({ fields: 'id', limit: '100' });
+      if (after) qs.set('after', after);
+      const data = await metaRequest(accessToken, 'GET', `/${wabaId}/phone_numbers?${qs.toString()}`);
+      if ((data?.data || []).some((p) => String(p.id) === String(phoneNumberId))) {
+        return true;
+      }
+      after = data?.paging?.cursors?.after;
+      if (!after) break;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+async function listWabaIdsFromDebugToken(accessToken) {
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appId || !appSecret) return [];
+
+  try {
+    const appToken = `${appId}|${appSecret}`;
+    const data = await metaRequest(
+      appToken,
+      'GET',
+      `/debug_token?input_token=${encodeURIComponent(accessToken)}`
+    );
+    const ids = new Set();
+    for (const scope of data?.data?.granular_scopes || []) {
+      if (!/whatsapp/i.test(scope.scope || '')) continue;
+      for (const id of scope.target_ids || []) {
+        if (id) ids.add(String(id));
+      }
+    }
+    return [...ids];
+  } catch {
+    return [];
+  }
+}
+
+async function listWabaIdsFromBusinesses(accessToken) {
+  const ids = new Set();
+  try {
+    const businesses = await metaRequest(accessToken, 'GET', `/me/businesses?fields=id`);
+    for (const biz of businesses?.data || []) {
+      for (const edge of ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts']) {
+        try {
+          const res = await metaRequest(accessToken, 'GET', `/${biz.id}/${edge}?fields=id`);
+          for (const w of res?.data || []) {
+            if (w?.id) ids.add(String(w.id));
+          }
+        } catch {
+          /* empresa sem WABA neste edge */
+        }
+      }
+    }
+  } catch {
+    /* sem permissão business_management */
+  }
+  return [...ids];
+}
+
+/** Resolve o WABA ID a partir do Phone Number ID (vários métodos da Graph API). */
+export async function resolveWabaId(phoneNumberId, accessToken) {
+  const phoneId = String(phoneNumberId || '').trim();
+  if (!phoneId) return null;
+
+  try {
+    const legacy = await metaRequest(accessToken, 'GET', `/${phoneId}?fields=whatsapp_business_account`);
+    if (legacy?.whatsapp_business_account?.id) {
+      return String(legacy.whatsapp_business_account.id);
+    }
+  } catch (err) {
+    const msg = String(err.message || '');
+    if (!msg.includes('(#100)') && !msg.includes('nonexisting field')) {
+      throw err;
+    }
+  }
+
+  const candidates = new Set([
+    ...(await listWabaIdsFromDebugToken(accessToken)),
+    ...(await listWabaIdsFromBusinesses(accessToken)),
+  ]);
+
+  for (const wabaId of candidates) {
+    if (await wabaOwnsPhoneNumber(wabaId, phoneId, accessToken)) {
+      return wabaId;
+    }
+  }
+
+  if (candidates.size === 1) {
+    return [...candidates][0];
+  }
+
+  return null;
+}
+
 export async function getWabaId(phoneNumberId, accessToken) {
-  const data = await metaRequest(accessToken, 'GET', `/${phoneNumberId}?fields=whatsapp_business_account`);
-  return data?.whatsapp_business_account?.id || null;
+  return resolveWabaId(phoneNumberId, accessToken);
 }
 
 export async function subscribeAppToWaba(phoneNumberId, accessToken) {
   try {
-    const wabaId = await getWabaId(phoneNumberId, accessToken);
+    const wabaId = await resolveWabaId(phoneNumberId, accessToken);
     if (!wabaId) return null;
     await metaRequest(accessToken, 'POST', `/${wabaId}/subscribed_apps`);
     return wabaId;
@@ -195,10 +295,15 @@ function mapMessageTemplate(row) {
 }
 
 /** Lista modelos de mensagem da conta WABA (aprovados, rejeitados, pendentes, etc.). */
-export async function listMessageTemplates(phoneNumberId, accessToken) {
-  const wabaId = await getWabaId(phoneNumberId, accessToken);
+export async function listMessageTemplates(phoneNumberId, accessToken, cachedWabaId) {
+  let wabaId = String(cachedWabaId || '').trim() || null;
   if (!wabaId) {
-    throw new Error('Não foi possível identificar a conta WhatsApp Business (WABA)');
+    wabaId = await resolveWabaId(phoneNumberId, accessToken);
+  }
+  if (!wabaId) {
+    throw new Error(
+      'Não foi possível identificar a conta WhatsApp Business (WABA). Verifique permissões whatsapp_business_management no token.'
+    );
   }
 
   const fields = 'id,name,status,category,language,components,rejected_reason,quality_score';
