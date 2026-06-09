@@ -256,7 +256,7 @@ const Integracoes = () => {
               <div>
                 <h3 className="integration-panel-title">WhatsApp Business</h3>
                 <p className="integration-panel-desc">
-                  Use a API oficial da Meta (Cloud API) ou conecte via Evolution API com QR Code.
+                  Use a API oficial da Meta
                 </p>
               </div>
               <span className={`pill-status ${status === 'connected' ? 'ok' : status === 'connecting' ? 'wait' : 'warn'}`}>
