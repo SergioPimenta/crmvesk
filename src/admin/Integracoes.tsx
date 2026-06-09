@@ -294,30 +294,40 @@ const Integracoes = () => {
 
             {loading ? <div className="kanban-empty">Carregando…</div> : null}
 
-            <form className="crm-form integration-form" onSubmit={saveConfig}>
+            <form className="crm-form integration-form" onSubmit={saveConfig} autoComplete="off">
               {isMeta ? (
                 <>
                   <div className="crm-field">
                     <label htmlFor="wa_phone_id">Phone Number ID</label>
                     <input
                       id="wa_phone_id"
+                      name="meta_phone_number_id"
                       value={phoneNumberId}
                       onChange={(e) => setPhoneNumberId(e.target.value)}
                       placeholder="Ex: 123456789012345"
                       disabled={isLocked}
                       required
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                   <div className="crm-field">
                     <label htmlFor="wa_token">Access Token (permanente)</label>
                     <input
                       id="wa_token"
+                      name="meta_access_token"
                       type="password"
                       value={apiToken}
                       onChange={(e) => setApiToken(e.target.value)}
                       placeholder={configured ? 'Deixe em branco para manter o atual' : 'Token da Meta Graph API'}
                       disabled={isLocked}
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore
                       required={!configured}
                     />
                   </div>
@@ -325,22 +335,30 @@ const Integracoes = () => {
                     <label htmlFor="wa_app_secret">App Secret (recomendado)</label>
                     <input
                       id="wa_app_secret"
+                      name="meta_app_secret"
                       type="password"
                       value={appSecret}
                       onChange={(e) => setAppSecret(e.target.value)}
                       placeholder={configured ? 'Deixe em branco para manter o atual' : 'Segredo do app Meta'}
                       disabled={isLocked}
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                   <div className="crm-field">
                     <label htmlFor="wa_phone">Número exibido (opcional)</label>
                     <input
                       id="wa_phone"
+                      name="meta_display_phone"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Ex: 5511999998888"
                       disabled={isLocked}
+                      autoComplete="off"
+                      inputMode="tel"
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                 </>
@@ -350,34 +368,45 @@ const Integracoes = () => {
                     <label htmlFor="wa_base">URL da API</label>
                     <input
                       id="wa_base"
+                      name="evolution_api_url"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
                       placeholder="Ex: https://sua-evolution.com"
                       disabled={isLocked}
                       required
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                   <div className="crm-field">
                     <label htmlFor="wa_instance">Nome da instância</label>
                     <input
                       id="wa_instance"
+                      name="evolution_instance_name"
                       value={instanceName}
                       onChange={(e) => setInstanceName(e.target.value)}
                       placeholder="Ex: crmvesk"
                       disabled={isLocked}
                       required
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                   <div className="crm-field">
                     <label htmlFor="wa_token_evo">API Key</label>
                     <input
                       id="wa_token_evo"
+                      name="evolution_api_key"
                       type="password"
                       value={apiToken}
                       onChange={(e) => setApiToken(e.target.value)}
                       placeholder={configured ? 'Deixe em branco para manter a atual' : 'Sua chave global'}
                       disabled={isLocked}
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore
                       required={!configured}
                     />
                   </div>
@@ -385,10 +414,15 @@ const Integracoes = () => {
                     <label htmlFor="wa_phone_evo">Número (opcional, com DDI)</label>
                     <input
                       id="wa_phone_evo"
+                      name="evolution_display_phone"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="Ex: 5511999998888"
                       disabled={isLocked}
+                      autoComplete="off"
+                      inputMode="tel"
+                      data-lpignore="true"
+                      data-1p-ignore
                     />
                   </div>
                 </>
