@@ -21,7 +21,6 @@ type UserForm = {
   email: string;
   password: string;
   role: UserRole;
-  active: boolean;
 };
 
 const emptyForm = (): UserForm => ({
@@ -29,7 +28,6 @@ const emptyForm = (): UserForm => ({
   email: '',
   password: '',
   role: 'user',
-  active: true,
 });
 
 const roleLabel = (role: UserRole) => (role === 'admin' ? 'Administrador' : 'Usuário');
@@ -97,7 +95,6 @@ const Usuarios = () => {
       email: u.email,
       password: '',
       role: u.role,
-      active: u.active,
     });
     setIsEditOpen(true);
   };
@@ -132,7 +129,6 @@ const Usuarios = () => {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        active: form.active,
       };
       if (form.password.trim()) {
         payload.password = form.password;
@@ -414,21 +410,6 @@ const Usuarios = () => {
               <option value="user">Usuário</option>
               <option value="admin">Administrador</option>
             </select>
-          </div>
-          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="eu_active" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                id="eu_active"
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))}
-                disabled={editingId === authUser?.id && form.active}
-              />
-              Usuário ativo
-            </label>
-            <span style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4, display: 'block' }}>
-              Use o toggle na listagem para ativar ou inativar rapidamente.
-            </span>
           </div>
 
           <div className="crm-form-actions" style={{ gridColumn: '1 / -1' }}>
