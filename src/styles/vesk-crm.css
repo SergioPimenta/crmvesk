@@ -1470,6 +1470,70 @@ body.vesk-app {
   flex-shrink: 0;
 }
 
+.wa-new-attendance-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wa-msg-mode-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--vesk-bg);
+  border: 1px solid var(--vesk-border);
+}
+
+.wa-msg-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vesk-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wa-msg-mode-btn:hover {
+  color: var(--vesk-text);
+}
+
+.wa-msg-mode-btn.active {
+  background: var(--vesk-surface2);
+  color: var(--vesk-orange);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.wa-template-preview {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--vesk-border);
+  background: var(--vesk-surface2);
+}
+
+.wa-template-preview-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vesk-muted);
+  margin-bottom: 6px;
+}
+
+.wa-template-preview p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vesk-text);
+  white-space: pre-wrap;
+}
+
 .wa-layout .inbox-items {
   overflow-y: auto;
   flex: 1;

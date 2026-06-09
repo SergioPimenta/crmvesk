@@ -9,6 +9,7 @@ import {
   formatMessageTime,
   type WaMsgStatus,
 } from '../utils/waChatFormat';
+import { WA_MESSAGE_TEMPLATES } from '../utils/waMessageTemplates';
 
 type WaMessage = {
   id: string;
@@ -61,9 +62,15 @@ const WhatsApp = () => {
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState('');
-  const [contactPicker, setContactPicker] = useState<'list' | 'new' | null>(null);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [openingChat, setOpeningChat] = useState(false);
+  const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [newMessageMode, setNewMessageMode] = useState<'free' | 'template'>('free');
+  const [newFreeMessage, setNewFreeMessage] = useState('');
+  const [newTemplateId, setNewTemplateId] = useState(WA_MESSAGE_TEMPLATES[0]?.id ?? '');
+  const [startingAttendance, setStartingAttendance] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevActiveIdRef = useRef<string | null>(null);
@@ -226,6 +233,55 @@ const WhatsApp = () => {
     );
   }, [contacts, contactSearch]);
 
+  const selectedTemplate = useMemo(
+    () => WA_MESSAGE_TEMPLATES.find((t) => t.id === newTemplateId) ?? WA_MESSAGE_TEMPLATES[0],
+    [newTemplateId]
+  );
+
+  const resetNewAttendanceForm = () => {
+    setNewPhone('');
+    setNewMessageMode('free');
+    setNewFreeMessage('');
+    setNewTemplateId(WA_MESSAGE_TEMPLATES[0]?.id ?? '');
+  };
+
+  const resolveNewAttendanceMessage = () => {
+    if (newMessageMode === 'template') return selectedTemplate?.body?.trim() || '';
+    return newFreeMessage.trim();
+  };
+
+  const startNewAttendance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const phone = newPhone.replace(/\D/g, '');
+    const message = resolveNewAttendanceMessage();
+    if (phone.length < 10) {
+      alert('Informe um telefone válido com DDI + DDD + número.');
+      return;
+    }
+    if (!message) {
+      alert('Informe a mensagem ou selecione um modelo.');
+      return;
+    }
+
+    setStartingAttendance(true);
+    try {
+      const data = await api.post<{ chat: WaConversation; messages: WaMessage[] }>('/whatsapp/chats', {
+        phone,
+        message,
+      });
+      await loadChats();
+      setActiveId(data.chat.id);
+      setMessages(data.messages || []);
+      scrollOnNextMessagesRef.current = true;
+      setNewAttendanceOpen(false);
+      resetNewAttendanceForm();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível iniciar o atendimento');
+    } finally {
+      setStartingAttendance(false);
+    }
+  };
+
   const openContactChat = async (contact: Contact) => {
     const phone = contact.telefone?.replace(/\D/g, '') || '';
     if (phone.length < 10) {
@@ -241,7 +297,7 @@ const WhatsApp = () => {
       });
       await loadChats();
       setActiveId(data.chat.id);
-      setContactPicker(null);
+      setContactPickerOpen(false);
       setContactSearch('');
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Não foi possível abrir a conversa');
@@ -321,7 +377,7 @@ const WhatsApp = () => {
                   aria-label="Abrir listagem de contatos"
                   onClick={() => {
                     setContactSearch('');
-                    setContactPicker('list');
+                    setContactPickerOpen(true);
                   }}
                 >
                   <i className="ti ti-address-book" aria-hidden="true" />
@@ -332,8 +388,8 @@ const WhatsApp = () => {
                   title="Iniciar novo atendimento"
                   aria-label="Iniciar novo atendimento"
                   onClick={() => {
-                    setContactSearch('');
-                    setContactPicker('new');
+                    resetNewAttendanceForm();
+                    setNewAttendanceOpen(true);
                   }}
                 >
                   <i className="ti ti-message-plus" aria-hidden="true" />
@@ -473,16 +529,112 @@ const WhatsApp = () => {
       )}
 
       <Modal
-        open={contactPicker !== null}
-        title={contactPicker === 'new' ? 'Novo atendimento' : 'Contatos'}
-        description={
-          contactPicker === 'new'
-            ? 'Selecione um contato para iniciar um atendimento pelo WhatsApp.'
-            : 'Selecione um contato para abrir ou criar a conversa.'
-        }
+        open={newAttendanceOpen}
+        title="Novo atendimento"
+        description="Informe o número e a primeira mensagem para abrir o chat no WhatsApp."
+        onClose={() => {
+          setNewAttendanceOpen(false);
+          resetNewAttendanceForm();
+        }}
+      >
+        <form className="crm-form wa-new-attendance-form" onSubmit={(e) => void startNewAttendance(e)}>
+          <div className="crm-field">
+            <label htmlFor="wa_new_phone">Telefone (DDI + DDD + número)</label>
+            <input
+              id="wa_new_phone"
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value)}
+              placeholder="Ex: 5511999998888"
+              inputMode="tel"
+              autoFocus
+              required
+            />
+          </div>
+
+          <div className="crm-field">
+            <label>Mensagem inicial</label>
+            <div className="wa-msg-mode-toggle" role="tablist" aria-label="Tipo de mensagem">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={newMessageMode === 'free'}
+                className={`wa-msg-mode-btn${newMessageMode === 'free' ? ' active' : ''}`}
+                onClick={() => setNewMessageMode('free')}
+              >
+                Mensagem livre
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={newMessageMode === 'template'}
+                className={`wa-msg-mode-btn${newMessageMode === 'template' ? ' active' : ''}`}
+                onClick={() => setNewMessageMode('template')}
+              >
+                Modelo
+              </button>
+            </div>
+          </div>
+
+          {newMessageMode === 'free' ? (
+            <div className="crm-field">
+              <label htmlFor="wa_new_message">Texto da mensagem</label>
+              <textarea
+                id="wa_new_message"
+                value={newFreeMessage}
+                onChange={(e) => setNewFreeMessage(e.target.value)}
+                placeholder="Digite a mensagem que será enviada…"
+                rows={4}
+                required
+              />
+            </div>
+          ) : (
+            <div className="crm-field">
+              <label htmlFor="wa_new_template">Modelo de mensagem</label>
+              <select
+                id="wa_new_template"
+                value={newTemplateId}
+                onChange={(e) => setNewTemplateId(e.target.value)}
+              >
+                {WA_MESSAGE_TEMPLATES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
+              <div className="wa-template-preview">
+                <span className="wa-template-preview-label">Pré-visualização</span>
+                <p>{selectedTemplate?.body}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="crm-form-actions">
+            <button
+              type="button"
+              className="crm-btn-secondary"
+              onClick={() => {
+                setNewAttendanceOpen(false);
+                resetNewAttendanceForm();
+              }}
+              disabled={startingAttendance}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className="crm-btn-primary" disabled={startingAttendance}>
+              <i className="ti ti-send" aria-hidden="true" />
+              {startingAttendance ? 'Iniciando…' : 'Iniciar atendimento'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={contactPickerOpen}
+        title="Contatos"
+        description="Selecione um contato para abrir ou criar a conversa."
         wide
         onClose={() => {
-          setContactPicker(null);
+          setContactPickerOpen(false);
           setContactSearch('');
         }}
       >

@@ -632,6 +632,40 @@ export async function openChatFromContact(userId, { phone, contactId, name }) {
   return chat;
 }
 
+export async function startNewAttendance(userId, { phone, message, name }) {
+  const digits = digitsOnly(phone);
+  if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
+
+  let contactId = null;
+  let contactName = String(name || '').trim();
+
+  if (!contactName) {
+    const [contacts] = await pool.query(
+      "SELECT id, nome FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '+', '') LIKE ? LIMIT 1",
+      [userId, `%${digits.slice(-8)}%`]
+    );
+    if (contacts[0]) {
+      contactId = contacts[0].id;
+      contactName = contacts[0].nome;
+    }
+  }
+
+  const chat = await openChatFromContact(userId, {
+    phone: digits,
+    contactId,
+    name: contactName,
+  });
+
+  let messages = [];
+  if (message?.trim()) {
+    messages = await sendChatMessage(userId, Number(chat.id), message.trim());
+  }
+
+  const chats = await listChats(userId);
+  const updatedChat = chats.find((c) => c.id === chat.id) || chat;
+  return { chat: updatedChat, messages };
+}
+
 export async function listChats(userId) {
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,

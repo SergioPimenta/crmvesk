@@ -9,6 +9,7 @@ import {
   loadMessagesFromProvider,
   maskSettings,
   openChatFromContact,
+  startNewAttendance,
   processWebhook,
   refreshConnectionStatus,
   saveSettings,
@@ -162,14 +163,18 @@ router.get('/chats', async (req, res) => {
 });
 
 router.post('/chats', async (req, res) => {
-  const { phone, contactId, name } = req.body ?? {};
+  const { phone, contactId, name, message } = req.body ?? {};
   try {
+    if (message?.trim()) {
+      const result = await startNewAttendance(req.userId, { phone, name, message: message.trim() });
+      return res.status(201).json(result);
+    }
     const chat = await openChatFromContact(req.userId, {
       phone,
       contactId: contactId ? Number(contactId) : undefined,
       name,
     });
-    res.status(201).json({ chat });
+    res.status(201).json({ chat, messages: [] });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
