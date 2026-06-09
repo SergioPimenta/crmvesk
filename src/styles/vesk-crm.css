@@ -1480,6 +1480,105 @@ body.vesk-app {
 
 .wa-chat-head-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.wa-finish-btn {
+  padding: 6px 12px !important;
+  font-size: 11px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.wa-finish-btn.reopened {
+  border-color: #25d36660;
+  color: #25d366;
+}
+
+.wa-attendance-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--vesk-surface2);
+  color: var(--vesk-muted);
+  vertical-align: middle;
+}
+
+.wa-day-separator {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 6px;
+}
+
+.wa-day-separator span {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+
+.wa-bubble-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.wa-bubble-meta time {
+  font-size: 10px;
+  color: var(--vesk-sub);
+}
+
+.wa-bubble.out .wa-bubble-meta time {
+  color: #25d36699;
+}
+
+.wa-msg-checks {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  width: 16px;
+  height: 12px;
+  color: #25d36699;
+  flex-shrink: 0;
+}
+
+.wa-msg-checks.read {
+  color: #53bdeb;
+}
+
+.wa-msg-checks .ti-check {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.wa-msg-checks .check-2 {
+  position: absolute;
+  left: 5px;
+  top: 0;
+}
+
+.wa-closed-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--vesk-muted);
+  border-top: 1px solid var(--vesk-border);
+  background: var(--vesk-surface2);
 }
 
 .wa-messages {
@@ -1521,14 +1620,6 @@ body.vesk-app {
   word-break: break-word;
 }
 
-.wa-bubble time {
-  display: block;
-  font-size: 10px;
-  color: var(--vesk-sub);
-  text-align: right;
-  margin-top: 4px;
-}
-
 .wa-bubble.in {
   background: var(--vesk-surface2);
   border: 1px solid var(--vesk-border);
@@ -1539,10 +1630,6 @@ body.vesk-app {
   background: #25d36622;
   border: 1px solid #25d36640;
   border-bottom-right-radius: 2px;
-}
-
-.wa-bubble.out time {
-  color: #25d36699;
 }
 
 .wa-compose {

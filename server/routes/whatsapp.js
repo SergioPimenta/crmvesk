@@ -12,6 +12,7 @@ import {
   refreshConnectionStatus,
   saveSettings,
   sendChatMessage,
+  setChatAttendance,
   startConnection,
   syncChatsFromProvider,
   verifyMetaWebhook,
@@ -175,6 +176,22 @@ router.get('/chats/:id/messages', async (req, res) => {
   }
 
   res.json({ messages });
+});
+
+router.post('/chats/:id/attendance', async (req, res) => {
+  const chatId = Number(req.params.id);
+  const { status } = req.body ?? {};
+  if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
+  if (status !== 'open' && status !== 'closed') {
+    return res.status(400).json({ message: 'Status inválido' });
+  }
+
+  try {
+    const result = await setChatAttendance(req.userId, chatId, status);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 router.post('/chats/:id/messages', async (req, res) => {

@@ -31,6 +31,7 @@ const KEY_ALIASES = {
   fromme: 'fromMe',
   messageat: 'messageAt',
   wamessageid: 'waMessageId',
+  attendancestatus: 'attendanceStatus',
   userid: 'userId',
   siteurl: 'siteUrl',
   sitename: 'siteName',

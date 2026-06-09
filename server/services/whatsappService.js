@@ -17,12 +17,21 @@ import {
 import {
   jidToPhone as metaJidToPhone,
   parseWebhookMessages,
+  parseWebhookStatuses,
   phoneToJid,
   sendText as metaSendText,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
 } from './metaWhatsAppClient.js';
+
+const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
+
+function toIso(date) {
+  if (!date) return new Date().toISOString();
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
 
 const webhookPublicBase = () =>
   process.env.WHATSAPP_WEBHOOK_PUBLIC_URL ||
@@ -345,7 +354,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
   return existing[0].id;
 }
 
-export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt }) {
+export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
   if (waMessageId) {
     const [dup] = await pool.query(
       'SELECT id FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
@@ -354,12 +363,47 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
     if (dup.length > 0) return dup[0].id;
   }
 
+  const msgStatus = fromMe ? status || 'sent' : '';
+
   const [ins] = await pool.query(
-    `INSERT INTO whatsapp_messages (user_id, chat_id, wa_message_id, body, from_me, message_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [userId, chatId, waMessageId || null, body, fromMe ? true : false, messageAt]
+    `INSERT INTO whatsapp_messages (user_id, chat_id, wa_message_id, body, from_me, message_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [userId, chatId, waMessageId || null, body, fromMe ? true : false, messageAt, msgStatus]
   );
   return ins.insertId;
+}
+
+export async function updateMessageStatus(userId, waMessageId, status) {
+  if (!waMessageId || !status) return;
+  const next = String(status).toLowerCase();
+  if (!['sent', 'delivered', 'read', 'failed'].includes(next)) return;
+
+  const [rows] = await pool.query(
+    'SELECT id, status FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
+    [userId, waMessageId]
+  );
+  if (!rows.length) return;
+
+  const current = String(rows[0].status || 'sent').toLowerCase();
+  const currentRank = STATUS_RANK[current] ?? 0;
+  const nextRank = STATUS_RANK[next] ?? 0;
+  if (next !== 'failed' && nextRank <= currentRank) return;
+
+  await pool.query('UPDATE whatsapp_messages SET status = ? WHERE id = ? AND user_id = ?', [
+    next,
+    rows[0].id,
+    userId,
+  ]);
+}
+
+export async function setChatAttendance(userId, chatId, status) {
+  const next = status === 'closed' ? 'closed' : 'open';
+  const [result] = await pool.query(
+    'UPDATE whatsapp_chats SET attendance_status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
+    [next, chatId, userId]
+  );
+  if (!result.affectedRows) throw new Error('Conversa não encontrada');
+  return { attendanceStatus: next };
 }
 
 export async function verifyMetaWebhook(userId, webhookSecret, query) {
@@ -407,6 +451,11 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
     });
     console.log(`WhatsApp webhook Meta: ${items.length} mensagem(ns) para user ${userId}`);
 
+    const statuses = parseWebhookStatuses(payload);
+    for (const st of statuses) {
+      await updateMessageStatus(userId, st.waMessageId, st.status);
+    }
+
     for (const item of items) {
       if (!item.text) continue;
       try {
@@ -418,6 +467,10 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
           lastMessageAt: item.messageAt,
           incrementUnread: true,
         });
+        await pool.query(
+          "UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?",
+          [chatId, userId]
+        );
         await insertMessage(userId, chatId, {
           waMessageId: item.waMessageId,
           body: item.text,
@@ -529,7 +582,7 @@ export async function syncChatsFromProvider(userId) {
 export async function listChats(userId) {
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,
-            c.last_message_at AS lastMessageAt, c.unread,
+            c.last_message_at AS lastMessageAt, c.unread, c.attendance_status AS attendanceStatus,
             ct.nome AS contactName
      FROM whatsapp_chats c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
@@ -547,26 +600,31 @@ export async function listChats(userId) {
       nome: row.contactName || row.name || jidToPhone(row.remoteJid),
       phone: jidToPhone(row.remoteJid),
       lastMessage: row.lastMessage || '',
-      when: formatWhen(row.lastMessageAt),
+      when: formatWhenLocal(row.lastMessageAt),
       unread: Number(row.unread) || 0,
+      attendanceStatus: row.attendanceStatus === 'closed' ? 'closed' : 'open',
     };
   });
 }
 
 export async function listMessages(userId, chatId) {
   const [rows] = await pool.query(
-    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt
+    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt, status
      FROM whatsapp_messages WHERE user_id = ? AND chat_id = ? ORDER BY message_at ASC, id ASC`,
     [userId, chatId]
   );
 
   return rows.map((r) => {
     const row = normalizeRow(r);
+    const fromMe = Boolean(row.fromMe);
+    let status = row.status ? String(row.status).toLowerCase() : '';
+    if (fromMe && !status) status = 'sent';
     return {
       id: String(row.id),
       text: row.text,
-      fromMe: Boolean(row.fromMe),
-      at: formatTime(row.messageAt),
+      fromMe,
+      messageAt: toIso(row.messageAt),
+      status: fromMe ? status : undefined,
     };
   });
 }
@@ -637,7 +695,13 @@ export async function sendChatMessage(userId, chatId, text) {
     body: text,
     fromMe: true,
     messageAt,
+    status: 'sent',
   });
+
+  await pool.query(
+    "UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?",
+    [chatId, userId]
+  );
 
   await upsertChat(userId, {
     remoteJid: chat.remoteJid,
@@ -650,18 +714,24 @@ export async function sendChatMessage(userId, chatId, text) {
   return listMessages(userId, chatId);
 }
 
-function formatWhen(date) {
+const TZ_BR = 'America/Sao_Paulo';
+
+function formatWhenLocal(date) {
   if (!date) return '';
   const d = new Date(date);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) return formatTime(d);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
+  if (Number.isNaN(d.getTime())) return '';
 
-function formatTime(date) {
-  const d = new Date(date);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const dayFmt = new Intl.DateTimeFormat('pt-BR', { timeZone: TZ_BR, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const timeFmt = new Intl.DateTimeFormat('pt-BR', { timeZone: TZ_BR, hour: '2-digit', minute: '2-digit' });
+
+  const dDay = dayFmt.format(d);
+  const nowDay = dayFmt.format(now);
+  if (dDay === nowDay) return timeFmt.format(d);
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (dDay === dayFmt.format(yesterday)) return 'Ontem';
+
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: TZ_BR, day: '2-digit', month: '2-digit' }).format(d);
 }

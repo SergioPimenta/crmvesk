@@ -3,12 +3,18 @@ import { Link } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
 import { useCrmData } from '../contexts/CrmDataContext';
 import { api } from '../services/api';
+import {
+  buildChatTimeline,
+  formatMessageTime,
+  type WaMsgStatus,
+} from '../utils/waChatFormat';
 
 type WaMessage = {
   id: string;
   text: string;
-  at: string;
+  messageAt: string;
   fromMe: boolean;
+  status?: WaMsgStatus;
 };
 
 type WaConversation = {
@@ -19,12 +25,25 @@ type WaConversation = {
   lastMessage: string;
   when: string;
   unread: number;
+  attendanceStatus?: 'open' | 'closed';
 };
 
 const initials = (name: string) => {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   return name.slice(0, 2).toUpperCase();
+};
+
+const MessageChecks = ({ status }: { status?: WaMsgStatus }) => {
+  if (!status || status === 'failed') return null;
+  const isRead = status === 'read';
+  const isDelivered = status === 'delivered' || isRead;
+  return (
+    <span className={`wa-msg-checks${isRead ? ' read' : ''}`} aria-label={isRead ? 'Lida' : isDelivered ? 'Entregue' : 'Enviada'}>
+      <i className="ti ti-check" aria-hidden="true" />
+      {isDelivered ? <i className="ti ti-check check-2" aria-hidden="true" /> : null}
+    </span>
+  );
 };
 
 const WhatsApp = () => {
@@ -39,6 +58,7 @@ const WhatsApp = () => {
   const [waProvider, setWaProvider] = useState<'meta' | 'evolution'>('meta');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -82,9 +102,11 @@ const WhatsApp = () => {
   useEffect(() => {
     if (!activeId) {
       setMessages([]);
-      return;
+      return undefined;
     }
     void loadMessages(activeId);
+    const id = window.setInterval(() => void loadMessages(activeId), 8000);
+    return () => window.clearInterval(id);
   }, [activeId, loadMessages]);
 
   useEffect(() => {
@@ -107,6 +129,9 @@ const WhatsApp = () => {
     [activeId, filtered]
   );
 
+  const chatTimeline = useMemo(() => buildChatTimeline(messages), [messages]);
+  const isClosed = active?.attendanceStatus === 'closed';
+
   useEffect(() => {
     if (!activeId && filtered[0]) setActiveId(filtered[0].id);
   }, [filtered, activeId]);
@@ -121,7 +146,7 @@ const WhatsApp = () => {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || !active) return;
+    if (!text || !active || isClosed) return;
     setSending(true);
     try {
       const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/messages`, { text });
@@ -132,6 +157,23 @@ const WhatsApp = () => {
       alert(err instanceof Error ? err.message : 'Não foi possível enviar a mensagem');
     } finally {
       setSending(false);
+    }
+  };
+
+  const toggleAttendance = async () => {
+    if (!active) return;
+    const next = isClosed ? 'open' : 'closed';
+    setFinishing(true);
+    try {
+      await api.post(`/whatsapp/chats/${active.id}/attendance`, { status: next });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === active.id ? { ...c, attendanceStatus: next } : c))
+      );
+      await loadChats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível atualizar o atendimento');
+    } finally {
+      setFinishing(false);
     }
   };
 
@@ -244,7 +286,10 @@ const WhatsApp = () => {
                 <div className="wa-chat-head">
                   <div className="wa-avatar lg">{initials(active.nome)}</div>
                   <div className="wa-chat-head-info">
-                    <div className="wa-chat-name">{active.nome}</div>
+                    <div className="wa-chat-name">
+                      {active.nome}
+                      {isClosed ? <span className="wa-attendance-badge">Finalizado</span> : null}
+                    </div>
                     <div className="wa-chat-phone">{active.phone}</div>
                     {contactCompany && contactCompany !== '—' ? (
                       <div className="wa-chat-meta">
@@ -254,6 +299,15 @@ const WhatsApp = () => {
                     ) : null}
                   </div>
                   <div className="wa-chat-head-actions">
+                    <button
+                      type="button"
+                      className={`crm-btn-secondary wa-finish-btn${isClosed ? ' reopened' : ''}`}
+                      onClick={() => void toggleAttendance()}
+                      disabled={finishing}
+                    >
+                      <i className={`ti ${isClosed ? 'ti-message-circle' : 'ti-circle-check'}`} aria-hidden="true" />
+                      {finishing ? 'Salvando…' : isClosed ? 'Reabrir atendimento' : 'Finalizar atendimento'}
+                    </button>
                     {active.contatoId ? (
                       <Link to="/admin/contatos" className="crm-btn-secondary" style={{ padding: '6px 10px', fontSize: 11 }}>
                         Ver contato
@@ -263,39 +317,55 @@ const WhatsApp = () => {
                 </div>
 
                 <div className="wa-messages" role="log" aria-live="polite">
-                  {messages.map((m) => (
-                    <div key={m.id} className={`wa-bubble-wrap${m.fromMe ? ' out' : ' in'}`}>
-                      <div className={`wa-bubble${m.fromMe ? ' out' : ' in'}`}>
-                        <p>{m.text}</p>
-                        <time dateTime={m.at}>{m.at}</time>
+                  {chatTimeline.map((item) =>
+                    item.type === 'day' ? (
+                      <div key={item.key} className="wa-day-separator" role="separator">
+                        <span>{item.label}</span>
                       </div>
-                    </div>
-                  ))}
+                    ) : (
+                      <div key={item.key} className={`wa-bubble-wrap${item.message.fromMe ? ' out' : ' in'}`}>
+                        <div className={`wa-bubble${item.message.fromMe ? ' out' : ' in'}`}>
+                          <p>{item.message.text}</p>
+                          <div className="wa-bubble-meta">
+                            <time dateTime={item.message.messageAt}>{formatMessageTime(item.message.messageAt)}</time>
+                            {item.message.fromMe ? <MessageChecks status={item.message.status} /> : null}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
 
-                <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
-                  <button type="button" className="crm-icon-btn" title="Anexo" aria-label="Anexar arquivo" disabled>
-                    <i className="ti ti-paperclip" aria-hidden="true" />
-                  </button>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder="Digite uma mensagem…"
-                    rows={1}
-                    aria-label="Mensagem"
-                    disabled={sending}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendMessage(e);
-                      }
-                    }}
-                  />
-                  <button type="submit" className="wa-send-btn" disabled={!draft.trim() || sending} aria-label="Enviar">
-                    <i className="ti ti-send" aria-hidden="true" />
-                  </button>
-                </form>
+                {isClosed ? (
+                  <div className="wa-closed-banner">
+                    <i className="ti ti-circle-check" aria-hidden="true" />
+                    Atendimento finalizado. Reabra para enviar novas mensagens.
+                  </div>
+                ) : (
+                  <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
+                    <button type="button" className="crm-icon-btn" title="Anexo" aria-label="Anexar arquivo" disabled>
+                      <i className="ti ti-paperclip" aria-hidden="true" />
+                    </button>
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder="Digite uma mensagem…"
+                      rows={1}
+                      aria-label="Mensagem"
+                      disabled={sending}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendMessage(e);
+                        }
+                      }}
+                    />
+                    <button type="submit" className="wa-send-btn" disabled={!draft.trim() || sending} aria-label="Enviar">
+                      <i className="ti ti-send" aria-hidden="true" />
+                    </button>
+                  </form>
+                )}
               </>
             ) : (
               <div className="wa-empty">

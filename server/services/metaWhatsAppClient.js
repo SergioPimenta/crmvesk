@@ -122,6 +122,27 @@ export function parseWebhookMessages(payload) {
   return items;
 }
 
+/** Extrai atualizações de status (enviada, entregue, lida) do webhook da Meta. */
+export function parseWebhookStatuses(payload) {
+  const items = [];
+  if (payload?.object !== 'whatsapp_business_account') return items;
+
+  for (const entry of payload.entry || []) {
+    for (const change of entry.changes || []) {
+      if (change.field !== 'messages') continue;
+      for (const status of change.value?.statuses || []) {
+        if (!status.id || !status.status) continue;
+        items.push({
+          waMessageId: status.id,
+          status: String(status.status).toLowerCase(),
+        });
+      }
+    }
+  }
+
+  return items;
+}
+
 /** Inscreve o app na conta WhatsApp Business (necessário para receber webhooks). */
 export async function subscribeAppToWaba(phoneNumberId, accessToken) {
   try {

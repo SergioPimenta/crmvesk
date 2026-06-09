@@ -111,6 +111,7 @@ export async function runMigrations() {
 
   await migrateWhatsappMetaColumns();
   await migrateWhatsappWebhookLogs();
+  await migrateWhatsappChatUi();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
@@ -138,6 +139,19 @@ async function migrateWhatsappMetaColumns() {
     await pool.query(`ALTER TABLE whatsapp_settings ALTER COLUMN api_key TYPE VARCHAR(512)`);
   } catch {
     /* tipo já ampliado */
+  }
+}
+
+async function migrateWhatsappChatUi() {
+  if (await tableExists('whatsapp_messages')) {
+    await pool.query(
+      `ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT ''`
+    );
+  }
+  if (await tableExists('whatsapp_chats')) {
+    await pool.query(
+      `ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(20) DEFAULT 'open'`
+    );
   }
 }
 
