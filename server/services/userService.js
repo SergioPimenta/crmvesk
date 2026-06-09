@@ -38,12 +38,11 @@ async function ensureDefaultPipelineForUser(userId) {
   return pipelineId;
 }
 
-export async function listActiveUsers() {
+export async function listUsers() {
   const [rows] = await pool.query(
     `SELECT id, name, email, role, active, created_at AS createdAt
      FROM users
-     WHERE active = TRUE
-     ORDER BY name ASC, id ASC`
+     ORDER BY active DESC, name ASC, id ASC`
   );
   return rows;
 }
@@ -155,6 +154,81 @@ export async function updateUser(id, { name, email, role, active, password }, ac
     }
 
     return { success: true, user: rows[0] };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function setUserActive(id, active, actorId) {
+  try {
+    const userId = Number(id);
+    if (!Number.isFinite(userId)) {
+      throw new Error('Usuário inválido');
+    }
+
+    if (typeof active !== 'boolean') {
+      throw new Error('Status inválido');
+    }
+
+    if (actorId && userId === Number(actorId) && active === false) {
+      throw new Error('Você não pode desativar sua própria conta');
+    }
+
+    const [currentRows] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+    if (currentRows.length === 0) {
+      throw new Error('Usuário não encontrado');
+    }
+
+    if (currentRows[0].role === 'admin' && active === false) {
+      const [adminRows] = await pool.query(
+        `SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin' AND active = TRUE AND id <> ?`,
+        [userId]
+      );
+      if (Number(adminRows[0]?.c) === 0) {
+        throw new Error('Não é possível desativar o único administrador');
+      }
+    }
+
+    const [rows] = await pool.query(
+      `UPDATE users SET active = ? WHERE id = ? RETURNING id, name, email, role, active, created_at AS createdAt`,
+      [active, userId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('Usuário não encontrado');
+    }
+
+    return { success: true, user: rows[0] };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteUser(id, actorId) {
+  try {
+    const userId = Number(id);
+    if (!Number.isFinite(userId)) {
+      throw new Error('Usuário inválido');
+    }
+
+    if (actorId && userId === Number(actorId)) {
+      throw new Error('Você não pode excluir sua própria conta');
+    }
+
+    const [currentRows] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+    if (currentRows.length === 0) {
+      throw new Error('Usuário não encontrado');
+    }
+
+    if (currentRows[0].role === 'admin') {
+      const [adminRows] = await pool.query(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin'`);
+      if (Number(adminRows[0]?.c) <= 1) {
+        throw new Error('Não é possível excluir o único administrador');
+      }
+    }
+
+    await pool.query('DELETE FROM users WHERE id = ?', [userId]);
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }

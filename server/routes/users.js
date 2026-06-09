@@ -1,6 +1,6 @@
 import express from 'express';
 import { verifyToken, requireAdmin } from '../middleware/auth.js';
-import { createUser, listActiveUsers, updateUser } from '../services/userService.js';
+import { createUser, deleteUser, listUsers, setUserActive, updateUser } from '../services/userService.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
 
 const router = express.Router();
@@ -9,7 +9,7 @@ router.use(verifyToken, requireAdmin);
 
 router.get('/', async (_req, res) => {
   try {
-    const rows = await listActiveUsers();
+    const rows = await listUsers();
     res.json(normalizeRows(rows));
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erro ao listar usuários' });
@@ -34,6 +34,31 @@ router.put('/:id', async (req, res) => {
 
   if (result.success) {
     res.json(normalizeRow(result.user));
+    return;
+  }
+
+  const status = result.error === 'Usuário não encontrado' ? 404 : 400;
+  res.status(status).json({ message: result.error });
+});
+
+router.patch('/:id/active', async (req, res) => {
+  const { active } = req.body || {};
+  const result = await setUserActive(req.params.id, active, req.userId);
+
+  if (result.success) {
+    res.json(normalizeRow(result.user));
+    return;
+  }
+
+  const status = result.error === 'Usuário não encontrado' ? 404 : 400;
+  res.status(status).json({ message: result.error });
+});
+
+router.delete('/:id', async (req, res) => {
+  const result = await deleteUser(req.params.id, req.userId);
+
+  if (result.success) {
+    res.status(204).send();
     return;
   }
 

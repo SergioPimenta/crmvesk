@@ -67,6 +67,10 @@ class ApiService {
     return this.request<T>(endpoint, { ...options, method: 'PUT', data });
   }
 
+  patch<T>(endpoint: string, data?: any, options?: FetchOptions) {
+    return this.request<T>(endpoint, { ...options, method: 'PATCH', data });
+  }
+
   delete<T>(endpoint: string, options?: FetchOptions) {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }

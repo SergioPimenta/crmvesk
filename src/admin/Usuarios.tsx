@@ -51,6 +51,8 @@ const Usuarios = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [form, setForm] = useState<UserForm>(emptyForm());
 
   const loadUsers = useCallback(async () => {
@@ -137,16 +139,14 @@ const Usuarios = () => {
       }
 
       const updated = await api.put<CrmUser>(`/users/${editingId}`, payload);
-
-      if (updated.active) {
-        setUsers((prev) =>
-          prev
-            .map((u) => (u.id === editingId ? updated : u))
-            .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-        );
-      } else {
-        setUsers((prev) => prev.filter((u) => u.id !== editingId));
-      }
+      setUsers((prev) =>
+        prev
+          .map((u) => (u.id === editingId ? updated : u))
+          .sort((a, b) => {
+            if (a.active !== b.active) return a.active ? -1 : 1;
+            return a.name.localeCompare(b.name, 'pt-BR');
+          })
+      );
 
       setIsEditOpen(false);
       setEditingId(null);
@@ -154,6 +154,44 @@ const Usuarios = () => {
       setError(err instanceof Error ? err.message : 'Erro ao salvar usuário');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleActive = async (user: CrmUser, nextActive: boolean) => {
+    if (user.id === authUser?.id && !nextActive) return;
+
+    setTogglingId(user.id);
+    setError('');
+    try {
+      const updated = await api.patch<CrmUser>(`/users/${user.id}/active`, { active: nextActive });
+      setUsers((prev) =>
+        prev
+          .map((u) => (u.id === user.id ? updated : u))
+          .sort((a, b) => {
+            if (a.active !== b.active) return a.active ? -1 : 1;
+            return a.name.localeCompare(b.name, 'pt-BR');
+          })
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao alterar status do usuário');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDelete = async (user: CrmUser) => {
+    if (user.id === authUser?.id) return;
+    if (!window.confirm(`Excluir o usuário "${user.name}"? Esta ação não pode ser desfeita.`)) return;
+
+    setDeletingId(user.id);
+    setError('');
+    try {
+      await api.delete(`/users/${user.id}`);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir usuário');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -169,7 +207,7 @@ const Usuarios = () => {
             Usuários <span>({filtered.length})</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            Contas ativas com acesso ao CRM
+            Gerencie contas de acesso ao CRM
           </div>
         </div>
         <div className="crm-page-actions">
@@ -202,39 +240,67 @@ const Usuarios = () => {
             Carregando usuários…
           </div>
         ) : (
-          <table className="crm-table" aria-label="Lista de usuários ativos">
+          <table className="crm-table" aria-label="Lista de usuários">
             <thead>
               <tr>
                 <th>Nome</th>
                 <th>E-mail</th>
                 <th>Perfil</th>
                 <th>Cadastro</th>
+                <th>Ativo</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
-                <tr key={u.id}>
-                  <td style={{ fontWeight: 600 }}>{u.name}</td>
-                  <td style={{ color: 'var(--vesk-muted)' }}>{u.email}</td>
-                  <td>
-                    <span className={`pill-status ${u.role === 'admin' ? 'ok' : ''}`}>{roleLabel(u.role)}</span>
-                  </td>
-                  <td style={{ color: 'var(--vesk-muted)' }}>{formatDate(u.createdAt)}</td>
-                  <td>
-                    <div className="crm-row-actions">
-                      <button type="button" className="crm-action-btn" onClick={() => openEdit(u.id)} aria-label={`Editar ${u.name}`}>
-                        <i className="ti ti-pencil" aria-hidden="true" />
-                        Editar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((u) => {
+                const isSelf = u.id === authUser?.id;
+                const toggleDisabled = togglingId === u.id || (isSelf && u.active);
+
+                return (
+                  <tr key={u.id} className={u.active ? undefined : 'crm-user-row-inactive'}>
+                    <td style={{ fontWeight: 600 }}>{u.name}</td>
+                    <td style={{ color: 'var(--vesk-muted)' }}>{u.email}</td>
+                    <td>
+                      <span className={`pill-status ${u.role === 'admin' ? 'ok' : ''}`}>{roleLabel(u.role)}</span>
+                    </td>
+                    <td style={{ color: 'var(--vesk-muted)' }}>{formatDate(u.createdAt)}</td>
+                    <td>
+                      <label className="crm-switch" title={u.active ? 'Usuário ativo' : 'Usuário inativo'}>
+                        <input
+                          type="checkbox"
+                          checked={u.active}
+                          disabled={toggleDisabled}
+                          onChange={(e) => void toggleActive(u, e.target.checked)}
+                          aria-label={u.active ? `Desativar ${u.name}` : `Ativar ${u.name}`}
+                        />
+                        <span className="crm-switch-slider" aria-hidden="true" />
+                      </label>
+                    </td>
+                    <td>
+                      <div className="crm-row-actions">
+                        <button type="button" className="crm-action-btn" onClick={() => openEdit(u.id)} aria-label={`Editar ${u.name}`}>
+                          <i className="ti ti-pencil" aria-hidden="true" />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="crm-action-btn crm-action-btn-danger"
+                          onClick={() => void handleDelete(u)}
+                          disabled={isSelf || deletingId === u.id}
+                          aria-label={`Excluir ${u.name}`}
+                          title={isSelf ? 'Você não pode excluir sua própria conta' : 'Excluir usuário'}
+                        >
+                          <i className="ti ti-trash" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
-                    Nenhum usuário ativo encontrado.
+                  <td colSpan={6} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
+                    Nenhum usuário encontrado.
                   </td>
                 </tr>
               ) : null}
@@ -356,11 +422,12 @@ const Usuarios = () => {
                 type="checkbox"
                 checked={form.active}
                 onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))}
+                disabled={editingId === authUser?.id && form.active}
               />
               Usuário ativo
             </label>
             <span style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4, display: 'block' }}>
-              Usuários inativos não conseguem entrar e deixam de aparecer nesta lista.
+              Use o toggle na listagem para ativar ou inativar rapidamente.
             </span>
           </div>
 
