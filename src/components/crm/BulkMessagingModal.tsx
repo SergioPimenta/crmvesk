@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Modal from './Modal';
+import { useCrmData } from '../../contexts/CrmDataContext';
 import { api } from '../../services/api';
-import { buildFullPhone, DEFAULT_DIAL_COUNTRY } from '../../utils/countryDialCodes';
+import { buildFullPhone, DEFAULT_DIAL_COUNTRY, nationalDigitsFromContactPhone } from '../../utils/countryDialCodes';
 
 type MetaApprovedTemplate = {
   id: string;
@@ -23,6 +24,19 @@ const templateOptionLabel = (t: MetaApprovedTemplate) => {
   return t.name.includes(lang) ? t.name : `${t.name} (${lang})`;
 };
 
+function contactPhonesText(contacts: { nome: string; telefone: string }[]): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  const sorted = [...contacts].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  for (const contact of sorted) {
+    const national = nationalDigitsFromContactPhone(contact.telefone || '');
+    if (national.length < 10 || seen.has(national)) continue;
+    seen.add(national);
+    lines.push(national);
+  }
+  return lines.join('\n');
+}
+
 function parsePhoneLines(text: string): string[] {
   const lines = text.split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
   const phones = new Set<string>();
@@ -41,6 +55,7 @@ type Props = {
 };
 
 const BulkMessagingModal = ({ open, onClose, onComplete }: Props) => {
+  const { contacts } = useCrmData();
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [templates, setTemplates] = useState<MetaApprovedTemplate[]>([]);
   const [templateId, setTemplateId] = useState('');
@@ -68,13 +83,15 @@ const BulkMessagingModal = ({ open, onClose, onComplete }: Props) => {
     }
   }, []);
 
+  const defaultPhonesText = useMemo(() => contactPhonesText(contacts), [contacts]);
+
   useEffect(() => {
     if (!open) return;
     setError('');
     setResult(null);
-    setPhonesText('');
+    setPhonesText(defaultPhonesText);
     void loadTemplates();
-  }, [open, loadTemplates]);
+  }, [open, loadTemplates, defaultPhonesText]);
 
   const selectedTemplate = useMemo(
     () => templates.find((t) => templateKey(t) === templateId) ?? templates[0],
@@ -170,12 +187,12 @@ const BulkMessagingModal = ({ open, onClose, onComplete }: Props) => {
             id="wa_bulk_phones"
             value={phonesText}
             onChange={(e) => setPhonesText(e.target.value)}
-            placeholder={'Um número por linha\nEx:\n41999998888\n11988887777'}
+            placeholder={defaultPhonesText ? undefined : 'Nenhum contato com telefone cadastrado'}
             rows={8}
             required
           />
           <p className="wa-new-attendance-hint" style={{ marginTop: 6 }}>
-            DDD + número (Brasil). Linhas inválidas são ignoradas. DDI +55 é aplicado automaticamente.
+            Lista preenchida com os telefones dos contatos salvos. Edite, remova ou adicione números (DDD + número, um por linha). DDI +55 é aplicado automaticamente.
           </p>
         </div>
 
