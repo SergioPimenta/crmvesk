@@ -39,6 +39,20 @@ const categoryLabel = (value: string) => {
   return value || '—';
 };
 
+const categoryClass = (value: string) => {
+  if (value === 'MARKETING') return 'marketing';
+  if (value === 'UTILITY') return 'utility';
+  if (value === 'AUTHENTICATION') return 'authentication';
+  return 'default';
+};
+
+const languageLabel = (value: string) => {
+  if (value === 'pt_BR') return 'PT-BR';
+  if (value === 'en_US') return 'EN-US';
+  if (value === 'es') return 'ES';
+  return value.replace('_', '-');
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -126,42 +140,45 @@ const MessageTemplatesModal = ({ open, onClose }: Props) => {
             Carregando modelos da Meta…
           </div>
         ) : (
-          <div className="crm-card wa-templates-list">
-            <table className="crm-table" aria-label={`Modelos ${TAB_LABELS[activeTab]}`}>
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Idioma</th>
-                  <th>Categoria</th>
-                  <th>Conteúdo</th>
-                  {activeTab === 'rejected' ? <th>Motivo</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((template) => (
-                  <tr key={`${template.id}-${template.language}`}>
-                    <td style={{ fontWeight: 600 }}>{template.name}</td>
-                    <td style={{ color: 'var(--vesk-muted)' }}>{template.language}</td>
-                    <td>
-                      <span className="pill-stage">{categoryLabel(template.category)}</span>
-                    </td>
-                    <td style={{ color: 'var(--vesk-muted)', maxWidth: 320 }}>
-                      <span className="wa-template-body">{template.body || '—'}</span>
-                    </td>
-                    {activeTab === 'rejected' ? (
-                      <td style={{ color: '#e05252', maxWidth: 220 }}>{template.rejectedReason || '—'}</td>
-                    ) : null}
-                  </tr>
-                ))}
-                {list.length === 0 ? (
-                  <tr>
-                    <td colSpan={activeTab === 'rejected' ? 5 : 4} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
-                      Nenhum modelo {TAB_LABELS[activeTab].toLowerCase()}.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="wa-templates-list">
+            {list.length === 0 ? (
+              <div className="wa-templates-empty">
+                <i className="ti ti-template-off" aria-hidden="true" />
+                <p>Nenhum modelo {TAB_LABELS[activeTab].toLowerCase()}.</p>
+              </div>
+            ) : (
+              list.map((template) => (
+                <article key={`${template.id}-${template.language}`} className="wa-template-row">
+                  <header className="wa-template-row-head">
+                    <div className="wa-template-row-title">
+                      <span className="wa-template-row-icon" aria-hidden="true">
+                        <i className="ti ti-template" />
+                      </span>
+                      <div>
+                        <strong className="wa-template-row-name">{template.name}</strong>
+                        <span className="wa-template-row-id">ID {template.id}</span>
+                      </div>
+                    </div>
+                    <div className="wa-template-row-badges">
+                      <span className="wa-template-lang">{languageLabel(template.language)}</span>
+                      <span className={`wa-template-cat wa-template-cat--${categoryClass(template.category)}`}>
+                        {categoryLabel(template.category)}
+                      </span>
+                    </div>
+                  </header>
+                  <div className="wa-template-row-body">
+                    <span className="wa-template-row-body-label">Conteúdo</span>
+                    <p>{template.body || '—'}</p>
+                  </div>
+                  {activeTab === 'rejected' && template.rejectedReason ? (
+                    <div className="wa-template-row-reject">
+                      <i className="ti ti-alert-circle" aria-hidden="true" />
+                      <span>{template.rejectedReason}</span>
+                    </div>
+                  ) : null}
+                </article>
+              ))
+            )}
           </div>
         )}
 
