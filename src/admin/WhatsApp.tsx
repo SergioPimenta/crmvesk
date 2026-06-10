@@ -10,6 +10,13 @@ import {
   type WaMsgStatus,
 } from '../utils/waChatFormat';
 import { computeMessagingWindow } from '../utils/whatsappWindow';
+import {
+  buildFullPhone,
+  COUNTRY_DIAL_CODES,
+  countryFlag,
+  DEFAULT_DIAL_COUNTRY,
+  splitPhoneDigits,
+} from '../utils/countryDialCodes';
 
 type MetaApprovedTemplate = {
   id: string;
@@ -81,7 +88,8 @@ const WhatsApp = () => {
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
-  const [newPhone, setNewPhone] = useState('');
+  const [newPhoneDial, setNewPhoneDial] = useState(DEFAULT_DIAL_COUNTRY);
+  const [newPhoneNational, setNewPhoneNational] = useState('');
   const [newContactId, setNewContactId] = useState<string | null>(null);
   const [newContactName, setNewContactName] = useState('');
   const [newTemplateId, setNewTemplateId] = useState('');
@@ -310,7 +318,8 @@ const WhatsApp = () => {
   );
 
   const resetNewAttendanceForm = () => {
-    setNewPhone('');
+    setNewPhoneDial(DEFAULT_DIAL_COUNTRY);
+    setNewPhoneNational('');
     setNewContactId(null);
     setNewContactName('');
     setNewTemplateId(approvedTemplates[0] ? templateKey(approvedTemplates[0]) : '');
@@ -322,7 +331,9 @@ const WhatsApp = () => {
       alert('Este contato não possui telefone válido para WhatsApp.');
       return;
     }
-    setNewPhone(phone);
+    const { iso2, national } = splitPhoneDigits(phone);
+    setNewPhoneDial(iso2);
+    setNewPhoneNational(national);
     setNewContactId(contact.id);
     setNewContactName(contact.nome);
     setContactPickerOpen(false);
@@ -332,9 +343,9 @@ const WhatsApp = () => {
 
   const startNewAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phone = newPhone.replace(/\D/g, '');
+    const phone = buildFullPhone(newPhoneDial, newPhoneNational);
     if (phone.length < 10) {
-      alert('Informe um telefone válido com DDI + DDD + número.');
+      alert('Informe um telefone válido com DDD + número.');
       return;
     }
     if (!selectedTemplate) {
@@ -624,14 +635,25 @@ const WhatsApp = () => {
         <form className="crm-form wa-new-attendance-form" onSubmit={(e) => void startNewAttendance(e)}>
           <div className="wa-new-attendance-section">
             <div className="crm-field">
-              <label htmlFor="wa_new_phone">Telefone (DDI + DDD + número)</label>
+              <label htmlFor="wa_new_phone">Telefone</label>
               <div className="wa-new-attendance-phone">
-                <i className="ti ti-phone" aria-hidden="true" />
+                <select
+                  className="wa-phone-dial-select"
+                  value={newPhoneDial}
+                  onChange={(e) => setNewPhoneDial(e.target.value)}
+                  aria-label="DDI do país"
+                >
+                  {COUNTRY_DIAL_CODES.map((c) => (
+                    <option key={c.iso2} value={c.iso2}>
+                      {countryFlag(c.iso2)} +{c.dial} {c.name}
+                    </option>
+                  ))}
+                </select>
                 <input
                   id="wa_new_phone"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  placeholder="Ex: 5511999998888"
+                  value={newPhoneNational}
+                  onChange={(e) => setNewPhoneNational(e.target.value.replace(/\D/g, ''))}
+                  placeholder="DDD + número"
                   inputMode="tel"
                   autoFocus
                   required

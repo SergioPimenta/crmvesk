@@ -1508,35 +1508,58 @@ body.vesk-app {
 
 .wa-new-attendance-phone {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
+  align-items: stretch;
   border-radius: 10px;
   border: 1px solid var(--vesk-border);
   background: var(--vesk-surface2);
+  overflow: hidden;
 }
 
 .wa-new-attendance-phone:focus-within {
   border-color: var(--vesk-orange);
 }
 
-.wa-new-attendance-phone i {
-  color: var(--vesk-muted);
-  font-size: 16px;
-  flex-shrink: 0;
+.wa-new-attendance-phone .wa-phone-dial-select {
+  flex: 0 0 auto;
+  max-width: 42%;
+  min-width: 118px;
+  border: none;
+  border-right: 1px solid var(--vesk-border);
+  background: var(--vesk-bg);
+  padding: 10px 8px 10px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--vesk-text);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+}
+
+.wa-new-attendance-phone .wa-phone-dial-select:focus {
+  outline: none;
 }
 
 .wa-new-attendance-phone input {
-  border: none;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
   background: transparent;
-  padding: 10px 0;
+  padding: 10px 12px;
   flex: 1;
   min-width: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--vesk-text);
 }
 
 .wa-new-attendance-phone input:focus {
   outline: none;
   box-shadow: none;
+  border: none !important;
 }
 
 .wa-new-attendance-hint {
