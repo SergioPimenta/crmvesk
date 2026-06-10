@@ -28,6 +28,7 @@ import {
   resolveWabaId,
 } from './metaWhatsAppClient.js';
 import { computeMessagingWindow } from '../utils/whatsappWindow.js';
+import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../utils/whatsappPhone.js';
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
 
@@ -45,6 +46,74 @@ const webhookPublicBase = () =>
 
 export function jidToPhone(remoteJid) {
   return evolutionJidToPhone(remoteJid) || metaJidToPhone(remoteJid);
+}
+
+async function resolveChatForPhone(userId, phone) {
+  const canonical = canonicalWhatsAppPhone(phone);
+  const canonicalJid = phoneToCanonicalJid(canonical);
+  if (!canonical) return { chatId: null, remoteJid: '' };
+
+  const [all] = await pool.query(
+    `SELECT id, remote_jid AS remoteJid, last_message_at AS lastMessageAt, attendance_status AS attendanceStatus
+     FROM whatsapp_chats WHERE user_id = ?`,
+    [userId]
+  );
+
+  const matches = all.filter((row) => phonesMatch(canonical, jidToPhone(row.remoteJid)));
+  if (!matches.length) return { chatId: null, remoteJid: canonicalJid };
+
+  const sorted = [...matches].sort((a, b) => {
+    const aOpen = a.attendanceStatus === 'open' ? 1 : 0;
+    const bOpen = b.attendanceStatus === 'open' ? 1 : 0;
+    if (bOpen !== aOpen) return bOpen - aOpen;
+    return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
+  });
+
+  const keep = sorted[0];
+  for (const dup of sorted.slice(1)) {
+    await pool.query('UPDATE whatsapp_messages SET chat_id = ? WHERE chat_id = ? AND user_id = ?', [
+      keep.id,
+      dup.id,
+      userId,
+    ]);
+    await pool.query('DELETE FROM whatsapp_chats WHERE id = ? AND user_id = ?', [dup.id, userId]);
+  }
+
+  if (keep.remoteJid !== canonicalJid) {
+    await pool.query('UPDATE whatsapp_chats SET remote_jid = ? WHERE id = ? AND user_id = ?', [
+      canonicalJid,
+      keep.id,
+      userId,
+    ]);
+  }
+
+  return { chatId: keep.id, remoteJid: canonicalJid };
+}
+
+async function dedupeUserChats(userId) {
+  const [all] = await pool.query(
+    `SELECT id, remote_jid AS remoteJid, last_message_at AS lastMessageAt, attendance_status AS attendanceStatus
+     FROM whatsapp_chats WHERE user_id = ?`,
+    [userId]
+  );
+  const byPhone = new Map();
+  for (const row of all) {
+    const key = canonicalWhatsAppPhone(jidToPhone(row.remoteJid));
+    if (!key) continue;
+    if (!byPhone.has(key)) byPhone.set(key, []);
+    byPhone.get(key).push(row);
+  }
+  for (const [canonical, matches] of byPhone) {
+    if (matches.length > 1) {
+      await resolveChatForPhone(userId, canonical);
+    } else if (matches[0].remoteJid !== phoneToCanonicalJid(canonical)) {
+      await pool.query('UPDATE whatsapp_chats SET remote_jid = ? WHERE id = ? AND user_id = ?', [
+        phoneToCanonicalJid(canonical),
+        matches[0].id,
+        userId,
+      ]);
+    }
+  }
 }
 
 async function logWebhookEvent(userId, { eventType, payload, processed, error = '' }) {
@@ -371,37 +440,45 @@ export async function getConnectionView(userId) {
 }
 
 export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMessageAt, incrementUnread = false }) {
-  const [existing] = await pool.query(
-    'SELECT id, unread FROM whatsapp_chats WHERE user_id = ? AND remote_jid = ?',
-    [userId, remoteJid]
-  );
+  const phone = jidToPhone(remoteJid);
+  const { chatId: resolvedId, remoteJid: canonicalJid } = await resolveChatForPhone(userId, phone);
+  const effectiveJid = canonicalJid || phoneToCanonicalJid(phone) || remoteJid;
 
-  if (existing.length === 0) {
-    const phone = jidToPhone(remoteJid);
-    let contactId = null;
-    if (phone) {
-      const [contacts] = await pool.query(
-        "SELECT id FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '+', '') LIKE ? LIMIT 1",
-        [userId, `%${phone.slice(-8)}%`]
-      );
-      contactId = contacts[0]?.id ?? null;
-    }
-
-    const [ins] = await pool.query(
-      `INSERT INTO whatsapp_chats (user_id, remote_jid, contact_id, name, last_message, last_message_at, unread)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, remoteJid, contactId, name || phone || remoteJid, lastMessage || '', lastMessageAt, incrementUnread ? 1 : 0]
+  if (resolvedId) {
+    const [existing] = await pool.query('SELECT unread FROM whatsapp_chats WHERE id = ?', [resolvedId]);
+    const unread = incrementUnread ? Number(existing[0]?.unread || 0) + 1 : existing[0]?.unread || 0;
+    await pool.query(
+      `UPDATE whatsapp_chats SET name = COALESCE(NULLIF(?, ''), name), last_message = ?, last_message_at = ?, unread = ?
+       WHERE id = ?`,
+      [name || '', lastMessage || '', lastMessageAt, unread, resolvedId]
     );
-    return ins.insertId;
+    return resolvedId;
   }
 
-  const unread = incrementUnread ? Number(existing[0].unread) + 1 : existing[0].unread;
-  await pool.query(
-    `UPDATE whatsapp_chats SET name = COALESCE(NULLIF(?, ''), name), last_message = ?, last_message_at = ?, unread = ?
-     WHERE id = ?`,
-    [name || '', lastMessage || '', lastMessageAt, unread, existing[0].id]
+  let contactId = null;
+  const canonicalPhone = canonicalWhatsAppPhone(phone);
+  if (canonicalPhone) {
+    const [contacts] = await pool.query(
+      "SELECT id FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '+', '') LIKE ? LIMIT 1",
+      [userId, `%${canonicalPhone.slice(-8)}%`]
+    );
+    contactId = contacts[0]?.id ?? null;
+  }
+
+  const [ins] = await pool.query(
+    `INSERT INTO whatsapp_chats (user_id, remote_jid, contact_id, name, last_message, last_message_at, unread)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      effectiveJid,
+      contactId,
+      name || canonicalPhone || effectiveJid,
+      lastMessage || '',
+      lastMessageAt,
+      incrementUnread ? 1 : 0,
+    ]
   );
-  return existing[0].id;
+  return ins.insertId;
 }
 
 export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
@@ -520,7 +597,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
     for (const item of items) {
       if (!item.text) continue;
       try {
-        const remoteJid = phoneToJid(item.from);
+        const remoteJid = phoneToCanonicalJid(item.from);
         const chatId = await upsertChat(userId, {
           remoteJid,
           name: item.contactName || item.from,
@@ -640,23 +717,16 @@ export async function syncChatsFromProvider(userId) {
   return listChats(userId);
 }
 
-function digitsOnly(phone) {
-  return String(phone || '').replace(/\D/g, '');
-}
-
 export async function openChatFromContact(userId, { phone, contactId, name }) {
-  const digits = digitsOnly(phone);
-  if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
+  const digits = canonicalWhatsAppPhone(phone);
+  if (digits.length < 12) throw new Error('Informe um telefone com DDI + DDD + número');
 
-  const remoteJid = phoneToJid(digits);
-  const [existing] = await pool.query(
-    'SELECT id FROM whatsapp_chats WHERE user_id = ? AND remote_jid = ?',
-    [userId, remoteJid]
-  );
+  const remoteJid = phoneToCanonicalJid(digits);
+  const { chatId: existingId } = await resolveChatForPhone(userId, digits);
 
   let chatId;
-  if (existing.length > 0) {
-    chatId = existing[0].id;
+  if (existingId) {
+    chatId = existingId;
     await pool.query(
       `UPDATE whatsapp_chats SET
          name = COALESCE(NULLIF(?, ''), name),
@@ -731,7 +801,7 @@ export async function sendTemplateMessage(userId, chatId, { templateName, templa
   const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
   if (!chat) throw new Error('Conversa não encontrada');
 
-  const number = jidToPhone(chat.remoteJid);
+  const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
   const result = await metaSendTemplate(settings.instanceName, settings.apiKey, number, name, language);
   const waMessageId = result?.messages?.[0]?.id || null;
   const displayBody = String(bodyPreview || `[Modelo: ${name}]`).trim();
@@ -762,8 +832,8 @@ export async function sendTemplateMessage(userId, chatId, { templateName, templa
 }
 
 export async function startNewAttendance(userId, { phone, name, contactId: contactIdParam, templateName, templateLanguage, templateBody }) {
-  const digits = digitsOnly(phone);
-  if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
+  const digits = canonicalWhatsAppPhone(phone);
+  if (digits.length < 12) throw new Error('Informe um telefone com DDI + DDD + número');
 
   const tplName = String(templateName || '').trim();
   const tplLang = String(templateLanguage || '').trim();
@@ -830,7 +900,7 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
     throw new Error('Selecione um modelo de mensagem aprovado pela Meta');
   }
 
-  const unique = [...new Set((phones || []).map((p) => digitsOnly(p)).filter((p) => p.length >= 10))];
+  const unique = [...new Set((phones || []).map((p) => canonicalWhatsAppPhone(p)).filter((p) => p.length >= 12))];
   if (!unique.length) {
     throw new Error('Informe ao menos um telefone válido');
   }
@@ -860,6 +930,8 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
 }
 
 export async function listChats(userId) {
+  await dedupeUserChats(userId);
+
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,
             c.last_message_at AS lastMessageAt, c.unread, c.attendance_status AS attendanceStatus,
@@ -956,7 +1028,7 @@ export async function sendChatMessage(userId, chatId, text) {
   const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
   if (!chat) throw new Error('Conversa não encontrada');
 
-  const number = jidToPhone(chat.remoteJid);
+  const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
   let result;
   let waMessageId = null;
 
