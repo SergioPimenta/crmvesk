@@ -577,6 +577,7 @@ const WhatsApp = () => {
 
       <Modal
         open={newAttendanceOpen}
+        wide
         title="Novo atendimento"
         description="Informe o número e a primeira mensagem para abrir o chat no WhatsApp."
         onClose={() => {
@@ -585,97 +586,113 @@ const WhatsApp = () => {
         }}
       >
         <form className="crm-form wa-new-attendance-form" onSubmit={(e) => void startNewAttendance(e)}>
-          <div className="crm-field">
-            <label htmlFor="wa_new_phone">Telefone (DDI + DDD + número)</label>
-            <input
-              id="wa_new_phone"
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              placeholder="Ex: 5511999998888"
-              inputMode="tel"
-              autoFocus
-              required
-            />
-          </div>
-
-          <div className="crm-field">
-            <label>Mensagem inicial</label>
-            <div className="wa-msg-mode-toggle" role="tablist" aria-label="Tipo de mensagem">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={newMessageMode === 'free'}
-                className={`wa-msg-mode-btn${newMessageMode === 'free' ? ' active' : ''}`}
-                onClick={() => setNewMessageMode('free')}
-              >
-                Mensagem livre
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={newMessageMode === 'template'}
-                className={`wa-msg-mode-btn${newMessageMode === 'template' ? ' active' : ''}`}
-                onClick={() => setNewMessageMode('template')}
-              >
-                Modelo
-              </button>
+          <div className="wa-new-attendance-section">
+            <div className="crm-field">
+              <label htmlFor="wa_new_phone">Telefone (DDI + DDD + número)</label>
+              <div className="wa-new-attendance-phone">
+                <i className="ti ti-phone" aria-hidden="true" />
+                <input
+                  id="wa_new_phone"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="Ex: 5511999998888"
+                  inputMode="tel"
+                  autoFocus
+                  required
+                />
+              </div>
             </div>
           </div>
 
-          {newMessageMode === 'free' ? (
+          <div className="wa-new-attendance-section">
             <div className="crm-field">
-              <label htmlFor="wa_new_message">Texto da mensagem</label>
-              <textarea
-                id="wa_new_message"
-                value={newFreeMessage}
-                onChange={(e) => setNewFreeMessage(e.target.value)}
-                placeholder="Digite a mensagem que será enviada…"
-                rows={4}
-                required
-              />
+              <label>Mensagem inicial</label>
+              <div className="wa-msg-mode-toggle" role="tablist" aria-label="Tipo de mensagem">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={newMessageMode === 'free'}
+                  className={`wa-msg-mode-btn${newMessageMode === 'free' ? ' active' : ''}`}
+                  onClick={() => setNewMessageMode('free')}
+                >
+                  <i className="ti ti-message" aria-hidden="true" />
+                  Mensagem livre
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={newMessageMode === 'template'}
+                  className={`wa-msg-mode-btn${newMessageMode === 'template' ? ' active' : ''}`}
+                  onClick={() => setNewMessageMode('template')}
+                >
+                  <i className="ti ti-template" aria-hidden="true" />
+                  Modelo Meta
+                </button>
+              </div>
+              <p className="wa-new-attendance-hint">
+                {newMessageMode === 'free'
+                  ? 'Use apenas se o contato já interagiu nas últimas 24 horas.'
+                  : 'Modelos aprovados pela Meta para iniciar conversas fora da janela de 24 h.'}
+              </p>
             </div>
-          ) : (
-            <div className="crm-field">
-              <label htmlFor="wa_new_template">Modelo de mensagem</label>
-              {loadingTemplates ? (
-                <div className="wa-templates-empty" style={{ padding: '16px 12px' }}>
-                  <p>Carregando modelos aprovados da Meta…</p>
-                </div>
-              ) : approvedTemplates.length === 0 ? (
-                <div className="integration-hint" style={{ marginTop: 0 }}>
-                  <i className="ti ti-alert-circle" aria-hidden="true" />
-                  <span>
-                    Nenhum modelo aprovado encontrado. Verifique em{' '}
-                    <Link to="/admin/integracoes?tab=whatsapp" style={{ color: 'var(--vesk-orange)' }}>
-                      Integrações → Modelos de mensagem
-                    </Link>
-                    .
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <select
-                    id="wa_new_template"
-                    value={newTemplateId}
-                    onChange={(e) => setNewTemplateId(e.target.value)}
-                    required
-                  >
-                    {approvedTemplates.map((t) => (
-                      <option key={templateKey(t)} value={templateKey(t)}>
-                        {templateOptionLabel(t)}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="wa-template-preview">
-                    <span className="wa-template-preview-label">Pré-visualização</span>
-                    <p>{selectedTemplate?.body}</p>
+          </div>
+
+          <div className="wa-new-attendance-section wa-new-attendance-section--message">
+            {newMessageMode === 'free' ? (
+              <div className="crm-field">
+                <label htmlFor="wa_new_message">Texto da mensagem</label>
+                <textarea
+                  id="wa_new_message"
+                  value={newFreeMessage}
+                  onChange={(e) => setNewFreeMessage(e.target.value)}
+                  placeholder="Digite a mensagem que será enviada…"
+                  rows={4}
+                  required
+                />
+              </div>
+            ) : (
+              <div className="crm-field">
+                <label htmlFor="wa_new_template">Modelo de mensagem</label>
+                {loadingTemplates ? (
+                  <div className="wa-new-attendance-state">
+                    <i className="ti ti-loader-2 wa-spin" aria-hidden="true" />
+                    <p>Carregando modelos aprovados da Meta…</p>
                   </div>
-                </>
-              )}
-            </div>
-          )}
+                ) : approvedTemplates.length === 0 ? (
+                  <div className="wa-new-attendance-state wa-new-attendance-state--warn">
+                    <i className="ti ti-alert-circle" aria-hidden="true" />
+                    <p>
+                      Nenhum modelo aprovado encontrado. Verifique em{' '}
+                      <Link to="/admin/integracoes?tab=whatsapp">Integrações → Modelos de mensagem</Link>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="wa-new-attendance-template">
+                    <select
+                      id="wa_new_template"
+                      value={newTemplateId}
+                      onChange={(e) => setNewTemplateId(e.target.value)}
+                      required
+                    >
+                      {approvedTemplates.map((t) => (
+                        <option key={templateKey(t)} value={templateKey(t)}>
+                          {templateOptionLabel(t)}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="wa-new-attendance-preview">
+                      <span className="wa-new-attendance-preview-label">Pré-visualização</span>
+                      <div className="wa-new-attendance-preview-bubble">
+                        <p>{selectedTemplate?.body}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-          <div className="crm-form-actions">
+          <div className="wa-new-attendance-footer">
             <button
               type="button"
               className="crm-btn-secondary"
@@ -687,7 +704,11 @@ const WhatsApp = () => {
             >
               Cancelar
             </button>
-            <button type="submit" className="crm-btn-primary" disabled={startingAttendance || (newMessageMode === 'template' && (!approvedTemplates.length || loadingTemplates))}>
+            <button
+              type="submit"
+              className="crm-btn-primary"
+              disabled={startingAttendance || (newMessageMode === 'template' && (!approvedTemplates.length || loadingTemplates))}
+            >
               <i className="ti ti-send" aria-hidden="true" />
               {startingAttendance ? 'Iniciando…' : 'Iniciar atendimento'}
             </button>

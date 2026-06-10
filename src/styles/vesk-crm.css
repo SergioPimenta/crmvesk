@@ -1488,7 +1488,62 @@ body.vesk-app {
 .wa-new-attendance-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+}
+
+.wa-new-attendance-form > * {
+  min-width: 0;
+}
+
+.wa-new-attendance-section {
+  width: 100%;
+}
+
+.wa-new-attendance-section--message {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--vesk-border);
+  background: var(--vesk-surface);
+}
+
+.wa-new-attendance-phone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--vesk-border);
+  background: var(--vesk-surface2);
+}
+
+.wa-new-attendance-phone:focus-within {
+  border-color: var(--vesk-orange);
+}
+
+.wa-new-attendance-phone i {
+  color: var(--vesk-muted);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.wa-new-attendance-phone input {
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-new-attendance-phone input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.wa-new-attendance-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--vesk-muted);
 }
 
 .wa-msg-mode-toggle {
@@ -1502,7 +1557,11 @@ body.vesk-app {
 
 .wa-msg-mode-btn {
   flex: 1;
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1521,6 +1580,111 @@ body.vesk-app {
   background: var(--vesk-surface2);
   color: var(--vesk-orange);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.wa-new-attendance-template {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wa-new-attendance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wa-new-attendance-preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vesk-muted);
+}
+
+.wa-new-attendance-preview-bubble {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: rgba(255, 122, 0, 0.1);
+  border: 1px solid rgba(255, 122, 0, 0.22);
+}
+
+.wa-new-attendance-preview-bubble p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--vesk-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wa-new-attendance-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--vesk-border);
+  color: var(--vesk-muted);
+}
+
+.wa-new-attendance-state p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.wa-new-attendance-state a {
+  color: var(--vesk-orange);
+  text-decoration: none;
+}
+
+.wa-new-attendance-state a:hover {
+  text-decoration: underline;
+}
+
+.wa-new-attendance-state--warn {
+  border-color: rgba(224, 82, 82, 0.35);
+  background: rgba(224, 82, 82, 0.08);
+  color: #fca5a5;
+}
+
+.wa-new-attendance-state--warn i {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.wa-new-attendance-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 2px;
+  border-top: 1px solid var(--vesk-border);
+}
+
+.wa-new-attendance-footer .crm-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding-inline: 18px;
+}
+
+.wa-new-attendance-footer .crm-btn-secondary {
+  min-height: 40px;
+}
+
+.wa-spin {
+  animation: wa-spin 0.9s linear infinite;
+}
+
+@keyframes wa-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .wa-template-preview {
@@ -2059,6 +2223,18 @@ body.vesk-app {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.crm-form.wa-new-attendance-form {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: unset;
+  gap: 18px;
+}
+
+.crm-form.wa-new-attendance-form > * {
+  grid-column: auto;
+  min-width: 0;
 }
 
 @media (max-width: 560px) {
