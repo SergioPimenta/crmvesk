@@ -11,6 +11,69 @@
   --vesk-sub: #4a4850;
   --font-head: 'Syne', sans-serif;
   --font-body: 'DM Sans', sans-serif;
+  --vesk-scrollbar-size: 10px;
+  --vesk-scrollbar-track: var(--vesk-surface);
+  --vesk-scrollbar-thumb: #55535a;
+  --vesk-scrollbar-thumb-hover: #6d6b72;
+}
+
+/* Scrollbars personalizados — tema CRM (Firefox + WebKit) */
+.vesk-app,
+.vesk-app * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vesk-scrollbar-thumb) var(--vesk-scrollbar-track);
+}
+
+.vesk-app *::-webkit-scrollbar {
+  width: var(--vesk-scrollbar-size);
+  height: var(--vesk-scrollbar-size);
+}
+
+.vesk-app *::-webkit-scrollbar-track {
+  background: var(--vesk-scrollbar-track);
+}
+
+.vesk-app *::-webkit-scrollbar-thumb {
+  background-color: var(--vesk-scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid var(--vesk-scrollbar-track);
+  background-clip: padding-box;
+  min-height: 32px;
+  min-width: 32px;
+}
+
+.vesk-app *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vesk-scrollbar-thumb-hover);
+}
+
+.vesk-app *::-webkit-scrollbar-button:single-button {
+  display: block;
+  width: var(--vesk-scrollbar-size);
+  height: 14px;
+  background-color: var(--vesk-scrollbar-track);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 7px;
+}
+
+.vesk-app *::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%2355535a' d='M4 2 1 6h6z'/%3E%3C/svg%3E");
+}
+
+.vesk-app *::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%2355535a' d='M4 6 1 2h6z'/%3E%3C/svg%3E");
+}
+
+.vesk-app *::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%2355535a' d='M2 4 6 1v6z'/%3E%3C/svg%3E");
+}
+
+.vesk-app *::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%2355535a' d='M6 4 2 1v6z'/%3E%3C/svg%3E");
+}
+
+.vesk-app *::-webkit-scrollbar-corner {
+  background: var(--vesk-scrollbar-track);
 }
 
 body.vesk-app {
@@ -236,19 +299,6 @@ body.vesk-app {
   flex-direction: column;
   gap: 18px;
   min-width: 0;
-}
-
-.crm-main::-webkit-scrollbar {
-  width: 4px;
-}
-
-.crm-main::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.crm-main::-webkit-scrollbar-thumb {
-  background: var(--vesk-border);
-  border-radius: 2px;
 }
 
 .crm-page-header {
