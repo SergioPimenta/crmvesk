@@ -6,21 +6,21 @@ function toIso(date) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-/** Janela de atendimento Meta: 24 h após a última mensagem recebida do cliente. */
+/**
+ * Janela de atendimento Meta: 24 h a partir da última mensagem do cliente.
+ * Cada nova mensagem recebida do cliente reinicia a contagem (ex.: resposta aos 23 h → +24 h).
+ */
 export function computeMessagingWindow(messages = []) {
-  const incoming = (messages || []).filter((m) => !m.fromMe);
-  if (incoming.length === 0) {
-    return {
-      withinWindow: false,
-      lastCustomerMessageAt: null,
-      windowExpiresAt: null,
-    };
+  let lastMs = null;
+
+  for (const m of messages || []) {
+    if (m.fromMe) continue;
+    const t = new Date(m.messageAt).getTime();
+    if (Number.isNaN(t)) continue;
+    if (lastMs === null || t > lastMs) lastMs = t;
   }
 
-  const last = incoming[incoming.length - 1];
-  const lastAt = new Date(last.messageAt);
-  const lastMs = lastAt.getTime();
-  if (Number.isNaN(lastMs)) {
+  if (lastMs === null) {
     return {
       withinWindow: false,
       lastCustomerMessageAt: null,
@@ -31,7 +31,7 @@ export function computeMessagingWindow(messages = []) {
   const expiresMs = lastMs + CUSTOMER_CARE_WINDOW_MS;
   return {
     withinWindow: Date.now() < expiresMs,
-    lastCustomerMessageAt: toIso(lastAt),
+    lastCustomerMessageAt: toIso(new Date(lastMs)),
     windowExpiresAt: toIso(new Date(expiresMs)),
   };
 }

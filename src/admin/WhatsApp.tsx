@@ -545,8 +545,9 @@ const WhatsApp = () => {
                     <div>
                       <strong>Fora da janela de 24 horas</strong>
                       <p>
-                        Não é possível enviar mensagens. Finalize o atendimento e inicie novamente com um modelo
-                        aprovado pela Meta.
+                        Passaram mais de 24 horas desde a última mensagem do cliente. A janela é reiniciada a cada
+                        nova mensagem dele — aguarde o contato ou finalize o atendimento e inicie novamente com um
+                        modelo aprovado pela Meta.
                       </p>
                     </div>
                   </div>
