@@ -9,6 +9,7 @@ import {
   formatMessageTime,
   type WaMsgStatus,
 } from '../utils/waChatFormat';
+import { computeMessagingWindow } from '../utils/whatsappWindow';
 
 type MetaApprovedTemplate = {
   id: string;
@@ -80,8 +81,6 @@ const WhatsApp = () => {
   const [openingChat, setOpeningChat] = useState(false);
   const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
   const [newPhone, setNewPhone] = useState('');
-  const [newMessageMode, setNewMessageMode] = useState<'free' | 'template'>('free');
-  const [newFreeMessage, setNewFreeMessage] = useState('');
   const [newTemplateId, setNewTemplateId] = useState('');
   const [approvedTemplates, setApprovedTemplates] = useState<MetaApprovedTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -163,6 +162,13 @@ const WhatsApp = () => {
     return () => window.clearInterval(id);
   }, [activeId, loadMessages]);
 
+  const [windowTick, setWindowTick] = useState(0);
+  useEffect(() => {
+    if (!activeId) return undefined;
+    const id = window.setInterval(() => setWindowTick((t) => t + 1), 30000);
+    return () => window.clearInterval(id);
+  }, [activeId]);
+
   const scrollMessagesToBottom = useCallback((smooth: boolean) => {
     const el = messagesContainerRef.current;
     if (!el) return;
@@ -201,7 +207,12 @@ const WhatsApp = () => {
   );
 
   const chatTimeline = useMemo(() => buildChatTimeline(messages), [messages]);
+  const messagingWindow = useMemo(() => {
+    void windowTick;
+    return computeMessagingWindow(messages);
+  }, [messages, windowTick]);
   const isClosed = active?.attendanceStatus === 'closed';
+  const outsideWindow = !isClosed && waStatus === 'connected' && !messagingWindow.withinWindow;
 
   useEffect(() => {
     if (!activeId && filtered[0]) setActiveId(filtered[0].id);
@@ -217,7 +228,7 @@ const WhatsApp = () => {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || !active || isClosed) return;
+    if (!text || !active || isClosed || outsideWindow) return;
     setSending(true);
     try {
       const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/messages`, { text });
@@ -232,26 +243,20 @@ const WhatsApp = () => {
     }
   };
 
-  const toggleAttendance = async () => {
-    if (!active) return;
-    const closing = !isClosed;
+  const finishAttendance = async () => {
+    if (!active || isClosed) return;
     const closedId = active.id;
 
-    if (closing) {
-      setConversations((prev) => prev.filter((c) => c.id !== closedId));
-      setActiveId(null);
-      setMessages([]);
-    }
+    setConversations((prev) => prev.filter((c) => c.id !== closedId));
+    setActiveId(null);
+    setMessages([]);
 
     setFinishing(true);
     try {
-      await api.post(`/whatsapp/chats/${active.id}/attendance`, {
-        status: closing ? 'closed' : 'open',
-      });
-      if (!closing) await loadChats();
+      await api.post(`/whatsapp/chats/${closedId}/attendance`, { status: 'closed' });
     } catch (err: unknown) {
-      if (closing) await loadChats();
-      else alert(err instanceof Error ? err.message : 'Não foi possível atualizar o atendimento');
+      await loadChats();
+      alert(err instanceof Error ? err.message : 'Não foi possível finalizar o atendimento');
     } finally {
       setFinishing(false);
     }
@@ -280,26 +285,18 @@ const WhatsApp = () => {
 
   const resetNewAttendanceForm = () => {
     setNewPhone('');
-    setNewMessageMode('free');
-    setNewFreeMessage('');
     setNewTemplateId(approvedTemplates[0] ? templateKey(approvedTemplates[0]) : '');
-  };
-
-  const resolveNewAttendanceMessage = () => {
-    if (newMessageMode === 'template') return selectedTemplate?.body?.trim() || '';
-    return newFreeMessage.trim();
   };
 
   const startNewAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
     const phone = newPhone.replace(/\D/g, '');
-    const message = resolveNewAttendanceMessage();
     if (phone.length < 10) {
       alert('Informe um telefone válido com DDI + DDD + número.');
       return;
     }
-    if (!message) {
-      alert(newMessageMode === 'template' ? 'Selecione um modelo aprovado.' : 'Informe a mensagem.');
+    if (!selectedTemplate) {
+      alert('Selecione um modelo aprovado pela Meta.');
       return;
     }
 
@@ -307,7 +304,9 @@ const WhatsApp = () => {
     try {
       const data = await api.post<{ chat: WaConversation; messages: WaMessage[] }>('/whatsapp/chats', {
         phone,
-        message,
+        templateName: selectedTemplate.name,
+        templateLanguage: selectedTemplate.language,
+        templateBody: selectedTemplate.body,
       });
       await loadChats();
       setActiveId(data.chat.id);
@@ -499,12 +498,12 @@ const WhatsApp = () => {
                   <div className="wa-chat-head-actions">
                     <button
                       type="button"
-                      className={`crm-btn-secondary wa-finish-btn${isClosed ? ' reopened' : ''}`}
-                      onClick={() => void toggleAttendance()}
-                      disabled={finishing}
+                      className="crm-btn-secondary wa-finish-btn"
+                      onClick={() => void finishAttendance()}
+                      disabled={finishing || isClosed}
                     >
-                      <i className={`ti ${isClosed ? 'ti-message-circle' : 'ti-circle-check'}`} aria-hidden="true" />
-                      {finishing ? 'Salvando…' : isClosed ? 'Reabrir atendimento' : 'Finalizar atendimento'}
+                      <i className="ti ti-circle-check" aria-hidden="true" />
+                      {finishing ? 'Salvando…' : 'Finalizar atendimento'}
                     </button>
                     {active.contatoId ? (
                       <Link to="/admin/contatos" className="crm-btn-secondary" style={{ padding: '6px 10px', fontSize: 11 }}>
@@ -538,7 +537,18 @@ const WhatsApp = () => {
                 {isClosed ? (
                   <div className="wa-closed-banner">
                     <i className="ti ti-circle-check" aria-hidden="true" />
-                    Atendimento finalizado. Reabra para enviar novas mensagens.
+                    Atendimento finalizado.
+                  </div>
+                ) : outsideWindow ? (
+                  <div className="wa-window-banner">
+                    <i className="ti ti-clock-exclamation" aria-hidden="true" />
+                    <div>
+                      <strong>Fora da janela de 24 horas</strong>
+                      <p>
+                        Não é possível enviar mensagens. Finalize o atendimento e inicie novamente com um modelo
+                        aprovado pela Meta.
+                      </p>
+                    </div>
                   </div>
                 ) : (
                   <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
@@ -579,7 +589,7 @@ const WhatsApp = () => {
         open={newAttendanceOpen}
         wide
         title="Novo atendimento"
-        description="Informe o número e a primeira mensagem para abrir o chat no WhatsApp."
+        description="Informe o número e selecione um modelo aprovado pela Meta para iniciar o atendimento."
         onClose={() => {
           setNewAttendanceOpen(false);
           resetNewAttendanceForm();
@@ -604,92 +614,48 @@ const WhatsApp = () => {
             </div>
           </div>
 
-          <div className="wa-new-attendance-section">
-            <div className="crm-field">
-              <label>Mensagem inicial</label>
-              <div className="wa-msg-mode-toggle" role="tablist" aria-label="Tipo de mensagem">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={newMessageMode === 'free'}
-                  className={`wa-msg-mode-btn${newMessageMode === 'free' ? ' active' : ''}`}
-                  onClick={() => setNewMessageMode('free')}
-                >
-                  <i className="ti ti-message" aria-hidden="true" />
-                  Mensagem livre
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={newMessageMode === 'template'}
-                  className={`wa-msg-mode-btn${newMessageMode === 'template' ? ' active' : ''}`}
-                  onClick={() => setNewMessageMode('template')}
-                >
-                  <i className="ti ti-template" aria-hidden="true" />
-                  Modelo Meta
-                </button>
-              </div>
-              <p className="wa-new-attendance-hint">
-                {newMessageMode === 'free'
-                  ? 'Use apenas se o contato já interagiu nas últimas 24 horas.'
-                  : 'Modelos aprovados pela Meta para iniciar conversas fora da janela de 24 h.'}
-              </p>
-            </div>
-          </div>
-
           <div className="wa-new-attendance-section wa-new-attendance-section--message">
-            {newMessageMode === 'free' ? (
-              <div className="crm-field">
-                <label htmlFor="wa_new_message">Texto da mensagem</label>
-                <textarea
-                  id="wa_new_message"
-                  value={newFreeMessage}
-                  onChange={(e) => setNewFreeMessage(e.target.value)}
-                  placeholder="Digite a mensagem que será enviada…"
-                  rows={4}
-                  required
-                />
-              </div>
-            ) : (
-              <div className="crm-field">
-                <label htmlFor="wa_new_template">Modelo de mensagem</label>
-                {loadingTemplates ? (
-                  <div className="wa-new-attendance-state">
-                    <i className="ti ti-loader-2 wa-spin" aria-hidden="true" />
-                    <p>Carregando modelos aprovados da Meta…</p>
-                  </div>
-                ) : approvedTemplates.length === 0 ? (
-                  <div className="wa-new-attendance-state wa-new-attendance-state--warn">
-                    <i className="ti ti-alert-circle" aria-hidden="true" />
-                    <p>
-                      Nenhum modelo aprovado encontrado. Verifique em{' '}
-                      <Link to="/admin/integracoes?tab=whatsapp">Integrações → Modelos de mensagem</Link>.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="wa-new-attendance-template">
-                    <select
-                      id="wa_new_template"
-                      value={newTemplateId}
-                      onChange={(e) => setNewTemplateId(e.target.value)}
-                      required
-                    >
-                      {approvedTemplates.map((t) => (
-                        <option key={templateKey(t)} value={templateKey(t)}>
-                          {templateOptionLabel(t)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="wa-new-attendance-preview">
-                      <span className="wa-new-attendance-preview-label">Pré-visualização</span>
-                      <div className="wa-new-attendance-preview-bubble">
-                        <p>{selectedTemplate?.body}</p>
-                      </div>
+            <div className="crm-field">
+              <label htmlFor="wa_new_template">Modelo de mensagem (aprovado pela Meta)</label>
+              <p className="wa-new-attendance-hint" style={{ marginTop: 0 }}>
+                Obrigatório para iniciar atendimentos via API oficial WhatsApp.
+              </p>
+              {loadingTemplates ? (
+                <div className="wa-new-attendance-state">
+                  <i className="ti ti-loader-2 wa-spin" aria-hidden="true" />
+                  <p>Carregando modelos aprovados da Meta…</p>
+                </div>
+              ) : approvedTemplates.length === 0 ? (
+                <div className="wa-new-attendance-state wa-new-attendance-state--warn">
+                  <i className="ti ti-alert-circle" aria-hidden="true" />
+                  <p>
+                    Nenhum modelo aprovado encontrado. Verifique em{' '}
+                    <Link to="/admin/integracoes?tab=whatsapp">Integrações → Modelos de mensagem</Link>.
+                  </p>
+                </div>
+              ) : (
+                <div className="wa-new-attendance-template">
+                  <select
+                    id="wa_new_template"
+                    value={newTemplateId}
+                    onChange={(e) => setNewTemplateId(e.target.value)}
+                    required
+                  >
+                    {approvedTemplates.map((t) => (
+                      <option key={templateKey(t)} value={templateKey(t)}>
+                        {templateOptionLabel(t)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="wa-new-attendance-preview">
+                    <span className="wa-new-attendance-preview-label">Pré-visualização</span>
+                    <div className="wa-new-attendance-preview-bubble">
+                      <p>{selectedTemplate?.body}</p>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="wa-new-attendance-footer">
@@ -707,7 +673,7 @@ const WhatsApp = () => {
             <button
               type="submit"
               className="crm-btn-primary"
-              disabled={startingAttendance || (newMessageMode === 'template' && (!approvedTemplates.length || loadingTemplates))}
+              disabled={startingAttendance || !approvedTemplates.length || loadingTemplates}
             >
               <i className="ti ti-send" aria-hidden="true" />
               {startingAttendance ? 'Iniciando…' : 'Iniciar atendimento'}

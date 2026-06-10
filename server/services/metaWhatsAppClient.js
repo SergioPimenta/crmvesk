@@ -72,6 +72,27 @@ export async function sendText(phoneNumberId, accessToken, to, text) {
   return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
 }
 
+/** Envia modelo aprovado (obrigatório fora da janela de 24 h). */
+export async function sendTemplate(phoneNumberId, accessToken, to, templateName, languageCode) {
+  const name = String(templateName || '').trim();
+  const code = String(languageCode || '').trim();
+  if (!name || !code) {
+    throw new Error('Nome e idioma do modelo são obrigatórios');
+  }
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: digitsOnly(to),
+    type: 'template',
+    template: {
+      name,
+      language: { code },
+    },
+  };
+  return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
+}
+
 export function extractMessageText(message = {}) {
   if (!message || typeof message !== 'object') return '';
   if (message.type === 'text' && message.text?.body) return message.text.body;

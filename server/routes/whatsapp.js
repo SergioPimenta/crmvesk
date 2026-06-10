@@ -20,6 +20,7 @@ import {
   verifyMetaWebhook,
   getWebhookDiagnostics,
   getMessageTemplates,
+  getChatMessagingWindow,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
@@ -175,10 +176,16 @@ router.get('/chats', async (req, res) => {
 });
 
 router.post('/chats', async (req, res) => {
-  const { phone, contactId, name, message } = req.body ?? {};
+  const { phone, contactId, name, templateName, templateLanguage, templateBody } = req.body ?? {};
   try {
-    if (message?.trim()) {
-      const result = await startNewAttendance(req.userId, { phone, name, message: message.trim() });
+    if (templateName?.trim() && templateLanguage?.trim()) {
+      const result = await startNewAttendance(req.userId, {
+        phone,
+        name,
+        templateName: templateName.trim(),
+        templateLanguage: templateLanguage.trim(),
+        templateBody: templateBody?.trim(),
+      });
       return res.status(201).json(result);
     }
     const chat = await openChatFromContact(req.userId, {
@@ -207,7 +214,8 @@ router.get('/chats/:id/messages', async (req, res) => {
     }
   }
 
-  res.json({ messages });
+  const messagingWindow = await getChatMessagingWindow(req.userId, chatId);
+  res.json({ messages, messagingWindow });
 });
 
 router.post('/chats/:id/attendance', async (req, res) => {

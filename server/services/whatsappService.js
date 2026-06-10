@@ -20,12 +20,14 @@ import {
   parseWebhookStatuses,
   phoneToJid,
   sendText as metaSendText,
+  sendTemplate as metaSendTemplate,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
   listMessageTemplates,
   resolveWabaId,
 } from './metaWhatsAppClient.js';
+import { computeMessagingWindow } from '../utils/whatsappWindow.js';
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
 
@@ -691,9 +693,83 @@ export async function openChatFromContact(userId, { phone, contactId, name }) {
   return chat;
 }
 
-export async function startNewAttendance(userId, { phone, message, name }) {
+export async function getChatMessagingWindow(userId, chatId) {
+  const messages = await listMessages(userId, chatId);
+  return computeMessagingWindow(messages);
+}
+
+async function assertMetaCustomerCareWindow(userId, chatId) {
+  const settings = await getSettings(userId);
+  if (!settings || settings.provider !== 'meta') return;
+
+  const window = await getChatMessagingWindow(userId, chatId);
+  if (!window.withinWindow) {
+    throw new Error(
+      'Fora da janela de 24 horas. Finalize o atendimento e inicie novamente com um modelo aprovado pela Meta.'
+    );
+  }
+}
+
+export async function sendTemplateMessage(userId, chatId, { templateName, templateLanguage, bodyPreview }) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('WhatsApp não configurado');
+  if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
+  if (settings.provider !== 'meta') {
+    throw new Error('Envio de modelos disponível apenas com a API oficial Meta');
+  }
+
+  const name = String(templateName || '').trim();
+  const language = String(templateLanguage || '').trim();
+  if (!name || !language) {
+    throw new Error('Modelo e idioma são obrigatórios');
+  }
+
+  const [chatRows] = await pool.query(
+    'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
+    [chatId, userId]
+  );
+  const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
+  if (!chat) throw new Error('Conversa não encontrada');
+
+  const number = jidToPhone(chat.remoteJid);
+  const result = await metaSendTemplate(settings.instanceName, settings.apiKey, number, name, language);
+  const waMessageId = result?.messages?.[0]?.id || null;
+  const displayBody = String(bodyPreview || `[Modelo: ${name}]`).trim();
+  const messageAt = new Date();
+
+  await insertMessage(userId, chatId, {
+    waMessageId,
+    body: displayBody,
+    fromMe: true,
+    messageAt,
+    status: 'sent',
+  });
+
+  await pool.query(
+    "UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?",
+    [chatId, userId]
+  );
+
+  await upsertChat(userId, {
+    remoteJid: chat.remoteJid,
+    name: '',
+    lastMessage: displayBody,
+    lastMessageAt: messageAt,
+    incrementUnread: false,
+  });
+
+  return listMessages(userId, chatId);
+}
+
+export async function startNewAttendance(userId, { phone, name, templateName, templateLanguage, templateBody }) {
   const digits = digitsOnly(phone);
   if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
+
+  const tplName = String(templateName || '').trim();
+  const tplLang = String(templateLanguage || '').trim();
+  if (!tplName || !tplLang) {
+    throw new Error('Selecione um modelo de mensagem aprovado pela Meta');
+  }
 
   let contactId = null;
   let contactName = String(name || '').trim();
@@ -715,14 +791,16 @@ export async function startNewAttendance(userId, { phone, message, name }) {
     name: contactName,
   });
 
-  let messages = [];
-  if (message?.trim()) {
-    messages = await sendChatMessage(userId, Number(chat.id), message.trim());
-  }
+  const messages = await sendTemplateMessage(userId, Number(chat.id), {
+    templateName: tplName,
+    templateLanguage: tplLang,
+    bodyPreview: templateBody,
+  });
 
   const chats = await listChats(userId);
   const updatedChat = chats.find((c) => c.id === chat.id) || chat;
-  return { chat: updatedChat, messages };
+  const messagingWindow = computeMessagingWindow(messages);
+  return { chat: updatedChat, messages, messagingWindow };
 }
 
 export async function listChats(userId) {
@@ -827,6 +905,7 @@ export async function sendChatMessage(userId, chatId, text) {
   let waMessageId = null;
 
   if (settings.provider === 'meta') {
+    await assertMetaCustomerCareWindow(userId, chatId);
     result = await metaSendText(settings.instanceName, settings.apiKey, number, text);
     waMessageId = result?.messages?.[0]?.id || null;
   } else {

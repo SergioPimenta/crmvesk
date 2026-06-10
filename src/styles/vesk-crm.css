@@ -1924,6 +1924,38 @@ body.vesk-app {
   background: var(--vesk-surface2);
 }
 
+.wa-window-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(224, 82, 82, 0.45);
+  background: linear-gradient(180deg, rgba(224, 82, 82, 0.16) 0%, rgba(224, 82, 82, 0.08) 100%);
+  color: #fecaca;
+}
+
+.wa-window-banner i {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 20px;
+  color: #f87171;
+}
+
+.wa-window-banner strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fca5a5;
+  margin-bottom: 4px;
+}
+
+.wa-window-banner p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fecaca;
+}
+
 .wa-messages {
   flex: 1;
   overflow-y: auto;
