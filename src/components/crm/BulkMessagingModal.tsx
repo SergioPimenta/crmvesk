@@ -192,7 +192,7 @@ const BulkMessagingModal = ({ open, onClose, onComplete }: Props) => {
             required
           />
           <p className="wa-new-attendance-hint" style={{ marginTop: 6 }}>
-            Lista preenchida com os telefones dos contatos salvos. Edite, remova ou adicione números (DDD + número, um por linha). DDI +55 é aplicado automaticamente.
+            Lista preenchida com os telefones dos contatos salvos. Edite, remova ou adicione números (DDD + número, um por linha). DDI +55 é aplicado automaticamente. Os disparos são enviados em fila, com intervalo de 2–3 segundos entre cada mensagem.
           </p>
         </div>
 
@@ -233,7 +233,7 @@ const BulkMessagingModal = ({ open, onClose, onComplete }: Props) => {
               disabled={sending || !templates.length || loadingTemplates || phoneCount === 0}
             >
               <i className="ti ti-broadcast" aria-hidden="true" />
-              {sending ? 'Enviando…' : `Disparar para ${phoneCount || 0} número${phoneCount === 1 ? '' : 's'}`}
+              {sending ? 'Enviando em fila…' : `Disparar para ${phoneCount || 0} número${phoneCount === 1 ? '' : 's'}`}
             </button>
           ) : null}
         </div>

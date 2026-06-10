@@ -803,6 +803,17 @@ export async function startNewAttendance(userId, { phone, name, contactId: conta
   return { chat: updatedChat, messages, messagingWindow };
 }
 
+const BULK_SEND_DELAY_MS_MIN = 2000;
+const BULK_SEND_DELAY_MS_MAX = 3000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function bulkSendDelayMs() {
+  return BULK_SEND_DELAY_MS_MIN + Math.floor(Math.random() * (BULK_SEND_DELAY_MS_MAX - BULK_SEND_DELAY_MS_MIN + 1));
+}
+
 export async function sendBulkTemplates(userId, { phones, templateName, templateLanguage, templateBody }) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
@@ -827,7 +838,11 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
   const sent = [];
   const failed = [];
 
-  for (const phone of unique) {
+  for (let i = 0; i < unique.length; i++) {
+    const phone = unique[i];
+    if (i > 0) {
+      await sleep(bulkSendDelayMs());
+    }
     try {
       const chat = await openChatFromContact(userId, { phone, name: '' });
       await sendTemplateMessage(userId, Number(chat.id), {
