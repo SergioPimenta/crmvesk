@@ -412,10 +412,6 @@ const Integracoes = () => {
                         </div>
                       </div>
                     ) : null}
-                    <div style={{ marginTop: 10, fontSize: 12, color: 'var(--vesk-muted)' }}>
-                      Assine o campo <strong>messages</strong>. Defina <code>WHATSAPP_WEBHOOK_PUBLIC_URL</code> no
-                      servidor (ex.: https://crm.vesk.com.br).
-                    </div>
                   </div>
                 </div>
               ) : null}
