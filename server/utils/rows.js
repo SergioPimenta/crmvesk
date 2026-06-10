@@ -23,6 +23,8 @@ const KEY_ALIASES = {
   verifytoken: 'verifyToken',
   graphversion: 'graphVersion',
   appsecret: 'appSecret',
+  wabaid: 'wabaId',
+  metaappid: 'metaAppId',
   remotejid: 'remoteJid',
   contactid: 'contactId',
   contactname: 'contactName',

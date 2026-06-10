@@ -185,7 +185,8 @@ const Integracoes = () => {
       const data = await api.post<{ status: string; webhookUrl?: string }>('/whatsapp/connect', {});
       setStatus((data.status as typeof status) || 'connecting');
       if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
-      void loadStatus();
+      await loadConfig();
+      await loadStatus();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao conectar');
     } finally {
