@@ -48,17 +48,45 @@ export function jidToPhone(remoteJid) {
   return evolutionJidToPhone(remoteJid) || metaJidToPhone(remoteJid);
 }
 
+async function loadUserChats(userId) {
+  const [rows] = await pool.query(
+    `SELECT id, remote_jid AS remoteJid, last_message_at AS lastMessageAt, attendance_status AS attendanceStatus
+     FROM whatsapp_chats WHERE user_id = ?`,
+    [userId]
+  );
+  return rows.map((row) => normalizeRow(row));
+}
+
+async function mergeDuplicatesIntoChat(userId, keepChatId, phone) {
+  const canonical = canonicalWhatsAppPhone(phone);
+  const canonicalJid = phoneToCanonicalJid(canonical);
+  if (!canonical || !keepChatId) return;
+
+  const all = await loadUserChats(userId);
+  for (const row of all) {
+    if (Number(row.id) === Number(keepChatId)) continue;
+    if (!phonesMatch(canonical, jidToPhone(row.remoteJid))) continue;
+    await pool.query('UPDATE whatsapp_messages SET chat_id = ? WHERE chat_id = ? AND user_id = ?', [
+      keepChatId,
+      row.id,
+      userId,
+    ]);
+    await pool.query('DELETE FROM whatsapp_chats WHERE id = ? AND user_id = ?', [row.id, userId]);
+  }
+
+  await pool.query('UPDATE whatsapp_chats SET remote_jid = ? WHERE id = ? AND user_id = ?', [
+    canonicalJid,
+    keepChatId,
+    userId,
+  ]);
+}
+
 async function resolveChatForPhone(userId, phone) {
   const canonical = canonicalWhatsAppPhone(phone);
   const canonicalJid = phoneToCanonicalJid(canonical);
   if (!canonical) return { chatId: null, remoteJid: '' };
 
-  const [all] = await pool.query(
-    `SELECT id, remote_jid AS remoteJid, last_message_at AS lastMessageAt, attendance_status AS attendanceStatus
-     FROM whatsapp_chats WHERE user_id = ?`,
-    [userId]
-  );
-
+  const all = await loadUserChats(userId);
   const matches = all.filter((row) => phonesMatch(canonical, jidToPhone(row.remoteJid)));
   if (!matches.length) return { chatId: null, remoteJid: canonicalJid };
 
@@ -91,11 +119,7 @@ async function resolveChatForPhone(userId, phone) {
 }
 
 async function dedupeUserChats(userId) {
-  const [all] = await pool.query(
-    `SELECT id, remote_jid AS remoteJid, last_message_at AS lastMessageAt, attendance_status AS attendanceStatus
-     FROM whatsapp_chats WHERE user_id = ?`,
-    [userId]
-  );
+  const all = await loadUserChats(userId);
   const byPhone = new Map();
   for (const row of all) {
     const key = canonicalWhatsAppPhone(jidToPhone(row.remoteJid));
@@ -452,6 +476,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
        WHERE id = ?`,
       [name || '', lastMessage || '', lastMessageAt, unread, resolvedId]
     );
+    await mergeDuplicatesIntoChat(userId, resolvedId, phone);
     return resolvedId;
   }
 
@@ -478,7 +503,11 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
       incrementUnread ? 1 : 0,
     ]
   );
-  return ins.insertId;
+  const newId = ins.insertId;
+  if (newId) {
+    await mergeDuplicatesIntoChat(userId, newId, phone);
+  }
+  return newId;
 }
 
 export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
@@ -815,18 +844,12 @@ export async function sendTemplateMessage(userId, chatId, { templateName, templa
     status: 'sent',
   });
 
+  await mergeDuplicatesIntoChat(userId, Number(chatId), number);
   await pool.query(
-    "UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?",
-    [chatId, userId]
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+     WHERE id = ? AND user_id = ?`,
+    [phoneToCanonicalJid(number), displayBody, messageAt, chatId, userId]
   );
-
-  await upsertChat(userId, {
-    remoteJid: chat.remoteJid,
-    name: '',
-    lastMessage: displayBody,
-    lastMessageAt: messageAt,
-    incrementUnread: false,
-  });
 
   return listMessages(userId, chatId);
 }
@@ -1051,18 +1074,12 @@ export async function sendChatMessage(userId, chatId, text) {
     status: 'sent',
   });
 
+  await mergeDuplicatesIntoChat(userId, Number(chatId), number);
   await pool.query(
-    "UPDATE whatsapp_chats SET attendance_status = 'open' WHERE id = ? AND user_id = ?",
-    [chatId, userId]
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+     WHERE id = ? AND user_id = ?`,
+    [phoneToCanonicalJid(number), text, messageAt, chatId, userId]
   );
-
-  await upsertChat(userId, {
-    remoteJid: chat.remoteJid,
-    name: '',
-    lastMessage: text,
-    lastMessageAt: messageAt,
-    incrementUnread: false,
-  });
 
   return listMessages(userId, chatId);
 }
