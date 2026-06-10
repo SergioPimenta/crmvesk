@@ -69,6 +69,8 @@ const WhatsApp = () => {
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
   const [messages, setMessages] = useState<WaMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesLoadedFor, setMessagesLoadedFor] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [configured, setConfigured] = useState(false);
@@ -88,6 +90,7 @@ const WhatsApp = () => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevActiveIdRef = useRef<string | null>(null);
+  const activeChatIdRef = useRef<string | null>(null);
   const scrollOnNextMessagesRef = useRef(false);
 
   const loadApprovedTemplates = useCallback(async () => {
@@ -133,9 +136,22 @@ const WhatsApp = () => {
     }
   }, []);
 
-  const loadMessages = useCallback(async (chatId: string) => {
-    const data = await api.get<{ messages: WaMessage[] }>(`/whatsapp/chats/${chatId}/messages`);
-    setMessages(data.messages || []);
+  const loadMessages = useCallback(async (chatId: string, { showLoading = false } = {}) => {
+    if (showLoading) setMessagesLoading(true);
+    try {
+      const data = await api.get<{ messages: WaMessage[] }>(`/whatsapp/chats/${chatId}/messages`);
+      if (activeChatIdRef.current !== chatId) return;
+      setMessages(data.messages || []);
+      setMessagesLoadedFor(chatId);
+    } catch {
+      if (activeChatIdRef.current !== chatId) return;
+      if (showLoading) {
+        setMessages([]);
+        setMessagesLoadedFor(null);
+      }
+    } finally {
+      if (showLoading && activeChatIdRef.current === chatId) setMessagesLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -153,11 +169,18 @@ const WhatsApp = () => {
   }, [waStatus, loadChats]);
 
   useEffect(() => {
+    activeChatIdRef.current = activeId;
+
     if (!activeId) {
       setMessages([]);
+      setMessagesLoadedFor(null);
+      setMessagesLoading(false);
       return undefined;
     }
-    void loadMessages(activeId);
+
+    setMessages([]);
+    setMessagesLoadedFor(null);
+    void loadMessages(activeId, { showLoading: true });
     const id = window.setInterval(() => void loadMessages(activeId), 8000);
     return () => window.clearInterval(id);
   }, [activeId, loadMessages]);
@@ -212,7 +235,9 @@ const WhatsApp = () => {
     return computeMessagingWindow(messages);
   }, [messages, windowTick]);
   const isClosed = active?.attendanceStatus === 'closed';
-  const outsideWindow = !isClosed && waStatus === 'connected' && !messagingWindow.withinWindow;
+  const messagesReady = Boolean(active?.id) && messagesLoadedFor === active.id && !messagesLoading;
+  const outsideWindow =
+    messagesReady && !isClosed && waStatus === 'connected' && !messagingWindow.withinWindow;
 
   useEffect(() => {
     if (!activeId && filtered[0]) setActiveId(filtered[0].id);
@@ -538,6 +563,11 @@ const WhatsApp = () => {
                   <div className="wa-closed-banner">
                     <i className="ti ti-circle-check" aria-hidden="true" />
                     Atendimento finalizado.
+                  </div>
+                ) : !messagesReady ? (
+                  <div className="wa-compose-pending">
+                    <i className="ti ti-loader-2 wa-spin" aria-hidden="true" />
+                    Carregando conversa…
                   </div>
                 ) : outsideWindow ? (
                   <div className="wa-window-banner">

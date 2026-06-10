@@ -1924,6 +1924,18 @@ body.vesk-app {
   background: var(--vesk-surface2);
 }
 
+.wa-compose-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--vesk-muted);
+  border-top: 1px solid var(--vesk-border);
+  background: var(--vesk-surface2);
+}
+
 .wa-window-banner {
   display: flex;
   align-items: flex-start;
