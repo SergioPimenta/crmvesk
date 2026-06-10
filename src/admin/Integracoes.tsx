@@ -343,9 +343,6 @@ const Integracoes = () => {
                   data-lpignore="true"
                   data-1p-ignore
                 />
-                <div style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4 }}>
-                  Usado com o App Secret para localizar a conta WABA automaticamente.
-                </div>
               </div>
               <div className="crm-field">
                 <label htmlFor="wa_waba_id">WABA ID (WhatsApp Business Account)</label>
@@ -363,9 +360,6 @@ const Integracoes = () => {
                   data-lpignore="true"
                   data-1p-ignore
                 />
-                <div style={{ fontSize: 11, color: 'var(--vesk-muted)', marginTop: 4 }}>
-                  Meta Business Suite → Configurações → Contas do WhatsApp → ID da conta. Necessário para listar modelos.
-                </div>
               </div>
               <div className="crm-field">
                 <label htmlFor="wa_phone">Número exibido (opcional)</label>
