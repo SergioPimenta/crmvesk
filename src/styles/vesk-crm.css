@@ -1520,13 +1520,12 @@ body.vesk-app {
 }
 
 .wa-new-attendance-phone .wa-phone-dial-select {
-  flex: 0 0 auto;
-  max-width: 42%;
-  min-width: 118px;
+  flex: 0 0 88px;
+  width: 88px;
   border: none;
   border-right: 1px solid var(--vesk-border);
-  background: var(--vesk-bg);
-  padding: 10px 8px 10px 10px;
+  background-color: var(--vesk-bg);
+  padding: 10px 22px 10px 10px;
   font-family: var(--font-body);
   font-size: 12px;
   color: var(--vesk-text);
@@ -1535,8 +1534,10 @@ body.vesk-app {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 26px;
+  background-position: right 6px center;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .wa-new-attendance-phone .wa-phone-dial-select:focus {

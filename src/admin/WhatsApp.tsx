@@ -643,8 +643,8 @@ const WhatsApp = () => {
                   aria-label="DDI do país"
                 >
                   {COUNTRY_DIAL_CODES.map((c) => (
-                    <option key={c.iso2} value={c.iso2}>
-                      {countryFlag(c.iso2)} +{c.dial} {c.name}
+                    <option key={c.iso2} value={c.iso2} title={c.name}>
+                      {countryFlag(c.iso2)} +{c.dial}
                     </option>
                   ))}
                 </select>
