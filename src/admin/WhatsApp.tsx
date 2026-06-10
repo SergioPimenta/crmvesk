@@ -9,7 +9,21 @@ import {
   formatMessageTime,
   type WaMsgStatus,
 } from '../utils/waChatFormat';
-import { WA_MESSAGE_TEMPLATES } from '../utils/waMessageTemplates';
+
+type MetaApprovedTemplate = {
+  id: string;
+  name: string;
+  body: string;
+  language: string;
+  category: string;
+};
+
+const templateKey = (t: MetaApprovedTemplate) => `${t.id}-${t.language}`;
+
+const templateOptionLabel = (t: MetaApprovedTemplate) => {
+  const lang = t.language.replace('_', '-');
+  return t.name.includes(lang) ? t.name : `${t.name} (${lang})`;
+};
 
 type WaMessage = {
   id: string;
@@ -68,12 +82,41 @@ const WhatsApp = () => {
   const [newPhone, setNewPhone] = useState('');
   const [newMessageMode, setNewMessageMode] = useState<'free' | 'template'>('free');
   const [newFreeMessage, setNewFreeMessage] = useState('');
-  const [newTemplateId, setNewTemplateId] = useState(WA_MESSAGE_TEMPLATES[0]?.id ?? '');
+  const [newTemplateId, setNewTemplateId] = useState('');
+  const [approvedTemplates, setApprovedTemplates] = useState<MetaApprovedTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [startingAttendance, setStartingAttendance] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevActiveIdRef = useRef<string | null>(null);
   const scrollOnNextMessagesRef = useRef(false);
+
+  const loadApprovedTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try {
+      const data = await api.get<{ groups: { approved: MetaApprovedTemplate[] } }>('/whatsapp/templates');
+      const approved = data.groups?.approved ?? [];
+      setApprovedTemplates(approved);
+      if (approved.length > 0) {
+        setNewTemplateId((current) =>
+          approved.some((t) => templateKey(t) === current) ? current : templateKey(approved[0])
+        );
+      } else {
+        setNewTemplateId('');
+      }
+    } catch {
+      setApprovedTemplates([]);
+      setNewTemplateId('');
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (newAttendanceOpen && waStatus === 'connected') {
+      void loadApprovedTemplates();
+    }
+  }, [newAttendanceOpen, waStatus, loadApprovedTemplates]);
 
   const loadChats = useCallback(async () => {
     try {
@@ -231,15 +274,15 @@ const WhatsApp = () => {
   }, [contacts, contactSearch]);
 
   const selectedTemplate = useMemo(
-    () => WA_MESSAGE_TEMPLATES.find((t) => t.id === newTemplateId) ?? WA_MESSAGE_TEMPLATES[0],
-    [newTemplateId]
+    () => approvedTemplates.find((t) => templateKey(t) === newTemplateId) ?? approvedTemplates[0],
+    [approvedTemplates, newTemplateId]
   );
 
   const resetNewAttendanceForm = () => {
     setNewPhone('');
     setNewMessageMode('free');
     setNewFreeMessage('');
-    setNewTemplateId(WA_MESSAGE_TEMPLATES[0]?.id ?? '');
+    setNewTemplateId(approvedTemplates[0] ? templateKey(approvedTemplates[0]) : '');
   };
 
   const resolveNewAttendanceMessage = () => {
@@ -256,7 +299,7 @@ const WhatsApp = () => {
       return;
     }
     if (!message) {
-      alert('Informe a mensagem ou selecione um modelo.');
+      alert(newMessageMode === 'template' ? 'Selecione um modelo aprovado.' : 'Informe a mensagem.');
       return;
     }
 
@@ -594,21 +637,41 @@ const WhatsApp = () => {
           ) : (
             <div className="crm-field">
               <label htmlFor="wa_new_template">Modelo de mensagem</label>
-              <select
-                id="wa_new_template"
-                value={newTemplateId}
-                onChange={(e) => setNewTemplateId(e.target.value)}
-              >
-                {WA_MESSAGE_TEMPLATES.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-              </select>
-              <div className="wa-template-preview">
-                <span className="wa-template-preview-label">Pré-visualização</span>
-                <p>{selectedTemplate?.body}</p>
-              </div>
+              {loadingTemplates ? (
+                <div className="wa-templates-empty" style={{ padding: '16px 12px' }}>
+                  <p>Carregando modelos aprovados da Meta…</p>
+                </div>
+              ) : approvedTemplates.length === 0 ? (
+                <div className="integration-hint" style={{ marginTop: 0 }}>
+                  <i className="ti ti-alert-circle" aria-hidden="true" />
+                  <span>
+                    Nenhum modelo aprovado encontrado. Verifique em{' '}
+                    <Link to="/admin/integracoes?tab=whatsapp" style={{ color: 'var(--vesk-orange)' }}>
+                      Integrações → Modelos de mensagem
+                    </Link>
+                    .
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <select
+                    id="wa_new_template"
+                    value={newTemplateId}
+                    onChange={(e) => setNewTemplateId(e.target.value)}
+                    required
+                  >
+                    {approvedTemplates.map((t) => (
+                      <option key={templateKey(t)} value={templateKey(t)}>
+                        {templateOptionLabel(t)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="wa-template-preview">
+                    <span className="wa-template-preview-label">Pré-visualização</span>
+                    <p>{selectedTemplate?.body}</p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -624,7 +687,7 @@ const WhatsApp = () => {
             >
               Cancelar
             </button>
-            <button type="submit" className="crm-btn-primary" disabled={startingAttendance}>
+            <button type="submit" className="crm-btn-primary" disabled={startingAttendance || (newMessageMode === 'template' && (!approvedTemplates.length || loadingTemplates))}>
               <i className="ti ti-send" aria-hidden="true" />
               {startingAttendance ? 'Iniciando…' : 'Iniciar atendimento'}
             </button>
