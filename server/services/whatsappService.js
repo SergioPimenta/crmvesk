@@ -803,6 +803,47 @@ export async function startNewAttendance(userId, { phone, name, contactId: conta
   return { chat: updatedChat, messages, messagingWindow };
 }
 
+export async function sendBulkTemplates(userId, { phones, templateName, templateLanguage, templateBody }) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('WhatsApp não configurado');
+  if (settings.provider !== 'meta') {
+    throw new Error('Disparos em massa disponíveis apenas com a API oficial Meta');
+  }
+  if (settings.status !== 'connected') {
+    throw new Error('Conecte o WhatsApp antes de enviar disparos');
+  }
+
+  const tplName = String(templateName || '').trim();
+  const tplLang = String(templateLanguage || '').trim();
+  if (!tplName || !tplLang) {
+    throw new Error('Selecione um modelo de mensagem aprovado pela Meta');
+  }
+
+  const unique = [...new Set((phones || []).map((p) => digitsOnly(p)).filter((p) => p.length >= 10))];
+  if (!unique.length) {
+    throw new Error('Informe ao menos um telefone válido');
+  }
+
+  const sent = [];
+  const failed = [];
+
+  for (const phone of unique) {
+    try {
+      const chat = await openChatFromContact(userId, { phone, name: '' });
+      await sendTemplateMessage(userId, Number(chat.id), {
+        templateName: tplName,
+        templateLanguage: tplLang,
+        bodyPreview: templateBody,
+      });
+      sent.push(phone);
+    } catch (err) {
+      failed.push({ phone, error: err.message || 'Falha no envio' });
+    }
+  }
+
+  return { sent: sent.length, failed, phones: sent };
+}
+
 export async function listChats(userId) {
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,

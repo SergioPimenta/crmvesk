@@ -1470,6 +1470,39 @@ body.vesk-app {
   background: #25d36622;
 }
 
+.wa-bulk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wa-bulk-count {
+  font-weight: 500;
+  color: var(--vesk-muted);
+  font-size: 12px;
+}
+
+.wa-bulk-result {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #25d36640;
+  background: #25d36612;
+  color: var(--vesk-text);
+  font-size: 13px;
+}
+
+.wa-bulk-result.has-errors {
+  border-color: #e0525240;
+  background: #e0525212;
+}
+
+.wa-bulk-result ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--vesk-muted);
+}
+
 .wa-contact-picker {
   display: flex;
   flex-direction: column;

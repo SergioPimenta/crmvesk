@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
+import BulkMessagingModal from '../components/crm/BulkMessagingModal';
 import { useCrmData, type Contact } from '../contexts/CrmDataContext';
 import { api } from '../services/api';
 import {
@@ -88,6 +89,7 @@ const WhatsApp = () => {
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
+  const [bulkMessagingOpen, setBulkMessagingOpen] = useState(false);
   const [newPhoneDial, setNewPhoneDial] = useState(DEFAULT_DIAL_COUNTRY);
   const [newPhoneNational, setNewPhoneNational] = useState('');
   const [newContactId, setNewContactId] = useState<string | null>(null);
@@ -460,6 +462,15 @@ const WhatsApp = () => {
                 </button>
                 <button
                   type="button"
+                  className="crm-icon-btn wa-list-icon-btn"
+                  title="Disparos em massa"
+                  aria-label="Disparos em massa"
+                  onClick={() => setBulkMessagingOpen(true)}
+                >
+                  <i className="ti ti-broadcast" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
                   className="crm-icon-btn wa-list-icon-btn wa-list-icon-btn--primary"
                   title="Iniciar novo atendimento"
                   aria-label="Iniciar novo atendimento"
@@ -780,6 +791,12 @@ const WhatsApp = () => {
           </div>
         </div>
       </Modal>
+
+      <BulkMessagingModal
+        open={bulkMessagingOpen}
+        onClose={() => setBulkMessagingOpen(false)}
+        onComplete={() => loadChats()}
+      />
     </CrmLayout>
   );
 };

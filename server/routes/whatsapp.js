@@ -21,6 +21,7 @@ import {
   getWebhookDiagnostics,
   getMessageTemplates,
   getChatMessagingWindow,
+  sendBulkTemplates,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
@@ -138,6 +139,22 @@ router.get('/status', async (req, res) => {
 router.get('/templates', async (req, res) => {
   try {
     const data = await getMessageTemplates(req.userId);
+    res.json(data);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post('/bulk-send', async (req, res) => {
+  const { phones, templateName, templateLanguage, templateBody } = req.body ?? {};
+  try {
+    const list = Array.isArray(phones) ? phones : [];
+    const data = await sendBulkTemplates(req.userId, {
+      phones: list,
+      templateName,
+      templateLanguage,
+      templateBody,
+    });
     res.json(data);
   } catch (err) {
     res.status(400).json({ message: err.message });
