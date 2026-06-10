@@ -15,7 +15,7 @@ import {
   COUNTRY_DIAL_CODES,
   countryFlag,
   DEFAULT_DIAL_COUNTRY,
-  splitPhoneDigits,
+  nationalDigitsFromContactPhone,
 } from '../utils/countryDialCodes';
 
 type MetaApprovedTemplate = {
@@ -331,9 +331,8 @@ const WhatsApp = () => {
       alert('Este contato não possui telefone válido para WhatsApp.');
       return;
     }
-    const { iso2, national } = splitPhoneDigits(phone);
-    setNewPhoneDial(iso2);
-    setNewPhoneNational(national);
+    setNewPhoneDial(DEFAULT_DIAL_COUNTRY);
+    setNewPhoneNational(nationalDigitsFromContactPhone(contact.telefone || ''));
     setNewContactId(contact.id);
     setNewContactName(contact.nome);
     setContactPickerOpen(false);

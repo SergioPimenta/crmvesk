@@ -241,19 +241,37 @@ export function getCountryByIso(iso2: string): CountryDialCode | undefined {
   return byIso.get(iso2);
 }
 
+/** Extrai DDD+número para contatos do CRM (sempre Brasil, sem confundir DDD com DDI). */
+export function nationalDigitsFromContactPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('55') && digits.length >= 12) {
+    return digits.slice(2);
+  }
+  return digits;
+}
+
 export function splitPhoneDigits(fullDigits: string): { iso2: string; national: string } {
   const digits = fullDigits.replace(/\D/g, '');
   if (!digits) return { iso2: DEFAULT_DIAL_COUNTRY, national: '' };
 
-  const byDialLength = [...COUNTRY_DIAL_CODES].sort((a, b) => b.dial.length - a.dial.length);
+  // Brasil com DDI explícito: 55 + DDD + número (12–13 dígitos)
+  if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) {
+    return { iso2: DEFAULT_DIAL_COUNTRY, national: digits.slice(2) };
+  }
+
+  // Número nacional BR (DDD + número) — priorizar antes de detectar outros DDIs
+  if (digits.length >= 10 && digits.length <= 11) {
+    return { iso2: DEFAULT_DIAL_COUNTRY, national: digits };
+  }
+
+  const byDialLength = [...COUNTRY_DIAL_CODES]
+    .filter((c) => c.iso2 !== DEFAULT_DIAL_COUNTRY)
+    .sort((a, b) => b.dial.length - a.dial.length);
+
   for (const country of byDialLength) {
     if (digits.startsWith(country.dial) && digits.length > country.dial.length + 7) {
       return { iso2: country.iso2, national: digits.slice(country.dial.length) };
     }
-  }
-
-  if (digits.length >= 10 && digits.length <= 11) {
-    return { iso2: DEFAULT_DIAL_COUNTRY, national: digits };
   }
 
   return { iso2: DEFAULT_DIAL_COUNTRY, national: digits };
