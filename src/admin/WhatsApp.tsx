@@ -80,9 +80,10 @@ const WhatsApp = () => {
   const [error, setError] = useState('');
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
-  const [openingChat, setOpeningChat] = useState(false);
   const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
   const [newPhone, setNewPhone] = useState('');
+  const [newContactId, setNewContactId] = useState<string | null>(null);
+  const [newContactName, setNewContactName] = useState('');
   const [newTemplateId, setNewTemplateId] = useState('');
   const [approvedTemplates, setApprovedTemplates] = useState<MetaApprovedTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -310,7 +311,23 @@ const WhatsApp = () => {
 
   const resetNewAttendanceForm = () => {
     setNewPhone('');
+    setNewContactId(null);
+    setNewContactName('');
     setNewTemplateId(approvedTemplates[0] ? templateKey(approvedTemplates[0]) : '');
+  };
+
+  const openNewAttendanceFromContact = (contact: Contact) => {
+    const phone = contact.telefone?.replace(/\D/g, '') || '';
+    if (phone.length < 10) {
+      alert('Este contato não possui telefone válido para WhatsApp.');
+      return;
+    }
+    setNewPhone(phone);
+    setNewContactId(contact.id);
+    setNewContactName(contact.nome);
+    setContactPickerOpen(false);
+    setContactSearch('');
+    setNewAttendanceOpen(true);
   };
 
   const startNewAttendance = async (e: React.FormEvent) => {
@@ -329,6 +346,8 @@ const WhatsApp = () => {
     try {
       const data = await api.post<{ chat: WaConversation; messages: WaMessage[] }>('/whatsapp/chats', {
         phone,
+        contactId: newContactId || undefined,
+        name: newContactName || undefined,
         templateName: selectedTemplate.name,
         templateLanguage: selectedTemplate.language,
         templateBody: selectedTemplate.body,
@@ -343,30 +362,6 @@ const WhatsApp = () => {
       alert(err instanceof Error ? err.message : 'Não foi possível iniciar o atendimento');
     } finally {
       setStartingAttendance(false);
-    }
-  };
-
-  const openContactChat = async (contact: Contact) => {
-    const phone = contact.telefone?.replace(/\D/g, '') || '';
-    if (phone.length < 10) {
-      alert('Este contato não possui telefone válido para WhatsApp.');
-      return;
-    }
-    setOpeningChat(true);
-    try {
-      const data = await api.post<{ chat: WaConversation }>('/whatsapp/chats', {
-        phone,
-        contactId: contact.id,
-        name: contact.nome,
-      });
-      await loadChats();
-      setActiveId(data.chat.id);
-      setContactPickerOpen(false);
-      setContactSearch('');
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Não foi possível abrir a conversa');
-    } finally {
-      setOpeningChat(false);
     }
   };
 
@@ -716,7 +711,7 @@ const WhatsApp = () => {
       <Modal
         open={contactPickerOpen}
         title="Contatos"
-        description="Selecione um contato para abrir ou criar a conversa."
+        description="Selecione um contato para iniciar o atendimento com um modelo da Meta."
         wide
         onClose={() => {
           setContactPickerOpen(false);
@@ -742,8 +737,8 @@ const WhatsApp = () => {
                   key={c.id}
                   type="button"
                   className="wa-contact-picker-item"
-                  disabled={!hasPhone || openingChat}
-                  onClick={() => void openContactChat(c)}
+                  disabled={!hasPhone}
+                  onClick={() => openNewAttendanceFromContact(c)}
                   role="listitem"
                 >
                   <div className="wa-avatar">{initials(c.nome)}</div>

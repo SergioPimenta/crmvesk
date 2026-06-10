@@ -761,7 +761,7 @@ export async function sendTemplateMessage(userId, chatId, { templateName, templa
   return listMessages(userId, chatId);
 }
 
-export async function startNewAttendance(userId, { phone, name, templateName, templateLanguage, templateBody }) {
+export async function startNewAttendance(userId, { phone, name, contactId: contactIdParam, templateName, templateLanguage, templateBody }) {
   const digits = digitsOnly(phone);
   if (digits.length < 10) throw new Error('Informe um telefone com DDI + DDD + número');
 
@@ -771,17 +771,17 @@ export async function startNewAttendance(userId, { phone, name, templateName, te
     throw new Error('Selecione um modelo de mensagem aprovado pela Meta');
   }
 
-  let contactId = null;
+  let contactId = contactIdParam ? Number(contactIdParam) : null;
   let contactName = String(name || '').trim();
 
-  if (!contactName) {
+  if (!contactId || !contactName) {
     const [contacts] = await pool.query(
       "SELECT id, nome FROM contacts WHERE user_id = ? AND REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '-', ''), '+', '') LIKE ? LIMIT 1",
       [userId, `%${digits.slice(-8)}%`]
     );
     if (contacts[0]) {
-      contactId = contacts[0].id;
-      contactName = contacts[0].nome;
+      contactId = contactId || contacts[0].id;
+      if (!contactName) contactName = contacts[0].nome;
     }
   }
 

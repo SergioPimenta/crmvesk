@@ -182,6 +182,7 @@ router.post('/chats', async (req, res) => {
       const result = await startNewAttendance(req.userId, {
         phone,
         name,
+        contactId: contactId ? Number(contactId) : undefined,
         templateName: templateName.trim(),
         templateLanguage: templateLanguage.trim(),
         templateBody: templateBody?.trim(),
