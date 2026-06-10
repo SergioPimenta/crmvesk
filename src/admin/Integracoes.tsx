@@ -34,6 +34,8 @@ const Integracoes = () => {
   const activeTab: IntegrationTab = TABS.some((t) => t.id === tabParam) ? tabParam! : 'whatsapp';
 
   const [configured, setConfigured] = useState(false);
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(false);
+  const [hasStoredAppSecret, setHasStoredAppSecret] = useState(false);
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
@@ -59,6 +61,8 @@ const Integracoes = () => {
     const data = await api.get<{ configured: boolean; settings: WaSettings | null }>('/whatsapp/config');
     setConfigured(data.configured);
     if (data.settings) {
+      setHasStoredApiKey(Boolean(data.settings.hasApiKey));
+      setHasStoredAppSecret(Boolean(data.settings.hasAppSecret));
       setPhoneNumberId(data.settings.phoneNumberId || '');
       setPhone(data.settings.phone || '');
       setMetaAppId(data.settings.metaAppId || '');
@@ -114,8 +118,29 @@ const Integracoes = () => {
     }
   };
 
+  const validateMetaRequired = () => {
+    if (!phoneNumberId.trim()) {
+      setError('Phone Number ID é obrigatório');
+      return false;
+    }
+    if (!apiToken.trim() && !(configured && hasStoredApiKey)) {
+      setError('Access Token é obrigatório');
+      return false;
+    }
+    if (!appSecret.trim() && !(configured && hasStoredAppSecret)) {
+      setError('App Secret é obrigatório');
+      return false;
+    }
+    if (!metaAppId.trim()) {
+      setError('App ID (Meta) é obrigatório');
+      return false;
+    }
+    return true;
+  };
+
   const saveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateMetaRequired()) return;
     setSaving(true);
     setError('');
     try {
@@ -124,7 +149,7 @@ const Integracoes = () => {
         phoneNumberId: phoneNumberId.trim(),
         accessToken: apiToken.trim() || undefined,
         appSecret: appSecret.trim() || undefined,
-        metaAppId: metaAppId.trim() || undefined,
+        metaAppId: metaAppId.trim(),
         wabaId: wabaId.trim() || undefined,
         phone: phone.trim(),
       });
@@ -139,23 +164,24 @@ const Integracoes = () => {
   };
 
   const handleConnect = async () => {
+    if (!validateMetaRequired()) return;
     setConnecting(true);
     setError('');
     try {
-      if (!configured) {
-        await api.put('/whatsapp/config', {
-          provider: 'meta',
-          phoneNumberId: phoneNumberId.trim(),
-          accessToken: apiToken.trim(),
-          appSecret: appSecret.trim() || undefined,
-          metaAppId: metaAppId.trim() || undefined,
-          wabaId: wabaId.trim() || undefined,
-          phone: phone.trim(),
-        });
-        setConfigured(true);
-        setApiToken('');
-        setAppSecret('');
-      }
+      await api.put('/whatsapp/config', {
+        provider: 'meta',
+        phoneNumberId: phoneNumberId.trim(),
+        accessToken: apiToken.trim() || undefined,
+        appSecret: appSecret.trim() || undefined,
+        metaAppId: metaAppId.trim(),
+        wabaId: wabaId.trim() || undefined,
+        phone: phone.trim(),
+      });
+      setConfigured(true);
+      setHasStoredApiKey(true);
+      setHasStoredAppSecret(true);
+      setApiToken('');
+      setAppSecret('');
       const data = await api.post<{ status: string; webhookUrl?: string }>('/whatsapp/connect', {});
       setStatus((data.status as typeof status) || 'connecting');
       if (data.webhookUrl) setWebhookUrl(data.webhookUrl);
@@ -168,10 +194,12 @@ const Integracoes = () => {
   };
 
   const handleDisconnect = async () => {
-    if (!window.confirm('Desconectar WhatsApp e remover a configuração deste CRM?')) return;
+    if (!window.confirm('Desconectar WhatsApp? A configuração será removida, mas suas conversas serão mantidas.')) return;
     try {
       await api.delete('/whatsapp/config');
       setConfigured(false);
+      setHasStoredApiKey(false);
+      setHasStoredAppSecret(false);
       setStatus('disconnected');
       setApiToken('');
       setAppSecret('');
@@ -179,24 +207,6 @@ const Integracoes = () => {
       setVerifyToken('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao desconectar');
-    }
-  };
-
-  const saveMetaIds = async () => {
-    setSaving(true);
-    setError('');
-    try {
-      await api.put('/whatsapp/config', {
-        provider: 'meta',
-        phoneNumberId: phoneNumberId.trim(),
-        metaAppId: metaAppId.trim() || undefined,
-        wabaId: wabaId.trim() || undefined,
-      });
-      await loadConfig();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar identificadores Meta');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -300,7 +310,7 @@ const Integracoes = () => {
                 />
               </div>
               <div className="crm-field">
-                <label htmlFor="wa_app_secret">App Secret (recomendado)</label>
+                <label htmlFor="wa_app_secret">App Secret</label>
                 <input
                   id="wa_app_secret"
                   name="meta_app_secret"
@@ -312,6 +322,7 @@ const Integracoes = () => {
                   autoComplete="new-password"
                   data-lpignore="true"
                   data-1p-ignore
+                  required={!configured || !hasStoredAppSecret}
                 />
               </div>
               <div className="crm-field">
@@ -322,6 +333,8 @@ const Integracoes = () => {
                   value={metaAppId}
                   onChange={(e) => setMetaAppId(e.target.value)}
                   placeholder="Ex: 1234567890123456"
+                  disabled={isLocked}
+                  required
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -341,6 +354,7 @@ const Integracoes = () => {
                   value={wabaId}
                   onChange={(e) => setWabaId(e.target.value)}
                   placeholder="Ex: 102289599326934"
+                  disabled={isLocked}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -415,11 +429,6 @@ const Integracoes = () => {
                 {!isLocked ? (
                   <button type="submit" className="crm-btn-secondary" disabled={saving}>
                     Salvar configuração
-                  </button>
-                ) : null}
-                {isLocked ? (
-                  <button type="button" className="crm-btn-secondary" disabled={saving} onClick={() => void saveMetaIds()}>
-                    Salvar WABA / App ID
                   </button>
                 ) : null}
                 {isLocked ? (

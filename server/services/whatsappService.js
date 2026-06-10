@@ -144,6 +144,12 @@ export async function saveSettings(userId, payload) {
     if (!phoneNumberId || !accessToken) {
       throw new Error('Phone Number ID e Access Token são obrigatórios');
     }
+    if (!appSecret) {
+      throw new Error('App Secret é obrigatório');
+    }
+    if (!metaAppId) {
+      throw new Error('App ID (Meta) é obrigatório');
+    }
 
     await pool.query(
       `INSERT INTO whatsapp_settings
@@ -191,8 +197,6 @@ export async function saveSettings(userId, payload) {
 }
 
 export async function deleteSettings(userId) {
-  await pool.query('DELETE FROM whatsapp_messages WHERE user_id = ?', [userId]);
-  await pool.query('DELETE FROM whatsapp_chats WHERE user_id = ?', [userId]);
   await pool.query('DELETE FROM whatsapp_settings WHERE user_id = ?', [userId]);
 }
 
