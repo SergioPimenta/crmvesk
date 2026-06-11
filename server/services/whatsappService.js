@@ -23,6 +23,7 @@ import {
   sendTemplate as metaSendTemplate,
   uploadMetaMedia,
   sendMetaMedia,
+  sendMetaMediaByLink,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
@@ -1017,7 +1018,7 @@ export async function listMessages(userId, chatId) {
   });
 }
 
-async function storeMediaCopy(userId, buffer, filename) {
+async function storeMediaCopy(userId, buffer, filename, contentType) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return '';
   try {
@@ -1026,11 +1027,58 @@ async function storeMediaCopy(userId, buffer, filename) {
     const blob = await put(`wa/${userId}/${Date.now()}-${safeName}`, buffer, {
       access: 'public',
       token,
+      contentType: contentType || undefined,
     });
     return blob.url;
   } catch (err) {
     console.warn('WhatsApp media blob:', err.message);
     return '';
+  }
+}
+
+async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filename, caption, publicUrl }) {
+  if (publicUrl) {
+    try {
+      const result = await sendMetaMediaByLink(settings.instanceName, settings.apiKey, number, {
+        kind,
+        url: publicUrl,
+        caption,
+        filename,
+      });
+      return { result, kind };
+    } catch (err) {
+      console.warn('WhatsApp media via link:', err.message);
+    }
+  }
+
+  const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+    buffer,
+    mimeType,
+    filename,
+  });
+
+  try {
+    const result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
+      kind,
+      mediaId: upload.id,
+      caption,
+      filename,
+    });
+    return { result, kind };
+  } catch (err) {
+    if (kind !== 'audio') throw err;
+    const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+      buffer,
+      mimeType,
+      filename,
+    });
+    const result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
+      kind: 'document',
+      mediaId: docUpload.id,
+      caption,
+      filename,
+    });
+    return { result, kind: 'document' };
   }
 }
 
@@ -1056,40 +1104,24 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   assertMetaMimeSupported(normalizedMime);
   const kind = detectMediaKind(normalizedMime);
   const safeName = safeMediaFilename(filename, normalizedMime);
+  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!fileBuffer.length) throw new Error('Arquivo vazio');
 
-  const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
-    buffer,
-    mimeType: normalizedMime,
-    filename: safeName,
-  });
-
-  let sendKind = kind;
-  let result;
-  try {
-    result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
-      kind: sendKind,
-      mediaId: upload.id,
-      caption,
-      filename: safeName,
-    });
-  } catch (err) {
-    if (sendKind !== 'audio') throw err;
-    const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
-      buffer,
-      mimeType: normalizedMime,
-      filename: safeName,
-    });
-    sendKind = 'document';
-    result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
-      kind: 'document',
-      mediaId: docUpload.id,
-      caption,
-      filename: safeName,
-    });
+  const mediaUrl = await storeMediaCopy(userId, fileBuffer, safeName, normalizedMime);
+  if (!mediaUrl && !process.env.BLOB_READ_WRITE_TOKEN) {
+    console.warn('WhatsApp: BLOB_READ_WRITE_TOKEN ausente — upload direto para Meta será usado');
   }
 
+  const { result, kind: sendKind } = await sendMediaToMeta(settings, number, {
+    kind,
+    buffer: fileBuffer,
+    mimeType: normalizedMime,
+    filename: safeName,
+    caption,
+    publicUrl: mediaUrl,
+  });
+
   const waMessageId = result?.messages?.[0]?.id || null;
-  const mediaUrl = await storeMediaCopy(userId, buffer, safeName);
   const body = serializeMediaMessage({ kind: sendKind, name: safeName, caption, url: mediaUrl });
   const preview = caption?.trim() || mediaLabel({ kind: sendKind, name: safeName });
   const messageAt = new Date();

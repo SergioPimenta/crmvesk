@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { buffer as bufferFromStream } from 'node:stream/consumers';
 import FormData from 'form-data';
 
 const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
@@ -97,22 +98,27 @@ export async function sendTemplate(phoneNumberId, accessToken, to, templateName,
 /** Envia arquivo para a Meta e retorna o media id. */
 export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mimeType, filename }) {
   const mime = mimeType || 'application/octet-stream';
+  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!fileBuffer.length) throw new Error('Arquivo vazio');
+
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
-  form.append('file', buffer, {
+  form.append('file', fileBuffer, {
     filename: filename || 'arquivo',
     contentType: mime,
+    knownLength: fileBuffer.length,
   });
 
+  const body = await bufferFromStream(form);
   const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...form.getHeaders(),
+      'Content-Length': String(body.length),
     },
-    body: form,
-    duplex: 'half',
+    body,
   });
 
   const text = await res.text();
@@ -155,6 +161,31 @@ export async function sendMetaMedia(phoneNumberId, accessToken, to, { kind, medi
       id: mediaId,
       filename: filename || 'documento',
     };
+    if (caption?.trim()) payload.document.caption = caption.trim();
+  }
+
+  return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
+}
+
+/** Envia mídia por URL pública (recomendado no Vercel/serverless). */
+export async function sendMetaMediaByLink(phoneNumberId, accessToken, to, { kind, url, caption, filename }) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: digitsOnly(to),
+    type: kind,
+  };
+
+  if (kind === 'image') {
+    payload.image = { link: url };
+    if (caption?.trim()) payload.image.caption = caption.trim();
+  } else if (kind === 'video') {
+    payload.video = { link: url };
+    if (caption?.trim()) payload.video.caption = caption.trim();
+  } else if (kind === 'audio') {
+    payload.audio = { link: url };
+  } else {
+    payload.document = { link: url, filename: filename || 'documento' };
     if (caption?.trim()) payload.document.caption = caption.trim();
   }
 
