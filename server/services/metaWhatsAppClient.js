@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import FormData from 'form-data';
 
 const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -98,14 +99,20 @@ export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mime
   const mime = mimeType || 'application/octet-stream';
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');
-  form.append('type', mime);
-  form.append('file', new Blob([buffer], { type: mime }), filename || 'arquivo');
+  form.append('file', buffer, {
+    filename: filename || 'arquivo',
+    contentType: mime,
+  });
 
   const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...form.getHeaders(),
+    },
     body: form,
+    duplex: 'half',
   });
 
   const text = await res.text();

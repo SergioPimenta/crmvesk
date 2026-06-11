@@ -32,9 +32,12 @@ import {
 import { computeMessagingWindow } from '../utils/whatsappWindow.js';
 import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../utils/whatsappPhone.js';
 import {
+  assertMetaMimeSupported,
   detectMediaKind,
   mediaLabel,
+  normalizeMetaMime,
   parseMessageBody,
+  safeMediaFilename,
   serializeMediaMessage,
 } from '../utils/waMessageBody.js';
 
@@ -1049,12 +1052,14 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   if (!chat) throw new Error('Conversa não encontrada');
 
   const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
-  const kind = detectMediaKind(mimeType);
-  const safeName = String(filename || 'arquivo').trim() || 'arquivo';
+  const normalizedMime = normalizeMetaMime(filename, mimeType);
+  assertMetaMimeSupported(normalizedMime);
+  const kind = detectMediaKind(normalizedMime);
+  const safeName = safeMediaFilename(filename, normalizedMime);
 
   const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
     buffer,
-    mimeType,
+    mimeType: normalizedMime,
     filename: safeName,
   });
 
@@ -1071,7 +1076,7 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
     if (sendKind !== 'audio') throw err;
     const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
       buffer,
-      mimeType: mimeType || 'application/octet-stream',
+      mimeType: normalizedMime,
       filename: safeName,
     });
     sendKind = 'document';
