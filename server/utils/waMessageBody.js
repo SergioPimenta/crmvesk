@@ -15,6 +15,15 @@ export function serializeMediaMessage({ kind, name, caption, url }) {
   });
 }
 
+/** Preview local no CRM (data URL) quando não há Blob na Vercel. */
+export function inlinePreviewDataUrl(buffer, mimeType, kind) {
+  if (!buffer?.length) return '';
+  const maxBytes = kind === 'image' ? 900_000 : kind === 'audio' ? 600_000 : 0;
+  if (!maxBytes || buffer.length > maxBytes) return '';
+  const mime = mimeType || 'application/octet-stream';
+  return `data:${mime};base64,${Buffer.from(buffer).toString('base64')}`;
+}
+
 export function parseMessageBody(body) {
   if (!body || typeof body !== 'string') {
     return { text: body || '', media: null };

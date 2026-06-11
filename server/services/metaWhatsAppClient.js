@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { File } from 'node:buffer';
 import { buffer as bufferFromStream } from 'node:stream/consumers';
 import FormData from 'form-data';
 
@@ -95,32 +96,7 @@ export async function sendTemplate(phoneNumberId, accessToken, to, templateName,
   return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
 }
 
-/** Envia arquivo para a Meta e retorna o media id. */
-export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mimeType, filename }) {
-  const mime = mimeType || 'application/octet-stream';
-  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  if (!fileBuffer.length) throw new Error('Arquivo vazio');
-
-  const form = new FormData();
-  form.append('messaging_product', 'whatsapp');
-  form.append('file', fileBuffer, {
-    filename: filename || 'arquivo',
-    contentType: mime,
-    knownLength: fileBuffer.length,
-  });
-
-  const body = await bufferFromStream(form);
-  const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...form.getHeaders(),
-      'Content-Length': String(body.length),
-    },
-    body,
-  });
-
+async function parseMetaUploadResponse(res) {
   const text = await res.text();
   let data;
   try {
@@ -137,6 +113,49 @@ export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mime
 
   if (!data?.id) throw new Error('Meta não retornou o ID da mídia');
   return data;
+}
+
+/** Envia arquivo para a Meta e retorna o media id. */
+export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mimeType, filename }) {
+  const mime = mimeType || 'application/octet-stream';
+  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!fileBuffer.length) throw new Error('Arquivo vazio');
+  const name = filename || 'arquivo';
+  const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
+
+  // FormData nativo do Node (melhor no Vercel serverless)
+  if (typeof globalThis.FormData !== 'undefined') {
+    const form = new globalThis.FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('file', new File([fileBuffer], name, { type: mime }));
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+    return parseMetaUploadResponse(res);
+  }
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', fileBuffer, {
+    filename: name,
+    contentType: mime,
+    knownLength: fileBuffer.length,
+  });
+
+  const body = await bufferFromStream(form);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...form.getHeaders(),
+      'Content-Length': String(body.length),
+    },
+    body,
+  });
+
+  return parseMetaUploadResponse(res);
 }
 
 /** Envia imagem, documento, áudio ou vídeo via media id. */

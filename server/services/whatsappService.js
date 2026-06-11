@@ -23,7 +23,6 @@ import {
   sendTemplate as metaSendTemplate,
   uploadMetaMedia,
   sendMetaMedia,
-  sendMetaMediaByLink,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
@@ -35,6 +34,7 @@ import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../uti
 import {
   assertMetaMimeSupported,
   detectMediaKind,
+  inlinePreviewDataUrl,
   mediaLabel,
   normalizeMetaMime,
   parseMessageBody,
@@ -1018,7 +1018,7 @@ export async function listMessages(userId, chatId) {
   });
 }
 
-async function storeMediaCopy(userId, buffer, filename, contentType) {
+async function storeBlobPreview(userId, buffer, filename, contentType) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return '';
   try {
@@ -1036,21 +1036,13 @@ async function storeMediaCopy(userId, buffer, filename, contentType) {
   }
 }
 
-async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filename, caption, publicUrl }) {
-  if (publicUrl) {
-    try {
-      const result = await sendMetaMediaByLink(settings.instanceName, settings.apiKey, number, {
-        kind,
-        url: publicUrl,
-        caption,
-        filename,
-      });
-      return { result, kind };
-    } catch (err) {
-      console.warn('WhatsApp media via link:', err.message);
-    }
-  }
+async function resolveMediaPreviewUrl(userId, buffer, filename, contentType, kind) {
+  const blobUrl = await storeBlobPreview(userId, buffer, filename, contentType);
+  if (blobUrl) return blobUrl;
+  return inlinePreviewDataUrl(buffer, contentType, kind);
+}
 
+async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filename, caption }) {
   const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
     buffer,
     mimeType,
@@ -1107,22 +1099,23 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   if (!fileBuffer.length) throw new Error('Arquivo vazio');
 
-  const mediaUrl = await storeMediaCopy(userId, fileBuffer, safeName, normalizedMime);
-  if (!mediaUrl && !process.env.BLOB_READ_WRITE_TOKEN) {
-    console.warn('WhatsApp: BLOB_READ_WRITE_TOKEN ausente — upload direto para Meta será usado');
-  }
-
   const { result, kind: sendKind } = await sendMediaToMeta(settings, number, {
     kind,
     buffer: fileBuffer,
     mimeType: normalizedMime,
     filename: safeName,
     caption,
-    publicUrl: mediaUrl,
   });
 
   const waMessageId = result?.messages?.[0]?.id || null;
-  const body = serializeMediaMessage({ kind: sendKind, name: safeName, caption, url: mediaUrl });
+  const previewUrl = await resolveMediaPreviewUrl(
+    userId,
+    fileBuffer,
+    safeName,
+    normalizedMime,
+    sendKind
+  );
+  const body = serializeMediaMessage({ kind: sendKind, name: safeName, caption, url: previewUrl });
   const preview = caption?.trim() || mediaLabel({ kind: sendKind, name: safeName });
   const messageAt = new Date();
 
