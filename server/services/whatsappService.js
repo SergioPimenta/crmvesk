@@ -21,6 +21,8 @@ import {
   phoneToJid,
   sendText as metaSendText,
   sendTemplate as metaSendTemplate,
+  uploadMetaMedia,
+  sendMetaMedia,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
@@ -29,6 +31,12 @@ import {
 } from './metaWhatsAppClient.js';
 import { computeMessagingWindow } from '../utils/whatsappWindow.js';
 import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../utils/whatsappPhone.js';
+import {
+  detectMediaKind,
+  mediaLabel,
+  parseMessageBody,
+  serializeMediaMessage,
+} from '../utils/waMessageBody.js';
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3, failed: 0 };
 
@@ -994,14 +1002,109 @@ export async function listMessages(userId, chatId) {
     const fromMe = Boolean(row.fromMe);
     let status = row.status ? String(row.status).toLowerCase() : '';
     if (fromMe && !status) status = 'sent';
+    const parsed = parseMessageBody(row.text);
     return {
       id: String(row.id),
-      text: row.text,
+      text: parsed.text,
+      media: parsed.media,
       fromMe,
       messageAt: toIso(row.messageAt),
       status: fromMe ? status : undefined,
     };
   });
+}
+
+async function storeMediaCopy(userId, buffer, filename) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return '';
+  try {
+    const { put } = await import('@vercel/blob');
+    const safeName = String(filename || 'arquivo').replace(/[^\w.\-()+]/g, '_');
+    const blob = await put(`wa/${userId}/${Date.now()}-${safeName}`, buffer, {
+      access: 'public',
+      token,
+    });
+    return blob.url;
+  } catch (err) {
+    console.warn('WhatsApp media blob:', err.message);
+    return '';
+  }
+}
+
+export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename, caption }) {
+  const settings = await getSettings(userId);
+  if (!settings) throw new Error('WhatsApp não configurado');
+  if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
+  if (settings.provider !== 'meta') {
+    throw new Error('Envio de anexos disponível apenas com a API oficial Meta');
+  }
+
+  await assertMetaCustomerCareWindow(userId, chatId);
+
+  const [chatRows] = await pool.query(
+    'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
+    [chatId, userId]
+  );
+  const chat = chatRows[0] ? normalizeRow(chatRows[0]) : null;
+  if (!chat) throw new Error('Conversa não encontrada');
+
+  const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
+  const kind = detectMediaKind(mimeType);
+  const safeName = String(filename || 'arquivo').trim() || 'arquivo';
+
+  const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+    buffer,
+    mimeType,
+    filename: safeName,
+  });
+
+  let sendKind = kind;
+  let result;
+  try {
+    result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
+      kind: sendKind,
+      mediaId: upload.id,
+      caption,
+      filename: safeName,
+    });
+  } catch (err) {
+    if (sendKind !== 'audio') throw err;
+    const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+      buffer,
+      mimeType: mimeType || 'application/octet-stream',
+      filename: safeName,
+    });
+    sendKind = 'document';
+    result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
+      kind: 'document',
+      mediaId: docUpload.id,
+      caption,
+      filename: safeName,
+    });
+  }
+
+  const waMessageId = result?.messages?.[0]?.id || null;
+  const mediaUrl = await storeMediaCopy(userId, buffer, safeName);
+  const body = serializeMediaMessage({ kind: sendKind, name: safeName, caption, url: mediaUrl });
+  const preview = caption?.trim() || mediaLabel({ kind: sendKind, name: safeName });
+  const messageAt = new Date();
+
+  await insertMessage(userId, chatId, {
+    waMessageId,
+    body,
+    fromMe: true,
+    messageAt,
+    status: 'sent',
+  });
+
+  await mergeDuplicatesIntoChat(userId, Number(chatId), number);
+  await pool.query(
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+     WHERE id = ? AND user_id = ?`,
+    [phoneToCanonicalJid(number), preview, messageAt, chatId, userId]
+  );
+
+  return listMessages(userId, chatId);
 }
 
 export async function loadMessagesFromProvider(userId, chatId) {

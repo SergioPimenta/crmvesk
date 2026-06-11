@@ -93,6 +93,67 @@ export async function sendTemplate(phoneNumberId, accessToken, to, templateName,
   return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
 }
 
+/** Envia arquivo para a Meta e retorna o media id. */
+export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mimeType, filename }) {
+  const mime = mimeType || 'application/octet-stream';
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mime);
+  form.append('file', new Blob([buffer], { type: mime }), filename || 'arquivo');
+
+  const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  if (!res.ok) {
+    const message =
+      data?.error?.message || (typeof data === 'string' ? data : null) || res.statusText;
+    throw new Error(String(message));
+  }
+
+  if (!data?.id) throw new Error('Meta não retornou o ID da mídia');
+  return data;
+}
+
+/** Envia imagem, documento, áudio ou vídeo via media id. */
+export async function sendMetaMedia(phoneNumberId, accessToken, to, { kind, mediaId, caption, filename }) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: digitsOnly(to),
+    type: kind,
+  };
+
+  if (kind === 'image') {
+    payload.image = { id: mediaId };
+    if (caption?.trim()) payload.image.caption = caption.trim();
+  } else if (kind === 'video') {
+    payload.video = { id: mediaId };
+    if (caption?.trim()) payload.video.caption = caption.trim();
+  } else if (kind === 'audio') {
+    payload.audio = { id: mediaId };
+  } else {
+    payload.document = {
+      id: mediaId,
+      filename: filename || 'documento',
+    };
+    if (caption?.trim()) payload.document.caption = caption.trim();
+  }
+
+  return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
+}
+
 export function extractMessageText(message = {}) {
   if (!message || typeof message !== 'object') return '';
   if (message.type === 'text' && message.text?.body) return message.text.body;

@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { verifyToken } from '../middleware/auth.js';
 import {
   deleteSettings,
@@ -14,6 +15,7 @@ import {
   refreshConnectionStatus,
   saveSettings,
   sendChatMessage,
+  sendChatMedia,
   setChatAttendance,
   startConnection,
   syncChatsFromProvider,
@@ -26,6 +28,11 @@ import {
 import pool from '../db.js';
 
 const router = express.Router();
+
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 16 * 1024 * 1024 },
+});
 
 router.get('/webhook/:userId/:secret', async (req, res) => {
   try {
@@ -260,6 +267,26 @@ router.post('/chats/:id/messages', async (req, res) => {
 
   try {
     const messages = await sendChatMessage(req.userId, chatId, text.trim());
+    res.json({ messages });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post('/chats/:id/media', mediaUpload.single('file'), async (req, res) => {
+  const chatId = Number(req.params.id);
+  if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
+  if (!req.file?.buffer?.length) return res.status(400).json({ message: 'Arquivo é obrigatório' });
+
+  const caption = String(req.body?.caption || '').trim();
+
+  try {
+    const messages = await sendChatMedia(req.userId, chatId, {
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype || 'application/octet-stream',
+      filename: req.file.originalname || 'arquivo',
+      caption,
+    });
     res.json({ messages });
   } catch (err) {
     res.status(400).json({ message: err.message });

@@ -18,6 +18,7 @@ import {
   DEFAULT_DIAL_COUNTRY,
   nationalDigitsFromContactPhone,
 } from '../utils/countryDialCodes';
+import type { WaMediaPayload } from '../utils/waMessageBody';
 
 type MetaApprovedTemplate = {
   id: string;
@@ -40,6 +41,7 @@ type WaMessage = {
   messageAt: string;
   fromMe: boolean;
   status?: WaMsgStatus;
+  media?: WaMediaPayload | null;
 };
 
 type WaConversation = {
@@ -57,6 +59,57 @@ const initials = (name: string) => {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   return name.slice(0, 2).toUpperCase();
+};
+
+const MessageContent = ({ message }: { message: WaMessage }) => {
+  const media = message.media;
+  if (!media) return <p>{message.text}</p>;
+
+  if (media.kind === 'image' && media.url) {
+    return (
+      <div className="wa-media-block">
+        <a href={media.url} target="_blank" rel="noreferrer">
+          <img src={media.url} alt={media.name || 'Imagem'} className="wa-media-image" />
+        </a>
+        {media.caption ? <p>{media.caption}</p> : null}
+      </div>
+    );
+  }
+
+  if (media.kind === 'video' && media.url) {
+    return (
+      <div className="wa-media-block">
+        <video controls src={media.url} className="wa-media-video" preload="metadata" />
+        {media.caption ? <p>{media.caption}</p> : null}
+      </div>
+    );
+  }
+
+  if (media.kind === 'audio' && media.url) {
+    return (
+      <div className="wa-media-block">
+        <audio controls src={media.url} className="wa-media-audio" preload="metadata" />
+        {media.caption ? <p>{media.caption}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="wa-media-block">
+      {media.url ? (
+        <a href={media.url} target="_blank" rel="noreferrer" className="wa-media-doc" download={media.name}>
+          <i className="ti ti-file" aria-hidden="true" />
+          <span>{media.name || message.text}</span>
+        </a>
+      ) : (
+        <div className="wa-media-doc wa-media-doc--static">
+          <i className="ti ti-file" aria-hidden="true" />
+          <span>{media.name || message.text}</span>
+        </div>
+      )}
+      {media.caption ? <p>{media.caption}</p> : null}
+    </div>
+  );
 };
 
 const MessageChecks = ({ status }: { status?: WaMsgStatus }) => {
@@ -98,7 +151,16 @@ const WhatsApp = () => {
   const [approvedTemplates, setApprovedTemplates] = useState<MetaApprovedTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [startingAttendance, setStartingAttendance] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordStreamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevActiveIdRef = useRef<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
@@ -260,6 +322,90 @@ const WhatsApp = () => {
     setActiveId(id);
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   };
+
+  const sendMediaFile = async (file: File) => {
+    if (!active || isClosed || outsideWindow || sending) return;
+    setSending(true);
+    setAttachOpen(false);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const caption = draft.trim();
+      if (caption) form.append('caption', caption);
+      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/media`, form);
+      scrollOnNextMessagesRef.current = true;
+      setMessages(data.messages || []);
+      setDraft('');
+      await loadChats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível enviar o arquivo');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) void sendMediaFile(file);
+  };
+
+  const startRecording = async () => {
+    if (!active || isClosed || outsideWindow || sending || recording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordStreamRef.current = stream;
+      const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+        ? 'audio/ogg;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        recordStreamRef.current = null;
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+        const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: mimeType });
+        void sendMediaFile(file);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      alert('Não foi possível acessar o microfone. Verifique as permissões do navegador.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    setRecording(false);
+  };
+
+  useEffect(() => {
+    if (!attachOpen) return undefined;
+    const onDocClick = (e: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+        setAttachOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [attachOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -563,7 +709,7 @@ const WhatsApp = () => {
                     ) : (
                       <div key={item.key} className={`wa-bubble-wrap${item.message.fromMe ? ' out' : ' in'}`}>
                         <div className={`wa-bubble${item.message.fromMe ? ' out' : ' in'}`}>
-                          <p>{item.message.text}</p>
+                          <MessageContent message={item.message} />
                           <div className="wa-bubble-meta">
                             <time dateTime={item.message.messageAt}>{formatMessageTime(item.message.messageAt)}</time>
                             {item.message.fromMe ? <MessageChecks status={item.message.status} /> : null}
@@ -599,16 +745,106 @@ const WhatsApp = () => {
                   </div>
                 ) : (
                   <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
-                    <button type="button" className="crm-icon-btn" title="Anexo" aria-label="Anexar arquivo" disabled>
-                      <i className="ti ti-paperclip" aria-hidden="true" />
-                    </button>
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={onFileSelected}
+                    />
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      hidden
+                      onChange={onFileSelected}
+                    />
+                    <input
+                      ref={documentInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,application/*"
+                      hidden
+                      onChange={onFileSelected}
+                    />
+                    <div className="wa-compose-attach" ref={attachMenuRef}>
+                      <button
+                        type="button"
+                        className="crm-icon-btn"
+                        title="Anexar"
+                        aria-label="Anexar arquivo"
+                        aria-expanded={attachOpen}
+                        disabled={sending || recording}
+                        onClick={() => setAttachOpen((o) => !o)}
+                      >
+                        <i className="ti ti-paperclip" aria-hidden="true" />
+                      </button>
+                      {attachOpen ? (
+                        <div className="wa-attach-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setAttachOpen(false);
+                              imageInputRef.current?.click();
+                            }}
+                          >
+                            <i className="ti ti-photo" aria-hidden="true" />
+                            Imagem
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setAttachOpen(false);
+                              videoInputRef.current?.click();
+                            }}
+                          >
+                            <i className="ti ti-video" aria-hidden="true" />
+                            Vídeo
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setAttachOpen(false);
+                              documentInputRef.current?.click();
+                            }}
+                          >
+                            <i className="ti ti-file" aria-hidden="true" />
+                            Documento
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    {recording ? (
+                      <button
+                        type="button"
+                        className="wa-record-btn wa-record-btn--active"
+                        title="Parar gravação"
+                        aria-label="Parar gravação de áudio"
+                        onClick={stopRecording}
+                      >
+                        <i className="ti ti-player-stop" aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="crm-icon-btn wa-record-btn"
+                        title="Gravar áudio"
+                        aria-label="Gravar áudio"
+                        disabled={sending}
+                        onClick={() => void startRecording()}
+                      >
+                        <i className="ti ti-microphone" aria-hidden="true" />
+                      </button>
+                    )}
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder="Digite uma mensagem…"
+                      placeholder={recording ? 'Gravando áudio…' : 'Digite uma mensagem…'}
                       rows={1}
                       aria-label="Mensagem"
-                      disabled={sending}
+                      disabled={sending || recording}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
@@ -616,7 +852,12 @@ const WhatsApp = () => {
                         }
                       }}
                     />
-                    <button type="submit" className="wa-send-btn" disabled={!draft.trim() || sending} aria-label="Enviar">
+                    <button
+                      type="submit"
+                      className="wa-send-btn"
+                      disabled={!draft.trim() || sending || recording}
+                      aria-label="Enviar"
+                    >
                       <i className="ti ti-send" aria-hidden="true" />
                     </button>
                   </form>
