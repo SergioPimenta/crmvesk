@@ -1,5 +1,4 @@
 import express from 'express';
-import multer from 'multer';
 import { verifyToken } from '../middleware/auth.js';
 import {
   deleteSettings,
@@ -29,10 +28,7 @@ import pool from '../db.js';
 
 const router = express.Router();
 
-const mediaUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 16 * 1024 * 1024 },
-});
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
 router.get('/webhook/:userId/:secret', async (req, res) => {
   try {
@@ -273,19 +269,33 @@ router.post('/chats/:id/messages', async (req, res) => {
   }
 });
 
-router.post('/chats/:id/media', mediaUpload.single('file'), async (req, res) => {
+router.post('/chats/:id/media', async (req, res) => {
   const chatId = Number(req.params.id);
   if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
-  if (!req.file?.buffer?.length) return res.status(400).json({ message: 'Arquivo é obrigatório' });
 
-  const caption = String(req.body?.caption || '').trim();
+  const { data, mimeType, filename, caption } = req.body ?? {};
+  if (!data || typeof data !== 'string') {
+    return res.status(400).json({ message: 'Arquivo é obrigatório' });
+  }
+
+  let buffer;
+  try {
+    buffer = Buffer.from(data, 'base64');
+  } catch {
+    return res.status(400).json({ message: 'Arquivo inválido' });
+  }
+
+  if (!buffer.length) return res.status(400).json({ message: 'Arquivo vazio' });
+  if (buffer.length > MAX_MEDIA_BYTES) {
+    return res.status(400).json({ message: 'Arquivo muito grande (máx. 8 MB)' });
+  }
 
   try {
     const messages = await sendChatMedia(req.userId, chatId, {
-      buffer: req.file.buffer,
-      mimeType: req.file.mimetype || 'application/octet-stream',
-      filename: req.file.originalname || 'arquivo',
-      caption,
+      buffer,
+      mimeType: mimeType || 'application/octet-stream',
+      filename: filename || 'arquivo',
+      caption: String(caption || '').trim(),
     });
     res.json({ messages });
   } catch (err) {

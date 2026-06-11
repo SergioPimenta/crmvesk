@@ -1043,11 +1043,16 @@ async function resolveMediaPreviewUrl(userId, buffer, filename, contentType, kin
 }
 
 async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filename, caption }) {
-  const upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
-    buffer,
-    mimeType,
-    filename,
-  });
+  let upload;
+  try {
+    upload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+      buffer,
+      mimeType,
+      filename,
+    });
+  } catch (err) {
+    throw new Error(`Upload para Meta: ${err.message}`);
+  }
 
   try {
     const result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
@@ -1058,19 +1063,23 @@ async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filen
     });
     return { result, kind };
   } catch (err) {
-    if (kind !== 'audio') throw err;
-    const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
-      buffer,
-      mimeType,
-      filename,
-    });
-    const result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
-      kind: 'document',
-      mediaId: docUpload.id,
-      caption,
-      filename,
-    });
-    return { result, kind: 'document' };
+    if (kind !== 'audio') throw new Error(`Envio para WhatsApp: ${err.message}`);
+    try {
+      const docUpload = await uploadMetaMedia(settings.instanceName, settings.apiKey, {
+        buffer,
+        mimeType,
+        filename,
+      });
+      const result = await sendMetaMedia(settings.instanceName, settings.apiKey, number, {
+        kind: 'document',
+        mediaId: docUpload.id,
+        caption,
+        filename,
+      });
+      return { result, kind: 'document' };
+    } catch (docErr) {
+      throw new Error(`Envio para WhatsApp: ${docErr.message}`);
+    }
   }
 }
 
@@ -1092,7 +1101,7 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   if (!chat) throw new Error('Conversa não encontrada');
 
   const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
-  const normalizedMime = normalizeMetaMime(filename, mimeType);
+  const normalizedMime = normalizeMetaMime(filename, mimeType, fileBuffer);
   assertMetaMimeSupported(normalizedMime);
   const kind = detectMediaKind(normalizedMime);
   const safeName = safeMediaFilename(filename, normalizedMime);

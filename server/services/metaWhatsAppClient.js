@@ -1,7 +1,4 @@
 import crypto from 'crypto';
-import { File } from 'node:buffer';
-import { buffer as bufferFromStream } from 'node:stream/consumers';
-import FormData from 'form-data';
 
 const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -42,9 +39,7 @@ export async function metaRequest(accessToken, method, path, body) {
 
   if (!res.ok) {
     const message =
-      (data?.error?.message) ||
-      (typeof data === 'string' ? data : null) ||
-      res.statusText;
+      metaErrorMessage(data, typeof data === 'string' ? data : null) || res.statusText;
     const err = new Error(String(message));
     err.status = res.status;
     err.data = data;
@@ -96,6 +91,36 @@ export async function sendTemplate(phoneNumberId, accessToken, to, templateName,
   return metaRequest(accessToken, 'POST', `/${phoneNumberId}/messages`, payload);
 }
 
+function metaErrorMessage(data, fallback) {
+  const err = data?.error;
+  if (!err) return fallback;
+  const parts = [err.message, err.error_user_msg, err.error_data?.details].filter(Boolean);
+  return parts.length ? parts.join(' — ') : fallback;
+}
+
+function buildMetaMultipartBody(fileBuffer, mime, filename) {
+  const boundary = `----MetaWa${crypto.randomBytes(12).toString('hex')}`;
+  const safeName = String(filename || 'arquivo').replace(/"/g, '_');
+  const chunks = [
+    Buffer.from(
+      `--${boundary}\r\n` +
+        'Content-Disposition: form-data; name="messaging_product"\r\n\r\n' +
+        'whatsapp\r\n'
+    ),
+    Buffer.from(
+      `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+        `Content-Type: ${mime}\r\n\r\n`
+    ),
+    fileBuffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ];
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
 async function parseMetaUploadResponse(res) {
   const text = await res.text();
   let data;
@@ -106,9 +131,7 @@ async function parseMetaUploadResponse(res) {
   }
 
   if (!res.ok) {
-    const message =
-      data?.error?.message || (typeof data === 'string' ? data : null) || res.statusText;
-    throw new Error(String(message));
+    throw new Error(metaErrorMessage(data, res.statusText || 'Falha no upload para Meta'));
   }
 
   if (!data?.id) throw new Error('Meta não retornou o ID da mídia');
@@ -122,34 +145,13 @@ export async function uploadMetaMedia(phoneNumberId, accessToken, { buffer, mime
   if (!fileBuffer.length) throw new Error('Arquivo vazio');
   const name = filename || 'arquivo';
   const url = `${GRAPH_BASE}/${phoneNumberId}/media`;
+  const { body, contentType } = buildMetaMultipartBody(fileBuffer, mime, name);
 
-  // FormData nativo do Node (melhor no Vercel serverless)
-  if (typeof globalThis.FormData !== 'undefined') {
-    const form = new globalThis.FormData();
-    form.append('messaging_product', 'whatsapp');
-    form.append('file', new File([fileBuffer], name, { type: mime }));
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      body: form,
-    });
-    return parseMetaUploadResponse(res);
-  }
-
-  const form = new FormData();
-  form.append('messaging_product', 'whatsapp');
-  form.append('file', fileBuffer, {
-    filename: name,
-    contentType: mime,
-    knownLength: fileBuffer.length,
-  });
-
-  const body = await bufferFromStream(form);
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      ...form.getHeaders(),
+      'Content-Type': contentType,
       'Content-Length': String(body.length),
     },
     body,

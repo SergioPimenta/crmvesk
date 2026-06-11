@@ -55,7 +55,7 @@ export async function createApp() {
   };
 
   app.use(express.json({
-    limit: '10mb',
+    limit: '12mb',
     verify: (req, _res, buf) => {
       if (isWhatsappWebhook(req)) {
         req.rawBody = buf.toString('utf8');

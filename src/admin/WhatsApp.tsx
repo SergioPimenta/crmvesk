@@ -323,16 +323,35 @@ const WhatsApp = () => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   };
 
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error('Não foi possível ler o arquivo'));
+      reader.readAsDataURL(file);
+    });
+
   const sendMediaFile = async (file: File) => {
     if (!active || isClosed || outsideWindow || sending) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Arquivo muito grande. O limite é 8 MB.');
+      return;
+    }
     setSending(true);
     setAttachOpen(false);
     try {
-      const form = new FormData();
-      form.append('file', file);
       const caption = draft.trim();
-      if (caption) form.append('caption', caption);
-      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/media`, form);
+      const payload = {
+        data: await fileToBase64(file),
+        mimeType: file.type || 'application/octet-stream',
+        filename: file.name || 'arquivo',
+        caption,
+      };
+      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/media`, payload);
       scrollOnNextMessagesRef.current = true;
       setMessages(data.messages || []);
       setDraft('');
