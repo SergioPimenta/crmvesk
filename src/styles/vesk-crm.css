@@ -233,13 +233,6 @@ body.vesk-app {
 .crm-sidebar:hover,
 .crm-sidebar:focus-within {
   width: 200px;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  height: 100%;
-  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.45);
-  z-index: 30;
 }
 
 .crm-nav-section {
