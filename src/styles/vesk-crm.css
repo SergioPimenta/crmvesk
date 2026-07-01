@@ -213,16 +213,33 @@ body.vesk-app {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .crm-sidebar {
-  width: 200px;
+  width: 64px;
   background: var(--vesk-surface);
   border-right: 1px solid var(--vesk-border);
   display: flex;
   flex-direction: column;
   padding: 16px 10px;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  transition: width 0.18s ease, box-shadow 0.18s ease;
+}
+
+.crm-sidebar:hover,
+.crm-sidebar:focus-within {
+  width: 200px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100%;
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.45);
+  z-index: 30;
 }
 
 .crm-nav-section {
@@ -237,6 +254,14 @@ body.vesk-app {
   color: var(--vesk-sub);
   padding: 0 8px;
   margin-bottom: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.crm-sidebar:hover .crm-nav-label,
+.crm-sidebar:focus-within .crm-nav-label {
+  opacity: 1;
 }
 
 .crm-nav-item {
@@ -257,6 +282,17 @@ body.vesk-app {
   text-align: left;
   font-family: var(--font-body);
   text-decoration: none;
+}
+
+.crm-nav-text {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.crm-sidebar:hover .crm-nav-text,
+.crm-sidebar:focus-within .crm-nav-text {
+  opacity: 1;
 }
 
 .crm-nav-item:hover {
