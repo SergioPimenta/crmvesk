@@ -1855,6 +1855,12 @@ body.vesk-app {
   min-height: 0;
 }
 
+.wa-conv-item {
+  flex-shrink: 0;
+  padding: 10px;
+  cursor: pointer;
+}
+
 .wa-conv-row {
   display: flex;
   gap: 10px;
