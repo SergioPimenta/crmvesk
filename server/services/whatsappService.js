@@ -23,6 +23,7 @@ import {
   sendTemplate as metaSendTemplate,
   uploadMetaMedia,
   sendMetaMedia,
+  downloadMetaMedia,
   validateConnection,
   verifySignature,
   subscribeAppToWaba,
@@ -636,13 +637,35 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
     }
 
     for (const item of items) {
-      if (!item.text) continue;
+      if (!item.text && !item.media) continue;
       try {
+        let body = item.text;
+        let preview = item.text;
+
+        if (item.media) {
+          try {
+            const { buffer, mimeType } = await downloadMetaMedia(settings.apiKey, item.media.id);
+            const normalizedMime = normalizeMetaMime(item.media.filename, mimeType || item.media.mimeType, buffer);
+            const kind = item.media.kind === 'document' ? 'document' : detectMediaKind(normalizedMime) || item.media.kind;
+            const safeName = safeMediaFilename(
+              item.media.filename || `${kind}-${item.waMessageId || Date.now()}`,
+              normalizedMime
+            );
+            const previewUrl = await resolveMediaPreviewUrl(userId, buffer, safeName, normalizedMime, kind);
+            body = serializeMediaMessage({ kind, name: safeName, caption: item.media.caption, url: previewUrl });
+            preview = item.media.caption?.trim() || mediaLabel({ kind, name: safeName });
+          } catch (mediaErr) {
+            console.error('WhatsApp webhook media download:', mediaErr.message);
+            body = item.text || `[Mídia recebida — falha ao baixar: ${mediaErr.message}]`;
+            preview = body;
+          }
+        }
+
         const remoteJid = phoneToCanonicalJid(item.from);
         const chatId = await upsertChat(userId, {
           remoteJid,
           name: item.contactName || item.from,
-          lastMessage: item.text,
+          lastMessage: preview,
           lastMessageAt: item.messageAt,
           incrementUnread: true,
         });
@@ -652,7 +675,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
         );
         await insertMessage(userId, chatId, {
           waMessageId: item.waMessageId,
-          body: item.text,
+          body,
           fromMe: false,
           messageAt: item.messageAt,
         });

@@ -228,6 +228,42 @@ export function extractMessageText(message = {}) {
   return `[Mensagem ${type} — abra no WhatsApp]`;
 }
 
+const MEDIA_MESSAGE_TYPES = ['image', 'video', 'audio', 'document', 'sticker'];
+
+/** Extrai a referência de mídia (id, mime, legenda) de uma mensagem recebida da Meta. */
+export function extractMediaRef(message = {}) {
+  const type = message?.type;
+  if (!MEDIA_MESSAGE_TYPES.includes(type)) return null;
+  const node = message[type];
+  if (!node?.id) return null;
+  return {
+    kind: type === 'sticker' ? 'image' : type,
+    id: node.id,
+    mimeType: node.mime_type || '',
+    filename: node.filename || '',
+    caption: node.caption || '',
+  };
+}
+
+/** Resolve a URL temporária de uma mídia recebida e baixa o conteúdo binário. */
+export async function downloadMetaMedia(accessToken, mediaId) {
+  const meta = await metaRequest(accessToken, 'GET', `/${mediaId}`);
+  if (!meta?.url) throw new Error('Meta não retornou a URL da mídia');
+
+  const res = await fetch(meta.url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Falha ao baixar mídia da Meta (${res.status})`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType: meta.mime_type || res.headers.get('content-type') || '',
+  };
+}
+
 /** Extrai mensagens recebidas do payload do webhook da Meta. */
 export function parseWebhookMessages(payload) {
   const items = [];
@@ -251,6 +287,7 @@ export function parseWebhookMessages(payload) {
           from,
           waMessageId: message.id,
           text: extractMessageText(message),
+          media: extractMediaRef(message),
           contactName: contactsByWaId[from] || '',
           messageAt: message.timestamp
             ? new Date(Number(message.timestamp) * 1000)
