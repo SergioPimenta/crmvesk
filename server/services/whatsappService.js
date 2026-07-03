@@ -987,6 +987,15 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
   return { sent: sent.length, failed, phones: sent };
 }
 
+export async function getUnreadCount(userId) {
+  const [rows] = await pool.query(
+    `SELECT COALESCE(SUM(unread), 0) AS total FROM whatsapp_chats
+     WHERE user_id = ? AND COALESCE(attendance_status, 'open') = 'open'`,
+    [userId]
+  );
+  return Number(rows[0]?.total) || 0;
+}
+
 export async function listChats(userId) {
   await dedupeUserChats(userId);
 

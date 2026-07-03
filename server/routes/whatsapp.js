@@ -23,6 +23,7 @@ import {
   getMessageTemplates,
   getChatMessagingWindow,
   sendBulkTemplates,
+  getUnreadCount,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 
@@ -193,6 +194,15 @@ router.get('/chats', async (req, res) => {
   }
   const chats = await listChats(req.userId);
   res.json({ configured: true, status: status.status, provider: status.provider, chats });
+});
+
+router.get('/unread-count', async (req, res) => {
+  try {
+    const count = await getUnreadCount(req.userId);
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: err.message, count: 0 });
+  }
 });
 
 router.post('/chats', async (req, res) => {

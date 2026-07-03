@@ -117,6 +117,9 @@ type CrmDataContextType = {
   activities: Activity[];
   emails: EmailItem[];
   proposals: Proposal[];
+  whatsappUnread: number;
+  setWhatsappUnread: (n: number) => void;
+  refreshWhatsappUnread: () => Promise<void>;
 
   addCompany: (company: Omit<Company, 'id'> & { id?: string }) => string;
   addContact: (
@@ -206,6 +209,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activities, setActivities] = useState<Activity[]>([]);
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [whatsappUnread, setWhatsappUnread] = useState(0);
 
   const clearCrmState = useCallback(() => {
     setPipelines([]);
@@ -217,6 +221,16 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActivities([]);
     setEmails([]);
     setProposals([]);
+    setWhatsappUnread(0);
+  }, []);
+
+  const refreshWhatsappUnread = useCallback(async () => {
+    try {
+      const data = await api.get<{ count: number }>('/whatsapp/unread-count');
+      setWhatsappUnread(Number(data?.count) || 0);
+    } catch {
+      /* WhatsApp não configurado ou offline — mantém contagem atual */
+    }
   }, []);
 
   const loadCrmData = useCallback(async (userId: number) => {
@@ -312,6 +326,17 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelled = true;
     };
   }, [user?.id, clearCrmState, loadCrmData]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    void refreshWhatsappUnread();
+    const interval = window.setInterval(() => {
+      void refreshWhatsappUnread();
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [user?.id, refreshWhatsappUnread]);
 
   useEffect(() => {
     if (!activePipelineId || !user?.id) {
@@ -738,6 +763,9 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     activities,
     emails,
     proposals,
+    whatsappUnread,
+    setWhatsappUnread,
+    refreshWhatsappUnread,
     addCompany,
     addContact,
     addDeal,

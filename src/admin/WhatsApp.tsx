@@ -208,7 +208,7 @@ const MessageChecks = ({ status }: { status?: WaMsgStatus }) => {
 };
 
 const WhatsApp = () => {
-  const { contacts, getCompanyName } = useCrmData();
+  const { contacts, getCompanyName, setWhatsappUnread } = useCrmData();
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
@@ -400,6 +400,10 @@ const WhatsApp = () => {
   }, [filtered, activeId]);
 
   const totalUnread = useMemo(() => conversations.reduce((n, c) => n + c.unread, 0), [conversations]);
+
+  useEffect(() => {
+    setWhatsappUnread(totalUnread);
+  }, [totalUnread, setWhatsappUnread]);
 
   const selectConversation = (id: string) => {
     setActiveId(id);

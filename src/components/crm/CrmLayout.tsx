@@ -18,7 +18,7 @@ const getInitials = (name?: string) => {
 
 const CrmLayout = ({ children }: CrmLayoutProps) => {
   const { user, logout } = useAuth();
-  const { contacts, emails } = useCrmData();
+  const { contacts, emails, whatsappUnread } = useCrmData();
   const navigate = useNavigate();
 
   const contatosPendentes = contacts.filter((c) => c.precisaFollowUp).length;
@@ -98,6 +98,7 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
             <NavLink to="/admin/whatsapp" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="WhatsApp">
               <i className="ti ti-brand-whatsapp" aria-hidden="true" />
               <span className="crm-nav-text">WhatsApp</span>
+              {whatsappUnread > 0 ? <span className="nav-count">{whatsappUnread}</span> : null}
             </NavLink>
             <NavLink to="/admin/relatorios" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Relatórios">
               <i className="ti ti-chart-bar" aria-hidden="true" />
