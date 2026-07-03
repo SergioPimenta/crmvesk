@@ -111,6 +111,7 @@ export async function runMigrations() {
 
   await migrateWhatsappMetaColumns();
   await migrateWhatsappWebhookLogs();
+  await migratePushSubscriptions();
   await migrateWhatsappChatUi();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
@@ -198,6 +199,23 @@ async function migrateWhatsappWebhookLogs() {
     )
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_webhook_logs_user ON whatsapp_webhook_logs(user_id)');
+}
+
+async function migratePushSubscriptions() {
+  if (await tableExists('push_subscriptions')) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, endpoint)
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id)');
 }
 
 async function migrateWhatsappButtonWidgets() {

@@ -30,6 +30,7 @@ import {
   listMessageTemplates,
   resolveWabaId,
 } from './metaWhatsAppClient.js';
+import { sendPushToUser } from './pushService.js';
 import { computeMessagingWindow } from '../utils/whatsappWindow.js';
 import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../utils/whatsappPhone.js';
 import {
@@ -679,6 +680,14 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
           fromMe: false,
           messageAt: item.messageAt,
         });
+
+        const senderName = item.contactName || item.from;
+        void sendPushToUser(userId, {
+          title: `WhatsApp — ${senderName}`,
+          body: (preview || 'Nova mensagem').slice(0, 120),
+          url: '/admin/whatsapp',
+          tag: `wa-${chatId}`,
+        }).catch((pushErr) => console.warn('Push WhatsApp:', pushErr.message));
       } catch (err) {
         console.error('WhatsApp webhook insert:', err.message);
         await logWebhookEvent(userId, {

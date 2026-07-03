@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { enrichDealWithContact, mapDealRow } from '../utils/apiRow';
 import { useAuth } from './AuthContext';
+import {
+  pushSupported as pushIsSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isPushSubscribed,
+} from '../utils/push';
 
 export type ContactStage = 'Prospecção' | 'Qualificação' | 'Proposta' | 'Negociação' | 'Fechado';
 export type ContactType = 'Lead' | 'Cliente' | 'Prospect';
@@ -123,6 +129,14 @@ type CrmDataContextType = {
   refreshWhatsappUnread: () => Promise<void>;
   notificationsEnabled: boolean;
   toggleNotifications: () => Promise<boolean>;
+  notifyWhatsapp: boolean;
+  notifyEmail: boolean;
+  setNotifyWhatsapp: (v: boolean) => void;
+  setNotifyEmail: (v: boolean) => void;
+  pushEnabled: boolean;
+  pushBusy: boolean;
+  pushSupported: boolean;
+  togglePush: () => Promise<void>;
 
   addCompany: (company: Omit<Company, 'id'> & { id?: string }) => string;
   addContact: (
@@ -558,6 +572,65 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return false;
   }, [notificationsSupported, notificationsEnabled]);
 
+  // Preferências por canal (WhatsApp / e-mail).
+  const [notifyWhatsapp, setNotifyWhatsappState] = useState<boolean>(
+    () => localStorage.getItem('crm_notify_whatsapp') !== '0'
+  );
+  const [notifyEmail, setNotifyEmailState] = useState<boolean>(
+    () => localStorage.getItem('crm_notify_email') !== '0'
+  );
+  const setNotifyWhatsapp = useCallback((v: boolean) => {
+    setNotifyWhatsappState(v);
+    localStorage.setItem('crm_notify_whatsapp', v ? '1' : '0');
+  }, []);
+  const setNotifyEmail = useCallback((v: boolean) => {
+    setNotifyEmailState(v);
+    localStorage.setItem('crm_notify_email', v ? '1' : '0');
+  }, []);
+
+  // Push no celular (Web Push).
+  const pushSupported = pushIsSupported();
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id || !pushSupported) {
+      setPushEnabled(false);
+      return;
+    }
+    void isPushSubscribed()
+      .then(setPushEnabled)
+      .catch(() => setPushEnabled(false));
+  }, [user?.id, pushSupported]);
+
+  const togglePush = useCallback(async () => {
+    if (!pushSupported) {
+      window.alert('Este dispositivo não suporta notificações push.');
+      return;
+    }
+    setPushBusy(true);
+    try {
+      if (pushEnabled) {
+        await unsubscribeFromPush();
+        setPushEnabled(false);
+      } else {
+        if (Notification.permission !== 'granted') {
+          const perm = await Notification.requestPermission();
+          if (perm !== 'granted') {
+            window.alert('Permissão de notificações negada. Habilite nas configurações do navegador.');
+            return;
+          }
+        }
+        await subscribeToPush();
+        setPushEnabled(true);
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Falha ao configurar push no celular.');
+    } finally {
+      setPushBusy(false);
+    }
+  }, [pushSupported, pushEnabled]);
+
   // Polling: contagem do WhatsApp + e-mails, para detectar mensagens novas.
   useEffect(() => {
     if (!user?.id) return;
@@ -593,7 +666,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const prev = prevWaUnreadRef.current;
     prevWaUnreadRef.current = whatsappUnread;
-    if (prev === null || !notifArmedRef.current || !notificationsEnabled) return;
+    if (prev === null || !notifArmedRef.current || !notificationsEnabled || !notifyWhatsapp) return;
     if (whatsappUnread > prev) {
       const diff = whatsappUnread - prev;
       notifyBrowser(
@@ -604,14 +677,14 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         '/admin/whatsapp'
       );
     }
-  }, [whatsappUnread, notificationsEnabled, notifyBrowser]);
+  }, [whatsappUnread, notificationsEnabled, notifyWhatsapp, notifyBrowser]);
 
   const emailUnread = emails.filter((e) => isEmailUnread(e.status)).length;
 
   useEffect(() => {
     const prev = prevEmailUnreadRef.current;
     prevEmailUnreadRef.current = emailUnread;
-    if (prev === null || !notifArmedRef.current || !notificationsEnabled) return;
+    if (prev === null || !notifArmedRef.current || !notificationsEnabled || !notifyEmail) return;
     if (emailUnread > prev) {
       const diff = emailUnread - prev;
       notifyBrowser(
@@ -620,7 +693,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         '/admin/emails'
       );
     }
-  }, [emailUnread, notificationsEnabled, notifyBrowser]);
+  }, [emailUnread, notificationsEnabled, notifyEmail, notifyBrowser]);
 
   const refreshCrmData = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -879,6 +952,14 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     refreshWhatsappUnread,
     notificationsEnabled,
     toggleNotifications,
+    notifyWhatsapp,
+    notifyEmail,
+    setNotifyWhatsapp,
+    setNotifyEmail,
+    pushEnabled,
+    pushBusy,
+    pushSupported,
+    togglePush,
     addCompany,
     addContact,
     addDeal,

@@ -215,6 +215,141 @@ body.vesk-app {
   color: var(--vesk-orange);
 }
 
+/* ---- Menu de preferências de notificações ---- */
+.crm-notif {
+  position: relative;
+  display: inline-flex;
+}
+
+.crm-notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  background: var(--vesk-surface);
+  border: 1px solid var(--vesk-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+  z-index: 100;
+}
+
+.crm-notif-title {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--vesk-text);
+  margin-bottom: 8px;
+}
+
+.crm-notif-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.crm-notif-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.crm-notif-row-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vesk-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.crm-notif-row-label i {
+  color: var(--vesk-muted);
+  font-size: 14px;
+}
+
+.crm-notif-row-desc {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  margin-top: 2px;
+}
+
+.crm-notif-channels {
+  padding-left: 8px;
+  border-left: 2px solid var(--vesk-border);
+  margin-left: 4px;
+  transition: opacity 0.15s;
+}
+
+.crm-notif-channels.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.crm-notif-divider {
+  height: 1px;
+  background: var(--vesk-border);
+  margin: 8px 0;
+}
+
+.crm-notif-hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--vesk-muted);
+  background: var(--vesk-surface2);
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+}
+
+.crm-notif-hint i {
+  color: var(--vesk-orange);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Switch */
+.crm-switch {
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.crm-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--vesk-muted);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.crm-switch.on {
+  background: var(--vesk-orange-glow);
+  border-color: var(--vesk-orange);
+}
+
+.crm-switch.on .crm-switch-knob {
+  transform: translateX(16px);
+  background: var(--vesk-orange);
+}
+
+.crm-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .crm-body {
   display: flex;
   flex: 1;
