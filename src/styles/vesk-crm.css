@@ -209,6 +209,12 @@ body.vesk-app {
   color: var(--vesk-text);
 }
 
+.crm-icon-btn.active {
+  background: var(--vesk-orange-glow);
+  border-color: #e85d2440;
+  color: var(--vesk-orange);
+}
+
 .crm-body {
   display: flex;
   flex: 1;

@@ -18,7 +18,7 @@ const getInitials = (name?: string) => {
 
 const CrmLayout = ({ children }: CrmLayoutProps) => {
   const { user, logout } = useAuth();
-  const { contacts, emails, whatsappUnread } = useCrmData();
+  const { contacts, emails, whatsappUnread, notificationsEnabled, toggleNotifications } = useCrmData();
   const navigate = useNavigate();
 
   const contatosPendentes = contacts.filter((c) => c.precisaFollowUp).length;
@@ -44,8 +44,15 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
           <input type="text" placeholder="Buscar contato, empresa…" aria-label="Buscar" />
         </div>
         <div className="crm-topbar-actions">
-          <button type="button" className="crm-icon-btn" title="Notificações" aria-label="Notificações">
-            <i className="ti ti-bell" aria-hidden="true" />
+          <button
+            type="button"
+            className={`crm-icon-btn${notificationsEnabled ? ' active' : ''}`}
+            title={notificationsEnabled ? 'Notificações ativadas — clique para desativar' : 'Ativar notificações de novas mensagens'}
+            aria-label="Alternar notificações"
+            aria-pressed={notificationsEnabled}
+            onClick={() => void toggleNotifications()}
+          >
+            <i className={`ti ${notificationsEnabled ? 'ti-bell-ringing' : 'ti-bell'}`} aria-hidden="true" />
           </button>
           <button type="button" className="crm-icon-btn" title="Configurações" aria-label="Configurações">
             <i className="ti ti-settings" aria-hidden="true" />

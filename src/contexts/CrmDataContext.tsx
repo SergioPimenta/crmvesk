@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { enrichDealWithContact, mapDealRow } from '../utils/apiRow';
 import { useAuth } from './AuthContext';
@@ -120,6 +121,8 @@ type CrmDataContextType = {
   whatsappUnread: number;
   setWhatsappUnread: (n: number) => void;
   refreshWhatsappUnread: () => Promise<void>;
+  notificationsEnabled: boolean;
+  toggleNotifications: () => Promise<boolean>;
 
   addCompany: (company: Omit<Company, 'id'> & { id?: string }) => string;
   addContact: (
@@ -182,6 +185,7 @@ const genId = (prefix: string) =>
 
 export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [activePipelineId, setActivePipelineIdState] = useState<string | null>(null);
@@ -326,17 +330,6 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelled = true;
     };
   }, [user?.id, clearCrmState, loadCrmData]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    void refreshWhatsappUnread();
-    const interval = window.setInterval(() => {
-      void refreshWhatsappUnread();
-    }, 15000);
-
-    return () => window.clearInterval(interval);
-  }, [user?.id, refreshWhatsappUnread]);
 
   useEffect(() => {
     if (!activePipelineId || !user?.id) {
@@ -510,6 +503,124 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }))
     );
   }, []);
+
+  // ---- Notificações de novas mensagens (WhatsApp / e-mails) ----
+  const notificationsSupported =
+    typeof window !== 'undefined' && 'Notification' in window;
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
+    if (!notificationsSupported) return false;
+    return (
+      localStorage.getItem('crm_notifications_enabled') === '1' &&
+      Notification.permission === 'granted'
+    );
+  });
+
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
+  const notifyBrowser = useCallback((title: string, body: string, path: string) => {
+    if (!notificationsSupported || Notification.permission !== 'granted') return;
+    try {
+      const notification = new Notification(title, { body, icon: '/vite.svg', tag: path });
+      notification.onclick = () => {
+        window.focus();
+        navigateRef.current(path);
+        notification.close();
+      };
+    } catch {
+      /* alguns navegadores exigem service worker; ignora silenciosamente */
+    }
+  }, [notificationsSupported]);
+
+  const toggleNotifications = useCallback(async () => {
+    if (!notificationsSupported) {
+      window.alert('Este navegador não suporta notificações.');
+      return false;
+    }
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      localStorage.setItem('crm_notifications_enabled', '0');
+      return false;
+    }
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      localStorage.setItem('crm_notifications_enabled', '1');
+      return true;
+    }
+    window.alert(
+      'Permissão de notificações negada. Habilite nas configurações do navegador para receber alertas.'
+    );
+    return false;
+  }, [notificationsSupported, notificationsEnabled]);
+
+  // Polling: contagem do WhatsApp + e-mails, para detectar mensagens novas.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    void refreshWhatsappUnread();
+    void refreshEmails().catch(() => {});
+    const interval = window.setInterval(() => {
+      void refreshWhatsappUnread();
+      void refreshEmails().catch(() => {});
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [user?.id, refreshWhatsappUnread, refreshEmails]);
+
+  // Só dispara notificações após um curto período, evitando alertar na carga inicial.
+  const notifArmedRef = useRef(false);
+  const prevWaUnreadRef = useRef<number | null>(null);
+  const prevEmailUnreadRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      notifArmedRef.current = false;
+      prevWaUnreadRef.current = null;
+      prevEmailUnreadRef.current = null;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      notifArmedRef.current = true;
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const prev = prevWaUnreadRef.current;
+    prevWaUnreadRef.current = whatsappUnread;
+    if (prev === null || !notifArmedRef.current || !notificationsEnabled) return;
+    if (whatsappUnread > prev) {
+      const diff = whatsappUnread - prev;
+      notifyBrowser(
+        'Novas mensagens no WhatsApp',
+        diff === 1
+          ? 'Você recebeu 1 nova mensagem no WhatsApp.'
+          : `Você recebeu ${diff} novas mensagens no WhatsApp.`,
+        '/admin/whatsapp'
+      );
+    }
+  }, [whatsappUnread, notificationsEnabled, notifyBrowser]);
+
+  const emailUnread = emails.filter((e) => isEmailUnread(e.status)).length;
+
+  useEffect(() => {
+    const prev = prevEmailUnreadRef.current;
+    prevEmailUnreadRef.current = emailUnread;
+    if (prev === null || !notifArmedRef.current || !notificationsEnabled) return;
+    if (emailUnread > prev) {
+      const diff = emailUnread - prev;
+      notifyBrowser(
+        'Novos e-mails',
+        diff === 1 ? 'Você recebeu 1 novo e-mail.' : `Você recebeu ${diff} novos e-mails.`,
+        '/admin/emails'
+      );
+    }
+  }, [emailUnread, notificationsEnabled, notifyBrowser]);
 
   const refreshCrmData = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -766,6 +877,8 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     whatsappUnread,
     setWhatsappUnread,
     refreshWhatsappUnread,
+    notificationsEnabled,
+    toggleNotifications,
     addCompany,
     addContact,
     addDeal,
