@@ -49,7 +49,7 @@ const Login = () => {
       <div className="vesk-login-card">
         <div className="vesk-login-header">
           <div className="vesk-login-logo">
-            <i className="ti ti-bolt" style={{ color: 'var(--vesk-orange)', fontSize: 24 }} aria-hidden="true" />
+            <img src="/logo-mark.svg" className="vesk-login-logo-img" alt="" aria-hidden="true" />
             VESK <span>CRM</span>
           </div>
           <p className="vesk-login-sub">Entre com suas credenciais para acessar o painel</p>

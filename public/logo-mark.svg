@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="55 25 315 190" aria-hidden="true">
+  <defs>
+    <linearGradient id="brownGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c96d4a" />
+      <stop offset="100%" stop-color="#8a4528" />
+    </linearGradient>
+    <linearGradient id="beigeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4c3b3" />
+      <stop offset="100%" stop-color="#b8a090" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.18" />
+    </filter>
+  </defs>
+  <polygon
+    points="70,35 145,35 255,200 180,200"
+    fill="url(#brownGradient)"
+    filter="url(#shadow)"
+    stroke="#9a4a2e"
+    stroke-width="3"
+    stroke-linejoin="round"
+  />
+  <polygon
+    points="265,40 355,40 310,110"
+    fill="url(#beigeGradient)"
+    filter="url(#shadow)"
+    stroke="#d4c3b3"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+</svg>

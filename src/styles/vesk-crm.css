@@ -158,8 +158,14 @@ body.vesk-app {
   color: var(--vesk-text);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-right: 8px;
+}
+
+.crm-logo-img {
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
 .crm-logo span {
@@ -3061,6 +3067,12 @@ body.vesk-app {
 
 .vesk-login-logo span {
   color: var(--vesk-orange);
+}
+
+.vesk-login-logo-img {
+  height: 34px;
+  width: auto;
+  display: block;
 }
 
 .vesk-login-sub {

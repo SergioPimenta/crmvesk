@@ -536,7 +536,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const notifyBrowser = useCallback((title: string, body: string, path: string) => {
     if (!notificationsSupported || Notification.permission !== 'granted') return;
     try {
-      const notification = new Notification(title, { body, icon: '/vite.svg', tag: path });
+      const notification = new Notification(title, { body, icon: '/icons/icon-192.png', tag: path });
       notification.onclick = () => {
         window.focus();
         navigateRef.current(path);

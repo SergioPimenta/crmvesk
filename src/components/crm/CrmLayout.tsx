@@ -52,7 +52,7 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
           <i className={`ti ${mobileNavOpen ? 'ti-x' : 'ti-menu-2'}`} aria-hidden="true" />
         </button>
         <div className="crm-logo">
-          <i className="ti ti-bolt" style={{ color: 'var(--vesk-orange)', fontSize: 18 }} aria-hidden="true" />
+          <img src="/logo-mark.svg" className="crm-logo-img" alt="" aria-hidden="true" />
           VESK <span>CRM</span>
         </div>
         <div className="crm-badge">Beta</div>
