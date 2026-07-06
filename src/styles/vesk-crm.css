@@ -4193,3 +4193,138 @@ body.vesk-app {
 .scrape-site-link:hover {
   text-decoration: underline;
 }
+
+/* ---- Página "Baixar app" (PWA) ---- */
+.install-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 28px 20px;
+}
+
+.install-hero-logo {
+  height: 64px;
+  width: auto;
+}
+
+.install-hero-title {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--vesk-text);
+}
+
+.install-hero-title span {
+  color: var(--vesk-orange);
+}
+
+.install-hero-sub {
+  font-size: 13px;
+  color: var(--vesk-muted);
+  max-width: 420px;
+  margin: 0;
+}
+
+.install-btn {
+  margin-top: 6px;
+  padding: 11px 22px !important;
+  font-size: 14px !important;
+}
+
+.install-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-top: 4px;
+  max-width: 440px;
+}
+
+.install-status.ok {
+  background: #4caf8218;
+  border: 1px solid #4caf8240;
+  color: #4caf82;
+}
+
+.install-status.hint {
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  color: var(--vesk-muted);
+}
+
+.install-status i {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.install-feedback {
+  font-size: 12px;
+  color: var(--vesk-orange);
+  margin-top: 2px;
+}
+
+.install-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 800px) {
+  .install-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.install-benefits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.install-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--vesk-text);
+}
+
+.install-benefits i {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--vesk-orange-glow);
+  color: var(--vesk-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.install-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--vesk-text);
+  line-height: 1.45;
+}
+
+.install-steps li {
+  padding-left: 4px;
+}
+
+.install-steps li::marker {
+  color: var(--vesk-orange);
+  font-weight: 700;
+}

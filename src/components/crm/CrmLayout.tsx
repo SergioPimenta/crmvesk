@@ -161,6 +161,10 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
             </button>
           </div>
           <div className="crm-sidebar-bottom">
+            <NavLink to="/admin/instalar-app" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Baixar app">
+              <i className="ti ti-device-mobile-down" aria-hidden="true" />
+              <span className="crm-nav-text">Baixar app</span>
+            </NavLink>
             <button type="button" className="crm-nav-item" title="Suporte">
               <i className="ti ti-help-circle" aria-hidden="true" />
               <span className="crm-nav-text">Suporte</span>

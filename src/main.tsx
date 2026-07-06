@@ -5,7 +5,10 @@ import App from './App.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import { CrmDataProvider } from './contexts/CrmDataContext.tsx';
 import { registerServiceWorker } from './utils/push';
+import { initPwaInstall } from './utils/pwaInstall';
 import './index.css';
+
+initPwaInstall();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

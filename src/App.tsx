@@ -13,6 +13,7 @@ import WhatsApp from './admin/WhatsApp';
 import BotaoWhatsApp from './admin/BotaoWhatsApp';
 import Scraping from './admin/Scraping';
 import Usuarios from './admin/Usuarios';
+import InstalarApp from './admin/InstalarApp';
 import PrivateRoute from './components/PrivateRoute';
 import GuestRoute from './components/GuestRoute';
 
@@ -37,6 +38,7 @@ function App() {
         <Route path="scraping" element={<Scraping />} />
         <Route path="integracoes" element={<Integracoes />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="instalar-app" element={<InstalarApp />} />
       </Route>
 
       <Route
