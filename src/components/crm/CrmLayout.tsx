@@ -1,6 +1,6 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useCrmData, isEmailUnread } from '../../contexts/CrmDataContext';
 import NotificationMenu from './NotificationMenu';
 
@@ -21,9 +21,16 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
   const { user, logout } = useAuth();
   const { contacts, emails, whatsappUnread } = useCrmData();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const contatosPendentes = contacts.filter((c) => c.precisaFollowUp).length;
   const emailsPendentes = emails.filter((e) => isEmailUnread(e.status)).length;
+
+  // Fecha o menu mobile ao trocar de rota.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -35,6 +42,15 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
       <h2 className="sr-only">VESK CRM — painel de controle de relacionamento com clientes</h2>
 
       <div className="crm-topbar">
+        <button
+          type="button"
+          className="crm-hamburger"
+          aria-label="Abrir menu de navegação"
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((v) => !v)}
+        >
+          <i className={`ti ${mobileNavOpen ? 'ti-x' : 'ti-menu-2'}`} aria-hidden="true" />
+        </button>
         <div className="crm-logo">
           <i className="ti ti-bolt" style={{ color: 'var(--vesk-orange)', fontSize: 18 }} aria-hidden="true" />
           VESK <span>CRM</span>
@@ -62,7 +78,12 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
       </div>
 
       <div className="crm-body">
-        <nav className="crm-sidebar" aria-label="Menu principal">
+        <div
+          className={`crm-nav-backdrop${mobileNavOpen ? ' open' : ''}`}
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+        <nav className={`crm-sidebar${mobileNavOpen ? ' open' : ''}`} aria-label="Menu principal">
           <div className="crm-nav-section">
             <div className="crm-nav-label">Principal</div>
             <NavLink to="/admin" end className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Dashboard">

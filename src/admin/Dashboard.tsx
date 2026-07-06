@@ -167,7 +167,7 @@ const Dashboard = () => {
         ) : (
           <div
             className="pipeline-cols pipeline-cols-dynamic"
-            style={{ gridTemplateColumns: `repeat(${stagesForActive.length}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${stagesForActive.length}, minmax(140px, 1fr))` }}
           >
             {stagesForActive.map((stage) => {
               const stageDeals = dealsByStage.get(stage.stageKey) ?? [];

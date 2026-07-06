@@ -106,6 +106,51 @@ body.vesk-app {
   flex-shrink: 0;
 }
 
+/* Botão de menu (hambúrguer) — só aparece no mobile */
+.crm-hamburger {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  color: var(--vesk-text);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-right: -4px;
+}
+
+/* Fundo escuro atrás do drawer de navegação (mobile) */
+.crm-nav-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Botão "voltar" do chat WhatsApp — só aparece no mobile */
+.wa-chat-back {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  color: var(--vesk-text);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 17px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
 .crm-logo {
   font-family: var(--font-head);
   font-weight: 800;
@@ -3844,7 +3889,16 @@ body.vesk-app {
 }
 
 @media (max-width: 768px) {
-  .crm-sidebar {
+  .crm-hamburger {
+    display: inline-flex;
+  }
+
+  .crm-topbar {
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .crm-badge {
     display: none;
   }
 
@@ -3852,8 +3906,91 @@ body.vesk-app {
     display: none;
   }
 
+  /* Sidebar vira um drawer que desliza da esquerda */
+  .crm-sidebar,
+  .crm-sidebar:hover,
+  .crm-sidebar:focus-within {
+    position: fixed;
+    top: 52px;
+    bottom: 0;
+    left: 0;
+    width: 250px;
+    max-width: 82vw;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
+    z-index: 50;
+    overflow-y: auto;
+    box-shadow: none;
+  }
+
+  .crm-sidebar.open,
+  .crm-sidebar.open:hover {
+    transform: translateX(0);
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.5);
+  }
+
+  /* No drawer os textos e rótulos ficam sempre visíveis */
+  .crm-sidebar .crm-nav-text,
+  .crm-sidebar .crm-nav-label {
+    opacity: 1;
+  }
+
+  .crm-nav-backdrop.open {
+    display: block;
+    opacity: 1;
+  }
+
+  .crm-main {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .crm-page-title {
+    font-size: 18px;
+  }
+
+  /* Botões de ação do topo quebram linha em vez de vazar */
+  .crm-page-actions {
+    flex-wrap: wrap;
+    margin-left: 0;
+    width: 100%;
+  }
+
+  /* Tabelas rolam horizontalmente em vez de estourar a tela */
+  .crm-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .scrape-search-fields {
     grid-template-columns: 1fr;
+  }
+
+  /* WhatsApp: um painel por vez (lista OU conversa) */
+  .wa-layout.inbox {
+    display: block;
+  }
+
+  .wa-layout .inbox-list {
+    max-height: none;
+  }
+
+  .wa-layout.has-active .inbox-list {
+    display: none;
+  }
+
+  .wa-layout:not(.has-active) .inbox-view {
+    display: none;
+  }
+
+  .wa-layout .inbox-view {
+    min-height: calc(100vh - 200px);
+  }
+
+  .wa-chat-back {
+    display: inline-flex;
   }
 }
 

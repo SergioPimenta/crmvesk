@@ -693,7 +693,7 @@ const WhatsApp = () => {
           </Link>
         </div>
       ) : (
-        <div className="wa-layout inbox" aria-label="Chat WhatsApp">
+        <div className={`wa-layout inbox${active ? ' has-active' : ''}`} aria-label="Chat WhatsApp">
           <div className="wa-list crm-card inbox-list" aria-label="Lista de conversas">
             <div className="crm-card-header wa-list-header" style={{ marginBottom: 10 }}>
               <i className="ti ti-brand-whatsapp" style={{ color: '#25d366', fontSize: 18 }} aria-hidden="true" />
@@ -774,6 +774,14 @@ const WhatsApp = () => {
             {active ? (
               <>
                 <div className="wa-chat-head">
+                  <button
+                    type="button"
+                    className="wa-chat-back"
+                    aria-label="Voltar para conversas"
+                    onClick={() => setActiveId(null)}
+                  >
+                    <i className="ti ti-arrow-left" aria-hidden="true" />
+                  </button>
                   <div className="wa-avatar lg">{initials(active.nome)}</div>
                   <div className="wa-chat-head-info">
                     <div className="wa-chat-name">
