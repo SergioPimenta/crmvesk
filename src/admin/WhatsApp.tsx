@@ -396,6 +396,11 @@ const WhatsApp = () => {
     messagesReady && !isClosed && waStatus === 'connected' && !messagingWindow.withinWindow;
 
   useEffect(() => {
+    // No mobile a lista aparece primeiro; o usuário toca para abrir a conversa.
+    // No desktop (2 painéis) mantemos a primeira conversa selecionada por padrão.
+    const isMobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+    if (isMobile) return;
     if (!activeId && filtered[0]) setActiveId(filtered[0].id);
   }, [filtered, activeId]);
 
@@ -693,7 +698,7 @@ const WhatsApp = () => {
           </Link>
         </div>
       ) : (
-        <div className={`wa-layout inbox${active ? ' has-active' : ''}`} aria-label="Chat WhatsApp">
+        <div className={`wa-layout inbox${activeId ? ' has-active' : ''}`} aria-label="Chat WhatsApp">
           <div className="wa-list crm-card inbox-list" aria-label="Lista de conversas">
             <div className="crm-card-header wa-list-header" style={{ marginBottom: 10 }}>
               <i className="ti ti-brand-whatsapp" style={{ color: '#25d366', fontSize: 18 }} aria-hidden="true" />

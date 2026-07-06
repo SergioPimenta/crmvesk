@@ -3985,12 +3985,52 @@ body.vesk-app {
     display: none;
   }
 
+  /* Chat com altura da tela: mensagens rolam por dentro, compositor fixo */
   .wa-layout .inbox-view {
-    min-height: calc(100vh - 200px);
+    height: calc(100dvh - 184px);
+    min-height: 360px;
+    max-height: none;
   }
 
   .wa-chat-back {
     display: inline-flex;
+  }
+
+  /* Cabeçalho do chat mais compacto no mobile */
+  .wa-chat-head {
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .wa-chat-head .wa-avatar.lg {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+  }
+
+  .wa-chat-name {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .wa-chat-phone,
+  .wa-chat-meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Botão "Finalizar atendimento" vira só ícone para poupar espaço */
+  .wa-finish-btn {
+    font-size: 0 !important;
+    padding: 8px !important;
+    gap: 0;
+  }
+
+  .wa-finish-btn i {
+    font-size: 16px;
   }
 }
 
