@@ -1703,6 +1703,122 @@ body.vesk-app {
   font-size: 12px;
 }
 
+/* Seletor de grupo de disparo */
+.wa-bulk-group-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.wa-bulk-group-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-bulk-group-row .crm-btn-secondary {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Gestão de grupos */
+.wa-groups-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wa-groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wa-group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  background: var(--vesk-surface2);
+}
+
+.wa-group-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-group-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vesk-text);
+}
+
+.wa-group-row-count {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  margin-top: 2px;
+}
+
+.wa-group-contacts {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  background: var(--vesk-bg);
+}
+
+.wa-group-contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #1c1c1f;
+  font-size: 13px;
+}
+
+.wa-group-contact:last-child {
+  border-bottom: none;
+}
+
+.wa-group-contact:hover {
+  background: var(--vesk-surface2);
+}
+
+.wa-group-contact.selected {
+  background: var(--vesk-orange-glow);
+}
+
+.wa-group-contact input {
+  accent-color: var(--vesk-orange);
+  flex-shrink: 0;
+}
+
+.wa-group-contact-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--vesk-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wa-group-contact-phone {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  flex-shrink: 0;
+}
+
+.wa-group-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--vesk-muted);
+}
+
 .wa-bulk-result {
   padding: 12px 14px;
   border-radius: 10px;
