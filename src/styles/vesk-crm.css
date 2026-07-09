@@ -17,6 +17,20 @@
   --vesk-scrollbar-thumb-hover: #6d6b72;
 }
 
+/* Tema claro — sobrescreve apenas os neutros; laranja e cores de acento seguem iguais */
+:root[data-theme='light'] {
+  --vesk-bg: #f3f4f6;
+  --vesk-surface: #ffffff;
+  --vesk-surface2: #eef0f3;
+  --vesk-border: #dfe1e6;
+  --vesk-orange-glow: #e85d241f;
+  --vesk-text: #1b1c1f;
+  --vesk-muted: #6b6d76;
+  --vesk-sub: #9aa0a8;
+  --vesk-scrollbar-thumb: #c6c9d0;
+  --vesk-scrollbar-thumb-hover: #a9adb6;
+}
+
 /* Scrollbars personalizados — tema CRM (Firefox + WebKit) */
 .vesk-app,
 .vesk-app * {
@@ -401,6 +415,48 @@ body.vesk-app {
 
 .crm-settings-item--danger:hover {
   background: #e0525214;
+}
+
+.crm-theme-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 2px 6px 4px;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+}
+
+.crm-theme-opt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--vesk-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.crm-theme-opt i {
+  font-size: 15px;
+}
+
+.crm-theme-opt:hover {
+  color: var(--vesk-text);
+}
+
+.crm-theme-opt.active {
+  background: var(--vesk-surface);
+  color: var(--vesk-orange);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .crm-notif-panel {
@@ -1110,7 +1166,7 @@ body.vesk-app {
 
 .crm-table td {
   padding: 10px;
-  border-bottom: 1px solid #1c1c1f;
+  border-bottom: 1px solid var(--vesk-border);
   color: var(--vesk-text);
 }
 
@@ -1423,7 +1479,7 @@ body.vesk-app {
   margin-top: 2px;
   padding: 10px;
   border-radius: 10px;
-  border: 1px dashed #2a2a2e;
+  border: 1px dashed var(--vesk-border);
   color: var(--vesk-sub);
   font-size: 11px;
 }
@@ -1907,7 +1963,7 @@ body.vesk-app {
   gap: 10px;
   padding: 8px 12px;
   cursor: pointer;
-  border-bottom: 1px solid #1c1c1f;
+  border-bottom: 1px solid var(--vesk-border);
   font-size: 13px;
 }
 
@@ -2748,7 +2804,7 @@ body.vesk-app {
   height: 12px;
   border-radius: 50%;
   background: #25d366;
-  border: 2px solid #0e0e0f;
+  border: 2px solid var(--vesk-bg);
   cursor: pointer;
 }
 
@@ -2757,7 +2813,7 @@ body.vesk-app {
   height: 12px;
   border-radius: 50%;
   background: #25d366;
-  border: 2px solid #0e0e0f;
+  border: 2px solid var(--vesk-bg);
   cursor: pointer;
 }
 
@@ -2996,7 +3052,7 @@ body.vesk-app {
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--vesk-border);
-  background: linear-gradient(180deg, #161618 0%, #141416 100%);
+  background: var(--vesk-surface);
   flex-shrink: 0;
 }
 

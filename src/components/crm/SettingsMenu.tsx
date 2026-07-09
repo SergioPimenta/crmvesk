@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { getStoredTheme, setStoredTheme, type Theme } from '../../utils/theme';
 
 const getInitials = (name?: string) => {
   if (!name) return 'VS';
@@ -19,7 +20,13 @@ const SettingsMenu = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(getStoredTheme());
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const changeTheme = (next: Theme) => {
+    setStoredTheme(next);
+    setTheme(next);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +80,29 @@ const SettingsMenu = () => {
               {user?.email ? <div className="crm-settings-account-email">{user.email}</div> : null}
               <span className="crm-settings-role">{roleLabel(user?.role)}</span>
             </div>
+          </div>
+
+          <div className="crm-settings-divider" />
+          <div className="crm-settings-section-label">Aparência</div>
+          <div className="crm-theme-toggle" role="group" aria-label="Tema">
+            <button
+              type="button"
+              className={`crm-theme-opt${theme === 'dark' ? ' active' : ''}`}
+              aria-pressed={theme === 'dark'}
+              onClick={() => changeTheme('dark')}
+            >
+              <i className="ti ti-moon" aria-hidden="true" />
+              Escuro
+            </button>
+            <button
+              type="button"
+              className={`crm-theme-opt${theme === 'light' ? ' active' : ''}`}
+              aria-pressed={theme === 'light'}
+              onClick={() => changeTheme('light')}
+            >
+              <i className="ti ti-sun" aria-hidden="true" />
+              Claro
+            </button>
           </div>
 
           <div className="crm-settings-divider" />
