@@ -272,6 +272,137 @@ body.vesk-app {
   display: inline-flex;
 }
 
+/* ---- Menu de configurações (engrenagem) ---- */
+.crm-settings {
+  position: relative;
+  display: inline-flex;
+}
+
+.crm-settings-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 264px;
+  background: var(--vesk-surface);
+  border: 1px solid var(--vesk-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  z-index: 100;
+}
+
+.crm-settings-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 10px;
+}
+
+.crm-settings-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--vesk-orange);
+  color: #fff;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.crm-settings-account-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.crm-settings-account-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vesk-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-settings-account-email {
+  font-size: 11px;
+  color: var(--vesk-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.crm-settings-role {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--vesk-orange-glow);
+  color: var(--vesk-orange);
+}
+
+.crm-settings-divider {
+  height: 1px;
+  background: var(--vesk-border);
+  margin: 4px 0;
+}
+
+.crm-settings-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--vesk-sub);
+  padding: 6px 8px 4px;
+}
+
+.crm-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vesk-text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.crm-settings-item i {
+  font-size: 16px;
+  color: var(--vesk-muted);
+  flex-shrink: 0;
+}
+
+.crm-settings-item:hover {
+  background: var(--vesk-surface2);
+}
+
+.crm-settings-item--danger {
+  color: #e05252;
+}
+
+.crm-settings-item--danger i {
+  color: #e05252;
+}
+
+.crm-settings-item--danger:hover {
+  background: #e0525214;
+}
+
 .crm-notif-panel {
   position: absolute;
   top: calc(100% + 8px);

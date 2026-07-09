@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useCrmData, isEmailUnread } from '../../contexts/CrmDataContext';
 import NotificationMenu from './NotificationMenu';
+import SettingsMenu from './SettingsMenu';
 
 interface CrmLayoutProps {
   children: ReactNode;
@@ -62,9 +63,7 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
         </div>
         <div className="crm-topbar-actions">
           <NotificationMenu />
-          <button type="button" className="crm-icon-btn" title="Configurações" aria-label="Configurações">
-            <i className="ti ti-settings" aria-hidden="true" />
-          </button>
+          <SettingsMenu />
           <button
             type="button"
             className="crm-avatar"
