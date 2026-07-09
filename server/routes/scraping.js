@@ -5,10 +5,21 @@ import {
   searchGoogleMaps,
   startGoogleMapsSearch,
 } from '../services/mapsScraperService.js';
+import { filterNewResults } from '../services/scrapingDedupeService.js';
 
 const router = express.Router();
 
 router.use(verifyToken);
+
+router.post('/maps/dedupe', async (req, res) => {
+  try {
+    const { query, results, limit } = req.body ?? {};
+    const data = await filterNewResults(req.userId, query, results, limit);
+    res.json(data);
+  } catch (err) {
+    res.status(400).json({ message: err.message || 'Erro ao filtrar resultados' });
+  }
+});
 
 router.post('/maps/start', async (req, res) => {
   try {

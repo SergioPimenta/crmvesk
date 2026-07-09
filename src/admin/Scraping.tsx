@@ -135,6 +135,34 @@ const Scraping = () => {
     }
   };
 
+  // Aplica a deduplicação: guarda o que já foi trazido para o termo e devolve
+  // apenas resultados novos (buscas repetidas do mesmo termo trazem inéditos).
+  const finishWithDedupe = async (rawResults: ScrapeResult[], source?: string) => {
+    const desired = Number(limit) || 10;
+    const via = source === 'python-playwright' ? ' (scraper Python)' : '';
+    try {
+      const data = await api.post<{ results: ScrapeResult[]; newAvailable: number; totalFetched: number }>(
+        '/scraping/maps/dedupe',
+        { query: query.trim(), results: rawResults, limit: desired }
+      );
+      const novos = data.results || [];
+      setResults(novos);
+      if (novos.length === 0) {
+        setStatus(
+          rawResults.length === 0
+            ? `Nenhuma empresa encontrada para "${query.trim()}".`
+            : `Nenhum resultado novo para "${query.trim()}" — os ${rawResults.length} encontrados já foram trazidos antes. Refine o termo (ex.: um bairro ou cidade específica) para achar novas empresas.`
+        );
+      } else {
+        setStatus(`Concluído: ${novos.length} resultado(s) novo(s)${via}.`);
+      }
+    } catch {
+      // fallback: se o dedupe falhar, mostra os resultados como vieram
+      setResults(rawResults);
+      setStatus(`Concluído: ${rawResults.length} empresa(s)${via}.`);
+    }
+  };
+
   const runSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -142,18 +170,21 @@ const Scraping = () => {
     setLoading(true);
     setResults([]);
 
+    // Busca um lote maior que o desejado para ter margem de paginação entre
+    // buscas repetidas (o scraper limita a 30 resultados).
+    const desired = Number(limit) || 10;
+    const poolLimit = Math.min(30, desired + 10);
+
     try {
       const started = await api.post<StartResponse>('/scraping/maps/start', {
         query: query.trim(),
-        limit: Number(limit) || 10,
+        limit: poolLimit,
         headless,
         onlyWithPhone,
       });
 
       if (started.mode === 'sync' || started.status === 'done') {
-        setResults(started.results || []);
-        const via = started.source === 'python-playwright' ? ' (scraper Python)' : '';
-        setStatus(`Concluído: ${started.total ?? started.results?.length ?? 0} empresa(s)${via}.`);
+        await finishWithDedupe(started.results || [], started.source);
         return;
       }
 
@@ -175,9 +206,7 @@ const Scraping = () => {
           throw new Error(job.message || 'Erro ao executar busca');
         }
 
-        setResults(job.results || []);
-        const via = job.source === 'python-playwright' ? ' (scraper Python)' : '';
-        setStatus(`Concluído: ${job.total ?? job.results?.length ?? 0} empresa(s)${via}.`);
+        await finishWithDedupe(job.results || [], job.source);
         return;
       }
 
@@ -201,7 +230,8 @@ const Scraping = () => {
         <div>
           <div className="crm-page-title">Google Maps Scraping</div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            Busque empresas e visualize nome, telefone e site em uma tabela — gratuito via Python + Playwright
+            Busque empresas e visualize nome, telefone e site em uma tabela — gratuito via Python + Playwright.
+            Cada busca traz apenas empresas novas: repetir o mesmo termo nunca devolve resultados já trazidos.
           </div>
         </div>
       </div>
