@@ -586,8 +586,6 @@ const Contatos = () => {
 
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
 
-              required
-
             />
 
           </div>
@@ -825,8 +823,6 @@ const Contatos = () => {
               value={form.email}
 
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-
-              required
 
             />
 
