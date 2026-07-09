@@ -1142,12 +1142,12 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   if (!chat) throw new Error('Conversa não encontrada');
 
   const number = canonicalWhatsAppPhone(jidToPhone(chat.remoteJid));
+  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!fileBuffer.length) throw new Error('Arquivo vazio');
   const normalizedMime = normalizeMetaMime(filename, mimeType, fileBuffer);
   assertMetaMimeSupported(normalizedMime);
   const kind = detectMediaKind(normalizedMime);
   const safeName = safeMediaFilename(filename, normalizedMime);
-  const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  if (!fileBuffer.length) throw new Error('Arquivo vazio');
 
   const { result, kind: sendKind } = await sendMediaToMeta(settings, number, {
     kind,
