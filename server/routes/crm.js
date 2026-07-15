@@ -1,11 +1,23 @@
 import express from 'express';
+import multer from 'multer';
 import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
+import {
+  listTemplates,
+  createTemplate,
+  renameTemplate,
+  deleteTemplate,
+} from '../services/proposalTemplateService.js';
 
 const router = express.Router();
 
 router.use(verifyToken);
+
+const templateUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
 
 const asId = (v) => {
   if (v === undefined || v === null || v === '') return null;
@@ -667,6 +679,55 @@ router.put('/proposals/:id', async (req, res) => {
     [asId(contatoId), asId(empresaId), asId(dealId), titulo, valor, status, enviadaEm, id, req.userId]
   );
   res.status(204).send();
+});
+
+// Modelos de propostas
+router.get('/proposal-templates', async (req, res) => {
+  try {
+    const templates = await listTemplates(req.userId);
+    res.json(templates);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post('/proposal-templates', templateUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'Selecione um arquivo' });
+    const { nome, descricao } = req.body ?? {};
+    const result = await createTemplate(req.userId, {
+      nome,
+      descricao,
+      buffer: req.file.buffer,
+      filename: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.put('/proposal-templates/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    const result = await renameTemplate(req.userId, id, req.body ?? {});
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.delete('/proposal-templates/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    await deleteTemplate(req.userId, id);
+    res.status(204).send();
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 export default router;

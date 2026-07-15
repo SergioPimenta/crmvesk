@@ -114,6 +114,7 @@ export async function runMigrations() {
   await migratePushSubscriptions();
   await migrateDispatchGroups();
   await migrateScrapingSeen();
+  await migrateProposalTemplates();
   await migrateWhatsappChatUi();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
@@ -218,6 +219,25 @@ async function migratePushSubscriptions() {
     )
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id)');
+}
+
+async function migrateProposalTemplates() {
+  if (await tableExists('proposal_templates')) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS proposal_templates (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nome VARCHAR(200) NOT NULL,
+      descricao VARCHAR(500) DEFAULT '',
+      file_url TEXT NOT NULL,
+      file_name VARCHAR(255) DEFAULT '',
+      mime_type VARCHAR(120) DEFAULT '',
+      file_size INT DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_proposal_templates_user ON proposal_templates(user_id)');
 }
 
 async function migrateDispatchGroups() {

@@ -45,6 +45,10 @@ const KEY_ALIASES = {
   lastseenat: 'lastSeenAt',
   createdat: 'createdAt',
   updatedat: 'updatedAt',
+  fileurl: 'fileUrl',
+  filename: 'fileName',
+  mimetype: 'mimeType',
+  filesize: 'fileSize',
 };
 
 export function normalizeRow(row) {

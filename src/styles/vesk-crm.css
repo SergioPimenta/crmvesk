@@ -3207,6 +3207,93 @@ body.vesk-app {
   border-color: #e0525260;
 }
 
+/* ---- Modelos de propostas ---- */
+.proposal-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-templates-divider {
+  height: 1px;
+  background: var(--vesk-border);
+  margin: 20px 0 14px;
+}
+
+.proposal-templates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.proposal-template-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 10px;
+  background: var(--vesk-surface2);
+}
+
+.proposal-template-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--vesk-orange-glow);
+  color: var(--vesk-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.proposal-template-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.proposal-template-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vesk-text);
+}
+
+.proposal-template-info input {
+  width: 100%;
+  background: var(--vesk-bg);
+  border: 1px solid var(--vesk-orange);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--vesk-text);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
+.proposal-template-desc {
+  font-size: 11.5px;
+  color: var(--vesk-muted);
+  margin-top: 2px;
+}
+
+.proposal-template-meta {
+  font-size: 11px;
+  color: var(--vesk-sub);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-template-row .crm-row-actions {
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .crm-switch {
   position: relative;
   display: inline-flex;

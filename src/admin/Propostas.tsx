@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
+import ProposalTemplatesModal from '../components/crm/ProposalTemplatesModal';
 import { useCrmData } from '../contexts/CrmDataContext';
 
 const Propostas = () => {
@@ -8,6 +9,7 @@ const Propostas = () => {
   const [query, setQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     titulo: '',
@@ -135,7 +137,7 @@ const Propostas = () => {
           <i className="ti ti-file-text" style={{ color: 'var(--vesk-orange)', fontSize: 16 }} aria-hidden="true" />
           <div className="crm-card-title">Gestão</div>
           <span className="pipeline-badge">enviada · visualizada · aceita · recusada</span>
-          <button type="button" className="crm-card-action">
+          <button type="button" className="crm-card-action" onClick={() => setIsTemplatesOpen(true)}>
             Modelos →
           </button>
         </div>
@@ -327,6 +329,8 @@ const Propostas = () => {
           </div>
         </form>
       </Modal>
+
+      <ProposalTemplatesModal open={isTemplatesOpen} onClose={() => setIsTemplatesOpen(false)} />
     </CrmLayout>
   );
 };
