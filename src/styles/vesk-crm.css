@@ -3306,81 +3306,283 @@ body.vesk-app {
   color: #ef9f27;
 }
 
-/* Login */
+/* Login — layout dividido: painel de marca (esquerda) + formulário (direita) */
 .vesk-login-page {
   min-height: 100vh;
   background: var(--vesk-bg);
+}
+
+.vesk-login-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+
+/* ---- Painel de marca/vendas (sempre no palette escuro da marca, independe do tema) ---- */
+.vesk-login-marketing {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 15% 15%, #e85d2433 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, #e85d2422 0%, transparent 50%),
+    linear-gradient(160deg, #17110b 0%, #0f0b07 55%, #100a06 100%);
+  color: #f5f1ea;
+  padding: 56px 56px;
+  display: flex;
+  align-items: center;
+}
+
+.vesk-login-marketing-glow {
+  position: absolute;
+  top: -140px;
+  right: -120px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e85d2440 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.vesk-login-marketing-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, #ffffff14 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, #000 0%, transparent 75%);
+  pointer-events: none;
+}
+
+.vesk-login-marketing-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 480px;
+}
+
+.vesk-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 17px;
+  color: #fff;
+  margin-bottom: 40px;
+}
+
+.vesk-login-brand b {
+  color: var(--vesk-orange);
+  font-weight: 800;
+}
+
+.vesk-login-brand-logo {
+  height: 26px;
+  width: auto;
+}
+
+.vesk-login-headline {
+  font-family: var(--font-head);
+  font-size: 34px;
+  line-height: 1.18;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 14px;
+  letter-spacing: -0.3px;
+}
+
+.vesk-login-headline span {
+  color: var(--vesk-orange);
+}
+
+.vesk-login-tagline {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: #d8d2c8;
+  margin: 0 0 36px;
+  max-width: 400px;
+}
+
+.vesk-login-features {
+  list-style: none;
+  margin: 0 0 32px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vesk-login-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.vesk-login-features strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.vesk-login-features li > div > span {
+  display: block;
+  font-size: 12px;
+  color: #a8a196;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.vesk-login-feature-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #e85d2422;
+  border: 1px solid #e85d2440;
+  color: var(--vesk-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+/* Mini "preview" decorativo do produto (kanban + chat) */
+.vesk-login-mock {
+  border-radius: 14px;
+  background: #ffffff08;
+  border: 1px solid #ffffff14;
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.vesk-login-mock-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ffffff12;
+}
+
+.vesk-login-mock-bar span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff20;
+}
+
+.vesk-login-mock-bar span:first-child {
+  background: #e85d24;
+}
+
+.vesk-login-mock-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.9fr;
+  gap: 10px;
+  padding: 14px;
+}
+
+.vesk-login-mock-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vesk-login-mock-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #b8b2a6;
+}
+
+.vesk-login-mock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vesk-orange);
+  display: inline-block;
+}
+
+.vesk-login-mock-dot.blue {
+  background: #378add;
+}
+
+.vesk-login-mock-card {
+  height: 30px;
+  border-radius: 6px;
+  background: #ffffff10;
+  border: 1px solid #ffffff14;
+}
+
+.vesk-login-mock-card.short {
+  height: 18px;
+  width: 70%;
+}
+
+.vesk-login-mock-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.vesk-login-mock-bubble {
+  height: 20px;
+  border-radius: 8px;
+  width: 85%;
+}
+
+.vesk-login-mock-bubble.in {
+  background: #ffffff12;
+  align-self: flex-start;
+}
+
+.vesk-login-mock-bubble.out {
+  background: #25d36630;
+  align-self: flex-end;
+  width: 65%;
+}
+
+/* ---- Lado do formulário (respeita o tema claro/escuro) ---- */
+.vesk-login-formside {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  position: relative;
-  overflow: hidden;
-}
-
-.vesk-login-page::before {
-  content: '';
-  position: absolute;
-  top: -120px;
-  right: -80px;
-  width: 360px;
-  height: 360px;
-  background: radial-gradient(circle, var(--vesk-orange-glow) 0%, transparent 70%);
-  pointer-events: none;
+  background: var(--vesk-bg);
 }
 
 .vesk-login-card {
   width: 100%;
-  max-width: 400px;
-  background: var(--vesk-surface);
-  border: 1px solid var(--vesk-border);
-  border-radius: 16px;
-  padding: 32px 28px;
-  position: relative;
-  z-index: 1;
-}
-
-.vesk-login-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--vesk-orange);
-  border-radius: 16px 16px 0 0;
+  max-width: 380px;
 }
 
 .vesk-login-header {
   text-align: center;
-  margin-bottom: 28px;
-}
-
-.vesk-login-logo {
-  font-family: var(--font-head);
-  font-weight: 800;
-  font-size: 22px;
-  color: var(--vesk-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.vesk-login-logo span {
-  color: var(--vesk-orange);
+  margin-bottom: 26px;
 }
 
 .vesk-login-logo-img {
-  height: 34px;
+  height: 36px;
   width: auto;
   display: block;
+  margin: 0 auto 18px;
+}
+
+.vesk-login-welcome {
+  font-family: var(--font-head);
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--vesk-text);
+  margin: 0 0 6px;
 }
 
 .vesk-login-sub {
   font-size: 13px;
   color: var(--vesk-muted);
+  margin: 0;
 }
 
 .vesk-field {
@@ -3402,11 +3604,12 @@ body.vesk-app {
   background: var(--vesk-surface2);
   border: 1px solid var(--vesk-border);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   color: var(--vesk-text);
   font-family: var(--font-body);
   font-size: 14px;
   outline: none;
+  transition: border-color 0.15s;
 }
 
 .vesk-field input:focus {
@@ -3431,8 +3634,24 @@ body.vesk-app {
 .vesk-login-submit {
   width: 100%;
   justify-content: center;
-  padding: 11px 14px;
+  padding: 12px 14px;
   margin-top: 8px;
+  font-size: 13px;
+  box-shadow: 0 8px 24px -8px #e85d2470;
+}
+
+.vesk-login-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 22px;
+  font-size: 11px;
+  color: var(--vesk-sub);
+}
+
+.vesk-login-trust i {
+  font-size: 12px;
 }
 
 .vesk-spinner {
@@ -3447,6 +3666,34 @@ body.vesk-app {
 @keyframes vesk-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Colapsa para uma coluna: painel de marca vira um cabeçalho compacto */
+@media (max-width: 980px) {
+  .vesk-login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .vesk-login-marketing {
+    padding: 40px 24px 32px;
+  }
+
+  .vesk-login-tagline {
+    margin-bottom: 0;
+  }
+
+  .vesk-login-headline {
+    font-size: 27px;
+  }
+
+  .vesk-login-features,
+  .vesk-login-mock {
+    display: none;
+  }
+
+  .vesk-login-formside {
+    padding: 32px 20px 48px;
   }
 }
 
