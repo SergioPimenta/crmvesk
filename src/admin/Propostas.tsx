@@ -1,8 +1,29 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
-import ProposalTemplatesModal from '../components/crm/ProposalTemplatesModal';
+import ProposalTemplatesModal, { type ProposalTemplate } from '../components/crm/ProposalTemplatesModal';
 import { useCrmData } from '../contexts/CrmDataContext';
+import { api } from '../services/api';
+
+type ProposalForm = {
+  titulo: string;
+  contatoId: string;
+  empresaId: string;
+  dealId: string;
+  valor: string;
+  templateId: string;
+  fieldValues: Record<string, string>;
+};
+
+const emptyForm: ProposalForm = {
+  titulo: '',
+  contatoId: '',
+  empresaId: '',
+  dealId: '',
+  valor: '',
+  templateId: '',
+  fieldValues: {},
+};
 
 const Propostas = () => {
   const { proposals, contacts, companies, deals, addProposal, updateProposal, getContactName, getCompanyName, getDealTitle } = useCrmData();
@@ -11,13 +32,43 @@ const Propostas = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    titulo: '',
-    contatoId: '',
-    empresaId: '',
-    dealId: '',
-    valor: '',
-  });
+  const [form, setForm] = useState<ProposalForm>(emptyForm);
+  const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
+
+  const loadTemplates = () => {
+    void api
+      .get<ProposalTemplate[]>('/crm/proposal-templates')
+      .then((data) => setTemplates((data || []).map((t) => ({ ...t, id: String(t.id) }))))
+      .catch(() => setTemplates([]));
+  };
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  // Recarrega a lista de modelos ao fechar o gerenciador, para refletir criações/edições.
+  const closeTemplatesModal = () => {
+    setIsTemplatesOpen(false);
+    loadTemplates();
+  };
+
+  const templateById = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates]);
+  const selectedTemplate = form.templateId ? templateById.get(form.templateId) : undefined;
+
+  const selectTemplate = (templateId: string) => {
+    const tpl = templateId ? templateById.get(templateId) : undefined;
+    setForm((p) => {
+      const nextValues: Record<string, string> = {};
+      (tpl?.fields || []).forEach((f) => {
+        nextValues[f] = p.fieldValues[f] ?? '';
+      });
+      return { ...p, templateId, fieldValues: nextValues };
+    });
+  };
+
+  const setFieldValue = (field: string, value: string) => {
+    setForm((p) => ({ ...p, fieldValues: { ...p.fieldValues, [field]: value } }));
+  };
 
   const selectedContact = useMemo(() => contacts.find((c) => c.id === form.contatoId) ?? null, [contacts, form.contatoId]);
   const allowedCompanies = useMemo(() => {
@@ -45,17 +96,8 @@ const Propostas = () => {
     return <span className="pill-status wait">Enviada</span>;
   };
 
-  const resetForm = () =>
-    setForm({
-      titulo: '',
-      contatoId: '',
-      empresaId: '',
-      dealId: '',
-      valor: '',
-    });
-
   const openCreate = () => {
-    resetForm();
+    setForm(emptyForm);
     setIsCreateOpen(true);
   };
 
@@ -69,6 +111,8 @@ const Propostas = () => {
       empresaId: p.empresaId ?? '',
       dealId: p.dealId ?? '',
       valor: p.valor ?? '',
+      templateId: p.templateId ?? '',
+      fieldValues: p.fieldValues ?? {},
     });
     setIsEditOpen(true);
   };
@@ -83,6 +127,8 @@ const Propostas = () => {
       valor: form.valor.trim() || 'R$0',
       status: 'Enviada',
       enviadaEm: 'Agora',
+      templateId: form.templateId || undefined,
+      fieldValues: Object.keys(form.fieldValues).length > 0 ? form.fieldValues : undefined,
     });
     setIsCreateOpen(false);
   };
@@ -99,9 +145,32 @@ const Propostas = () => {
       empresaId: form.empresaId || undefined,
       dealId: form.dealId || undefined,
       valor: form.valor.trim() || 'R$0',
+      templateId: form.templateId || undefined,
+      fieldValues: Object.keys(form.fieldValues).length > 0 ? form.fieldValues : undefined,
     });
     setIsEditOpen(false);
     setEditingId(null);
+  };
+
+  const templateFieldInputs = (idPrefix: string) => {
+    if (!selectedTemplate || !selectedTemplate.fields || selectedTemplate.fields.length === 0) return null;
+    return (
+      <div className="proposal-field-values" style={{ gridColumn: '1 / -1' }}>
+        <div className="proposal-field-values-title">Campos de "{selectedTemplate.nome}"</div>
+        <div className="proposal-field-values-grid">
+          {selectedTemplate.fields.map((f) => (
+            <div className="crm-field" key={f}>
+              <label htmlFor={`${idPrefix}_${f}`}>{f}</label>
+              <input
+                id={`${idPrefix}_${f}`}
+                value={form.fieldValues[f] ?? ''}
+                onChange={(e) => setFieldValue(f, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -158,7 +227,15 @@ const Propostas = () => {
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id}>
-                <td style={{ fontWeight: 600 }}>{p.titulo}</td>
+                <td style={{ fontWeight: 600 }}>
+                  {p.titulo}
+                  {p.templateId && templateById.get(p.templateId) ? (
+                    <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--vesk-muted)', marginTop: 2 }}>
+                      <i className="ti ti-file-text" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
+                      {templateById.get(p.templateId)?.nome}
+                    </div>
+                  ) : null}
+                </td>
                 <td style={{ color: 'var(--vesk-muted)' }}>{getContactName(p.contatoId)}</td>
                 <td style={{ color: 'var(--vesk-muted)' }}>{getCompanyName(p.empresaId)}</td>
                 <td style={{ color: 'var(--vesk-muted)' }}>{p.dealId ? getDealTitle(p.dealId) : '—'}</td>
@@ -188,6 +265,7 @@ const Propostas = () => {
 
       <Modal
         open={isCreateOpen}
+        wide
         title="Nova proposta"
         description="Crie uma proposta e vincule a um contato/negócio."
         onClose={() => setIsCreateOpen(false)}
@@ -197,6 +275,18 @@ const Propostas = () => {
             <label htmlFor="p_titulo">Título</label>
             <input id="p_titulo" value={form.titulo} onChange={(e) => setForm((p) => ({ ...p, titulo: e.target.value }))} required />
           </div>
+          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="p_tpl">Modelo (opcional)</label>
+            <select id="p_tpl" value={form.templateId} onChange={(e) => selectTemplate(e.target.value)}>
+              <option value="">— Sem modelo —</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          {templateFieldInputs('p_field')}
           <div className="crm-field">
             <label htmlFor="p_cont">Contato</label>
             <select
@@ -260,6 +350,7 @@ const Propostas = () => {
 
       <Modal
         open={isEditOpen}
+        wide
         title="Editar proposta"
         description="Atualize campos e vínculos da proposta."
         onClose={() => setIsEditOpen(false)}
@@ -269,6 +360,18 @@ const Propostas = () => {
             <label htmlFor="ep_titulo">Título</label>
             <input id="ep_titulo" value={form.titulo} onChange={(e) => setForm((p) => ({ ...p, titulo: e.target.value }))} required />
           </div>
+          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="ep_tpl">Modelo (opcional)</label>
+            <select id="ep_tpl" value={form.templateId} onChange={(e) => selectTemplate(e.target.value)}>
+              <option value="">— Sem modelo —</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          {templateFieldInputs('ep_field')}
           <div className="crm-field">
             <label htmlFor="ep_cont">Contato</label>
             <select
@@ -330,10 +433,9 @@ const Propostas = () => {
         </form>
       </Modal>
 
-      <ProposalTemplatesModal open={isTemplatesOpen} onClose={() => setIsTemplatesOpen(false)} />
+      <ProposalTemplatesModal open={isTemplatesOpen} onClose={closeTemplatesModal} />
     </CrmLayout>
   );
 };
 
 export default Propostas;
-

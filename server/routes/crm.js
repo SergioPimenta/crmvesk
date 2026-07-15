@@ -647,9 +647,23 @@ router.delete('/emails/:id', async (req, res) => {
 });
 
 // Proposals
+const asFieldValues = (v) => {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return JSON.stringify(v);
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v);
+      return parsed && typeof parsed === 'object' ? JSON.stringify(parsed) : '{}';
+    } catch {
+      return '{}';
+    }
+  }
+  return '{}';
+};
+
 router.get('/proposals', async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT id, contact_id AS contatoId, company_id AS empresaId, deal_id AS dealId, titulo, valor, status, enviada_em AS enviadaEm
+    `SELECT id, contact_id AS contatoId, company_id AS empresaId, deal_id AS dealId, titulo, valor, status, enviada_em AS enviadaEm,
+            template_id AS templateId, field_values AS fieldValues
      FROM proposals WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
@@ -657,26 +671,70 @@ router.get('/proposals', async (req, res) => {
 });
 
 router.post('/proposals', async (req, res) => {
-  const { contatoId, empresaId, dealId, titulo, valor = '', status = 'Enviada', enviadaEm = '' } = req.body ?? {};
+  const {
+    contatoId,
+    empresaId,
+    dealId,
+    titulo,
+    valor = '',
+    status = 'Enviada',
+    enviadaEm = '',
+    templateId,
+    fieldValues,
+  } = req.body ?? {};
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
   const [result] = await pool.query(
-    `INSERT INTO proposals (user_id, contact_id, company_id, deal_id, titulo, valor, status, enviada_em)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, asId(contatoId), asId(empresaId), asId(dealId), titulo, valor, status, enviadaEm]
+    `INSERT INTO proposals (user_id, contact_id, company_id, deal_id, titulo, valor, status, enviada_em, template_id, field_values)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      req.userId,
+      asId(contatoId),
+      asId(empresaId),
+      asId(dealId),
+      titulo,
+      valor,
+      status,
+      enviadaEm,
+      asId(templateId),
+      asFieldValues(fieldValues),
+    ]
   );
   res.status(201).json({ id: result.insertId });
 });
 
 router.put('/proposals/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const { contatoId, empresaId, dealId, titulo, valor = '', status = 'Enviada', enviadaEm = '' } = req.body ?? {};
+  const {
+    contatoId,
+    empresaId,
+    dealId,
+    titulo,
+    valor = '',
+    status = 'Enviada',
+    enviadaEm = '',
+    templateId,
+    fieldValues,
+  } = req.body ?? {};
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
 
   await pool.query(
-    `UPDATE proposals SET contact_id = ?, company_id = ?, deal_id = ?, titulo = ?, valor = ?, status = ?, enviada_em = ?
+    `UPDATE proposals SET contact_id = ?, company_id = ?, deal_id = ?, titulo = ?, valor = ?, status = ?, enviada_em = ?,
+            template_id = ?, field_values = ?
      WHERE id = ? AND user_id = ?`,
-    [asId(contatoId), asId(empresaId), asId(dealId), titulo, valor, status, enviadaEm, id, req.userId]
+    [
+      asId(contatoId),
+      asId(empresaId),
+      asId(dealId),
+      titulo,
+      valor,
+      status,
+      enviadaEm,
+      asId(templateId),
+      asFieldValues(fieldValues),
+      id,
+      req.userId,
+    ]
   );
   res.status(204).send();
 });
@@ -694,10 +752,11 @@ router.get('/proposal-templates', async (req, res) => {
 router.post('/proposal-templates', templateUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'Selecione um arquivo' });
-    const { nome, descricao } = req.body ?? {};
+    const { nome, descricao, fields } = req.body ?? {};
     const result = await createTemplate(req.userId, {
       nome,
       descricao,
+      fields,
       buffer: req.file.buffer,
       filename: req.file.originalname,
       mimeType: req.file.mimetype,

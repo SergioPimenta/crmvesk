@@ -3294,6 +3294,117 @@ body.vesk-app {
   flex-shrink: 0;
 }
 
+.proposal-template-edit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--vesk-orange);
+  border-radius: 10px;
+  background: var(--vesk-surface2);
+}
+
+@media (max-width: 560px) {
+  .proposal-template-edit {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Chips de campos do modelo (Cliente, Site Atual, Data…) */
+.template-fields-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.template-field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: var(--vesk-orange-glow);
+  border: 1px solid #e85d2440;
+  color: var(--vesk-orange);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.template-field-chip button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.template-field-chip button:hover {
+  background: #e85d2430;
+}
+
+.template-field-chip--static {
+  background: var(--vesk-surface2);
+  border-color: var(--vesk-border);
+  color: var(--vesk-muted);
+  font-weight: 500;
+}
+
+.template-fields-add {
+  display: flex;
+  gap: 8px;
+}
+
+.template-fields-add input {
+  flex: 1;
+  background: var(--vesk-surface2);
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--vesk-text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+}
+
+.template-fields-add input:focus {
+  border-color: var(--vesk-orange);
+}
+
+/* Campos dinâmicos preenchidos ao criar/editar uma proposta com modelo */
+.proposal-field-values {
+  border: 1px dashed var(--vesk-border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.proposal-field-values-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vesk-orange);
+  margin-bottom: 10px;
+}
+
+.proposal-field-values-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .proposal-field-values-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .crm-switch {
   position: relative;
   display: inline-flex;

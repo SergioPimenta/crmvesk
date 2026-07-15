@@ -49,6 +49,8 @@ const KEY_ALIASES = {
   filename: 'fileName',
   mimetype: 'mimeType',
   filesize: 'fileSize',
+  templateid: 'templateId',
+  fieldvalues: 'fieldValues',
 };
 
 export function normalizeRow(row) {

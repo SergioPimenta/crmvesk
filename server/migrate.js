@@ -115,6 +115,7 @@ export async function runMigrations() {
   await migrateDispatchGroups();
   await migrateScrapingSeen();
   await migrateProposalTemplates();
+  await migrateProposalTemplateFields();
   await migrateWhatsappChatUi();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
@@ -234,10 +235,22 @@ async function migrateProposalTemplates() {
       file_name VARCHAR(255) DEFAULT '',
       mime_type VARCHAR(120) DEFAULT '',
       file_size INT DEFAULT 0,
+      fields JSONB DEFAULT '[]',
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_proposal_templates_user ON proposal_templates(user_id)');
+}
+
+async function migrateProposalTemplateFields() {
+  if (!(await tableExists('proposal_templates'))) return;
+  await pool.query(`ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS fields JSONB DEFAULT '[]'`);
+
+  if (!(await tableExists('proposals'))) return;
+  await pool.query(
+    `ALTER TABLE proposals ADD COLUMN IF NOT EXISTS template_id INT REFERENCES proposal_templates(id) ON DELETE SET NULL`
+  );
+  await pool.query(`ALTER TABLE proposals ADD COLUMN IF NOT EXISTS field_values JSONB DEFAULT '{}'`);
 }
 
 async function migrateDispatchGroups() {

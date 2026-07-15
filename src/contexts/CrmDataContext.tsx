@@ -110,6 +110,8 @@ export type Proposal = {
   status: ProposalStatus;
   enviadaEm: string;
   dealId?: string;
+  templateId?: string;
+  fieldValues?: Record<string, string>;
 };
 
 type CrmDataContextType = {
@@ -315,6 +317,8 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         contatoId: (p as any).contatoId ? String((p as any).contatoId) : undefined,
         empresaId: (p as any).empresaId ? String((p as any).empresaId) : undefined,
         dealId: (p as any).dealId ? String((p as any).dealId) : undefined,
+        templateId: (p as any).templateId ? String((p as any).templateId) : undefined,
+        fieldValues: (p as any).fieldValues && typeof (p as any).fieldValues === 'object' ? (p as any).fieldValues : undefined,
       }))
     );
   }, []);
