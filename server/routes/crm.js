@@ -9,6 +9,7 @@ import {
   renameTemplate,
   deleteTemplate,
 } from '../services/proposalTemplateService.js';
+import { sendProposalEmail } from '../services/proposalEmailService.js';
 
 const router = express.Router();
 
@@ -663,11 +664,22 @@ const asFieldValues = (v) => {
 router.get('/proposals', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, contact_id AS contatoId, company_id AS empresaId, deal_id AS dealId, titulo, valor, status, enviada_em AS enviadaEm,
-            template_id AS templateId, field_values AS fieldValues
+            template_id AS templateId, field_values AS fieldValues, email_sent_at AS emailSentAt
      FROM proposals WHERE user_id = ? ORDER BY id DESC`,
     [req.userId]
   );
   res.json(normalizeRows(rows));
+});
+
+router.post('/proposals/:id/send-email', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    const result = await sendProposalEmail(req.userId, id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 router.post('/proposals', async (req, res) => {

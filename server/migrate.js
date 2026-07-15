@@ -116,6 +116,7 @@ export async function runMigrations() {
   await migrateScrapingSeen();
   await migrateProposalTemplates();
   await migrateProposalTemplateFields();
+  await migrateProposalEmailTracking();
   await migrateWhatsappChatUi();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
@@ -251,6 +252,11 @@ async function migrateProposalTemplateFields() {
     `ALTER TABLE proposals ADD COLUMN IF NOT EXISTS template_id INT REFERENCES proposal_templates(id) ON DELETE SET NULL`
   );
   await pool.query(`ALTER TABLE proposals ADD COLUMN IF NOT EXISTS field_values JSONB DEFAULT '{}'`);
+}
+
+async function migrateProposalEmailTracking() {
+  if (!(await tableExists('proposals'))) return;
+  await pool.query(`ALTER TABLE proposals ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`);
 }
 
 async function migrateDispatchGroups() {

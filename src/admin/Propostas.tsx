@@ -34,6 +34,9 @@ const Propostas = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProposalForm>(emptyForm);
   const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [emailFeedback, setEmailFeedback] = useState<{ id: string; ok: boolean; message: string } | null>(null);
+  const [localEmailSentAt, setLocalEmailSentAt] = useState<Record<string, string>>({});
 
   const loadTemplates = () => {
     void api
@@ -152,6 +155,27 @@ const Propostas = () => {
     setEditingId(null);
   };
 
+  const handleSendEmail = async (p: (typeof proposals)[number]) => {
+    if (sendingEmailId) return;
+    setSendingEmailId(p.id);
+    setEmailFeedback(null);
+    try {
+      const result = await api.post<{ ok: boolean; to: string; emailSentAt: string }>(
+        `/crm/proposals/${p.id}/send-email`
+      );
+      setLocalEmailSentAt((prev) => ({ ...prev, [p.id]: result.emailSentAt }));
+      setEmailFeedback({ id: p.id, ok: true, message: `Enviado para ${result.to}` });
+    } catch (err) {
+      setEmailFeedback({
+        id: p.id,
+        ok: false,
+        message: err instanceof Error ? err.message : 'Erro ao enviar e-mail',
+      });
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
   const templateFieldInputs = (idPrefix: string) => {
     if (!selectedTemplate || !selectedTemplate.fields || selectedTemplate.fields.length === 0) return null;
     return (
@@ -225,33 +249,67 @@ const Propostas = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p) => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: 600 }}>
-                  {p.titulo}
-                  {p.templateId && templateById.get(p.templateId) ? (
-                    <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--vesk-muted)', marginTop: 2 }}>
-                      <i className="ti ti-file-text" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
-                      {templateById.get(p.templateId)?.nome}
+            {filtered.map((p) => {
+              const contactEmail = contacts.find((c) => c.id === p.contatoId)?.email?.trim();
+              const emailSentAt = p.emailSentAt || localEmailSentAt[p.id];
+              const sending = sendingEmailId === p.id;
+              const feedback = emailFeedback?.id === p.id ? emailFeedback : null;
+              const disabledReason = !p.contatoId
+                ? 'Vincule um contato à proposta para enviar por e-mail'
+                : !contactEmail
+                  ? 'O contato não tem e-mail cadastrado'
+                  : '';
+
+              return (
+                <tr key={p.id}>
+                  <td style={{ fontWeight: 600 }}>
+                    {p.titulo}
+                    {p.templateId && templateById.get(p.templateId) ? (
+                      <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--vesk-muted)', marginTop: 2 }}>
+                        <i className="ti ti-file-text" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
+                        {templateById.get(p.templateId)?.nome}
+                      </div>
+                    ) : null}
+                    {emailSentAt ? (
+                      <div style={{ fontWeight: 400, fontSize: 11, color: '#4caf82', marginTop: 2 }}>
+                        <i className="ti ti-mail-check" style={{ fontSize: 11 }} aria-hidden="true" /> Enviado por e-mail em{' '}
+                        {new Date(emailSentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      </div>
+                    ) : null}
+                    {feedback && !feedback.ok ? (
+                      <div style={{ fontWeight: 400, fontSize: 11, color: '#e05252', marginTop: 2 }}>
+                        <i className="ti ti-alert-circle" style={{ fontSize: 11 }} aria-hidden="true" /> {feedback.message}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{getContactName(p.contatoId)}</td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{getCompanyName(p.empresaId)}</td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{p.dealId ? getDealTitle(p.dealId) : '—'}</td>
+                  <td style={{ fontFamily: 'var(--font-head)', color: 'var(--vesk-orange)' }}>{p.valor}</td>
+                  <td>{statusPill(p.status)}</td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{p.enviadaEm}</td>
+                  <td>
+                    <div className="crm-row-actions">
+                      <button
+                        type="button"
+                        className="crm-action-btn"
+                        onClick={() => void handleSendEmail(p)}
+                        disabled={sending || !!disabledReason}
+                        title={disabledReason || (emailSentAt ? 'Reenviar por e-mail' : 'Enviar por e-mail')}
+                        aria-label={`Enviar ${p.titulo} por e-mail`}
+                      >
+                        <i className={`ti ${sending ? 'ti-loader-2 wa-spin' : 'ti-send'}`} aria-hidden="true" />
+                        {sending ? 'Enviando…' : emailSentAt ? 'Reenviar' : 'Enviar e-mail'}
+                      </button>
+                      <button type="button" className="crm-action-btn" onClick={() => openEdit(p.id)} aria-label={`Editar ${p.titulo}`}>
+                        <i className="ti ti-pencil" aria-hidden="true" />
+                        Editar
+                      </button>
                     </div>
-                  ) : null}
-                </td>
-                <td style={{ color: 'var(--vesk-muted)' }}>{getContactName(p.contatoId)}</td>
-                <td style={{ color: 'var(--vesk-muted)' }}>{getCompanyName(p.empresaId)}</td>
-                <td style={{ color: 'var(--vesk-muted)' }}>{p.dealId ? getDealTitle(p.dealId) : '—'}</td>
-                <td style={{ fontFamily: 'var(--font-head)', color: 'var(--vesk-orange)' }}>{p.valor}</td>
-                <td>{statusPill(p.status)}</td>
-                <td style={{ color: 'var(--vesk-muted)' }}>{p.enviadaEm}</td>
-                <td>
-                  <div className="crm-row-actions">
-                    <button type="button" className="crm-action-btn" onClick={() => openEdit(p.id)} aria-label={`Editar ${p.titulo}`}>
-                      <i className="ti ti-pencil" aria-hidden="true" />
-                      Editar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              );
+            })}
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ color: 'var(--vesk-muted)', padding: 14 }}>

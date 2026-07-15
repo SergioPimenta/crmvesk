@@ -51,6 +51,7 @@ const KEY_ALIASES = {
   filesize: 'fileSize',
   templateid: 'templateId',
   fieldvalues: 'fieldValues',
+  emailsentat: 'emailSentAt',
 };
 
 export function normalizeRow(row) {

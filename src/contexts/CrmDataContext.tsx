@@ -112,6 +112,7 @@ export type Proposal = {
   dealId?: string;
   templateId?: string;
   fieldValues?: Record<string, string>;
+  emailSentAt?: string;
 };
 
 type CrmDataContextType = {
