@@ -49,11 +49,11 @@ export const loginUser = async (email, password) => {
       throw new Error('Invalid email or password');
     }
 
-    // Generate token
+    // Generate token — sessão expira em 4 horas a partir do login
     const token = jwt.sign(
       { id: user.id, role: user.role, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '4h' }
     );
 
     return {

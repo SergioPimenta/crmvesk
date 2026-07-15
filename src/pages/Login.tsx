@@ -18,6 +18,13 @@ const Login = () => {
   }, []);
 
   useEffect(() => {
+    if (sessionStorage.getItem('session_expired')) {
+      sessionStorage.removeItem('session_expired');
+      setError('Sua sessão expirou. Faça login novamente.');
+    }
+  }, []);
+
+  useEffect(() => {
     if (user) {
       navigate('/admin', { replace: true });
     }

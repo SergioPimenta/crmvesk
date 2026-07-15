@@ -7,6 +7,20 @@ interface FetchOptions extends RequestInit {
   data?: any;
 }
 
+// Endpoints onde um 401 é resposta normal do fluxo (credenciais inválidas),
+// não sessão expirada — não deve disparar o logout automático.
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/register'];
+
+function handleSessionExpired() {
+  const hadToken = !!localStorage.getItem('token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  if (hadToken) {
+    sessionStorage.setItem('session_expired', '1');
+    window.location.href = '/';
+  }
+}
+
 class ApiService {
   private async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
@@ -39,6 +53,11 @@ class ApiService {
       if (!response.ok) {
         const isJson = response.headers.get('content-type')?.includes('application/json');
         const errBody = isJson ? await response.json() : await response.text();
+
+        if (response.status === 401 && !AUTH_ENDPOINTS.includes(endpoint)) {
+          handleSessionExpired();
+        }
+
         throw new Error((errBody && errBody.message) || response.statusText);
       }
 
