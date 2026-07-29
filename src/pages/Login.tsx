@@ -120,35 +120,6 @@ const Login = () => {
                 </li>
               ))}
             </ul>
-
-            <div className="vesk-login-mock" aria-hidden="true">
-              <div className="vesk-login-mock-bar">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="vesk-login-mock-body">
-                <div className="vesk-login-mock-col">
-                  <div className="vesk-login-mock-col-head">
-                    <i className="vesk-login-mock-dot" />
-                    Prospecção
-                  </div>
-                  <div className="vesk-login-mock-card" />
-                  <div className="vesk-login-mock-card short" />
-                </div>
-                <div className="vesk-login-mock-col">
-                  <div className="vesk-login-mock-col-head">
-                    <i className="vesk-login-mock-dot blue" />
-                    Negociação
-                  </div>
-                  <div className="vesk-login-mock-card" />
-                </div>
-                <div className="vesk-login-mock-chat">
-                  <div className="vesk-login-mock-bubble in" />
-                  <div className="vesk-login-mock-bubble out" />
-                </div>
-              </div>
-            </div>
           </div>
         </aside>
 
