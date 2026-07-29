@@ -3530,6 +3530,18 @@ body.vesk-app {
   align-items: center;
 }
 
+.vesk-login-marketing::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 180px;
+  background: linear-gradient(to right, transparent, var(--vesk-bg));
+  pointer-events: none;
+  z-index: 2;
+}
+
 .vesk-login-marketing-glow {
   position: absolute;
   top: -140px;
@@ -3775,6 +3787,16 @@ body.vesk-app {
 
   .vesk-login-marketing {
     padding: 40px 24px 32px;
+  }
+
+  .vesk-login-marketing::after {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 90px;
+    background: linear-gradient(to bottom, transparent, var(--vesk-bg));
   }
 
   .vesk-login-tagline {
