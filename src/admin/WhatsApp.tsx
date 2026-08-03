@@ -748,7 +748,7 @@ const WhatsApp = () => {
                 <button
                   key={c.id}
                   type="button"
-                  className={`inbox-item wa-conv-item${active?.id === c.id ? ' active' : ''}`}
+                  className={`inbox-item wa-conv-item${active?.id === c.id ? ' active' : ''}${c.unread > 0 ? ' unread' : ''}`}
                   onClick={() => selectConversation(c.id)}
                   role="listitem"
                 >

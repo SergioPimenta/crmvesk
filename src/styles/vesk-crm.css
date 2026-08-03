@@ -2358,13 +2358,22 @@ body.vesk-app {
 
 .wa-conv-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
 }
 
 .wa-conv-body {
   flex: 1;
   min-width: 0;
+}
+
+/* Tipografia da lista de conversas WhatsApp — nome maior, no padrão do app oficial */
+.wa-conv-item .inbox-from {
+  font-size: 14px;
+}
+
+.wa-conv-item .inbox-when {
+  font-size: 11px;
 }
 
 .wa-conv-preview {
@@ -2377,18 +2386,30 @@ body.vesk-app {
 .wa-conv-preview .inbox-preview {
   flex: 1;
   margin-top: 0;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Estado não lida: nome em negrito, horário e prévia ganham destaque — igual ao WhatsApp */
+.wa-conv-item.unread .inbox-when {
+  color: #25d366;
+  font-weight: 700;
+}
+
+.wa-conv-item.unread .wa-conv-preview .inbox-preview {
+  color: var(--vesk-text);
+  font-weight: 600;
+}
+
 .wa-avatar {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: #25d36628;
   color: #25d366;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   display: flex;
   align-items: center;
