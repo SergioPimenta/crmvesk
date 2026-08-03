@@ -1667,6 +1667,7 @@ body.vesk-app {
   display: flex;
   align-items: stretch;
   gap: 0;
+  min-width: 0;
   border: 1px solid var(--vesk-border);
   background: var(--vesk-surface2);
   border-radius: 12px;
@@ -1739,6 +1740,7 @@ body.vesk-app {
   justify-content: space-between;
   gap: 10px;
   align-items: baseline;
+  min-width: 0;
 }
 
 .inbox-from {
@@ -1748,6 +1750,7 @@ body.vesk-app {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .inbox-when {
@@ -1841,6 +1844,7 @@ body.vesk-app {
   max-height: calc(100vh - 180px);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .wa-list-header {
@@ -2360,6 +2364,7 @@ body.vesk-app {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .wa-conv-body {
@@ -2381,10 +2386,12 @@ body.vesk-app {
   align-items: center;
   gap: 8px;
   margin-top: 2px;
+  min-width: 0;
 }
 
 .wa-conv-preview .inbox-preview {
   flex: 1;
+  min-width: 0;
   margin-top: 0;
   font-size: 12.5px;
   white-space: nowrap;
