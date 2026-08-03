@@ -841,16 +841,23 @@ export async function getChatMessagingWindow(userId, chatId) {
   return computeMessagingWindow(messages);
 }
 
-async function assertMetaCustomerCareWindow(userId, chatId) {
-  const settings = await getSettings(userId);
-  if (!settings || settings.provider !== 'meta') return;
+/**
+ * Verifica, só de leitura, se já existe conversa para esse telefone e se ela
+ * está dentro da janela de 24h da Meta (nesse caso texto livre é permitido;
+ * fora dela, só modelo aprovado). Usado pelo modal "Novo atendimento" para
+ * decidir se mostra o campo de mensagem livre ou exige um modelo.
+ */
+export async function getWindowForPhone(userId, phone) {
+  const canonical = canonicalWhatsAppPhone(phone);
+  if (canonical.length < 12) return { chatId: null, chatName: '', withinWindow: false };
 
-  const window = await getChatMessagingWindow(userId, chatId);
-  if (!window.withinWindow) {
-    throw new Error(
-      'Fora da janela de 24 horas. Finalize o atendimento e inicie novamente com um modelo aprovado pela Meta.'
-    );
-  }
+  const all = await loadUserChats(userId);
+  const match = all.find((row) => phonesMatch(canonical, jidToPhone(row.remoteJid)));
+  if (!match) return { chatId: null, chatName: '', withinWindow: false };
+
+  const messages = await listMessages(userId, match.id);
+  const window = computeMessagingWindow(messages);
+  return { chatId: String(match.id), chatName: match.name || '', withinWindow: window.withinWindow };
 }
 
 export async function sendTemplateMessage(userId, chatId, { templateName, templateLanguage, bodyPreview }) {
@@ -1132,8 +1139,6 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
     throw new Error('Envio de anexos disponível apenas com a API oficial Meta');
   }
 
-  await assertMetaCustomerCareWindow(userId, chatId);
-
   const [chatRows] = await pool.query(
     'SELECT remote_jid AS remoteJid FROM whatsapp_chats WHERE id = ? AND user_id = ?',
     [chatId, userId]
@@ -1239,7 +1244,6 @@ export async function sendChatMessage(userId, chatId, text) {
   let waMessageId = null;
 
   if (settings.provider === 'meta') {
-    await assertMetaCustomerCareWindow(userId, chatId);
     result = await metaSendText(settings.instanceName, settings.apiKey, number, text);
     waMessageId = result?.messages?.[0]?.id || null;
   } else {

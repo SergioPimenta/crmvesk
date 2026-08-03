@@ -24,6 +24,7 @@ import {
   getChatMessagingWindow,
   sendBulkTemplates,
   getUnreadCount,
+  getWindowForPhone,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 import {
@@ -254,6 +255,16 @@ router.get('/unread-count', async (req, res) => {
     res.json({ count });
   } catch (err) {
     res.status(500).json({ message: err.message, count: 0 });
+  }
+});
+
+router.get('/chats/window-by-phone', async (req, res) => {
+  try {
+    const phone = String(req.query.phone || '');
+    const result = await getWindowForPhone(req.userId, phone);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 });
 

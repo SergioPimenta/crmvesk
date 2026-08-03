@@ -428,7 +428,7 @@ const WhatsApp = () => {
     });
 
   const sendMediaFile = async (file: File) => {
-    if (!active || isClosed || outsideWindow || sending) return;
+    if (!active || isClosed || sending) return;
     if (file.size > 8 * 1024 * 1024) {
       alert('Arquivo muito grande. O limite é 8 MB.');
       return;
@@ -462,7 +462,7 @@ const WhatsApp = () => {
   };
 
   const startRecording = async () => {
-    if (!active || isClosed || outsideWindow || sending || recording) return;
+    if (!active || isClosed || sending || recording) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordStreamRef.current = stream;
@@ -521,7 +521,7 @@ const WhatsApp = () => {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || !active || isClosed || outsideWindow) return;
+    if (!text || !active || isClosed) return;
     setSending(true);
     try {
       const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/messages`, { text });
@@ -850,20 +850,22 @@ const WhatsApp = () => {
                     <i className="ti ti-loader-2 wa-spin" aria-hidden="true" />
                     Carregando conversa…
                   </div>
-                ) : outsideWindow ? (
-                  <div className="wa-window-banner">
-                    <i className="ti ti-clock-exclamation" aria-hidden="true" />
-                    <div>
-                      <strong>Fora da janela de 24 horas</strong>
-                      <p>
-                        Passaram mais de 24 horas desde a última mensagem do cliente. A janela é reiniciada a cada
-                        nova mensagem dele — aguarde o contato ou finalize o atendimento e inicie novamente com um
-                        modelo aprovado pela Meta.
-                      </p>
-                    </div>
-                  </div>
                 ) : (
-                  <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
+                  <>
+                    {outsideWindow ? (
+                      <div className="wa-window-banner wa-window-banner--hint">
+                        <i className="ti ti-clock-exclamation" aria-hidden="true" />
+                        <div>
+                          <strong>Fora da janela de 24 horas</strong>
+                          <p>
+                            Passaram mais de 24 horas desde a última mensagem do cliente. Mensagens de texto livre
+                            podem ser recusadas pela Meta — se isso acontecer, finalize o atendimento e reinicie
+                            com um modelo aprovado.
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                    <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>
                     <input
                       ref={imageInputRef}
                       type="file"
@@ -979,7 +981,8 @@ const WhatsApp = () => {
                     >
                       <i className="ti ti-send" aria-hidden="true" />
                     </button>
-                  </form>
+                    </form>
+                  </>
                 )}
               </>
             ) : (
