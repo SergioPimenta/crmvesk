@@ -29,13 +29,20 @@ export function dayKey(iso: string): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+type WaTimelineMessage = {
+  id: string;
+  text: string;
+  fromMe: boolean;
+  messageAt: string;
+  status?: WaMsgStatus;
+  errorMessage?: string;
+};
+
 export type WaChatItem =
   | { type: 'day'; key: string; label: string }
-  | { type: 'message'; key: string; message: { id: string; text: string; fromMe: boolean; messageAt: string; status?: WaMsgStatus } };
+  | { type: 'message'; key: string; message: WaTimelineMessage };
 
-export function buildChatTimeline(
-  messages: { id: string; text: string; fromMe: boolean; messageAt: string; status?: WaMsgStatus }[]
-): WaChatItem[] {
+export function buildChatTimeline(messages: WaTimelineMessage[]): WaChatItem[] {
   const items: WaChatItem[] = [];
   let lastDay = '';
 

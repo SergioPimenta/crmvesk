@@ -118,6 +118,7 @@ export async function runMigrations() {
   await migrateProposalTemplateFields();
   await migrateProposalEmailTracking();
   await migrateWhatsappChatUi();
+  await migrateWhatsappMessageError();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
@@ -187,6 +188,13 @@ async function migrateWhatsappChatUi() {
       `ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(20) DEFAULT 'open'`
     );
   }
+}
+
+async function migrateWhatsappMessageError() {
+  if (!(await tableExists('whatsapp_messages'))) return;
+  await pool.query(
+    `ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS error_message VARCHAR(500) DEFAULT ''`
+  );
 }
 
 async function migrateWhatsappWebhookLogs() {

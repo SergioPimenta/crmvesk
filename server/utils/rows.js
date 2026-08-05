@@ -52,6 +52,7 @@ const KEY_ALIASES = {
   templateid: 'templateId',
   fieldvalues: 'fieldValues',
   emailsentat: 'emailSentAt',
+  errormessage: 'errorMessage',
 };
 
 export function normalizeRow(row) {

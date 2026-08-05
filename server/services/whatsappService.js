@@ -543,7 +543,7 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
   return ins.insertId;
 }
 
-export async function updateMessageStatus(userId, waMessageId, status) {
+export async function updateMessageStatus(userId, waMessageId, status, errorMessage = '') {
   if (!waMessageId || !status) return;
   const next = String(status).toLowerCase();
   if (!['sent', 'delivered', 'read', 'failed'].includes(next)) return;
@@ -559,8 +559,9 @@ export async function updateMessageStatus(userId, waMessageId, status) {
   const nextRank = STATUS_RANK[next] ?? 0;
   if (next !== 'failed' && nextRank <= currentRank) return;
 
-  await pool.query('UPDATE whatsapp_messages SET status = ? WHERE id = ? AND user_id = ?', [
+  await pool.query('UPDATE whatsapp_messages SET status = ?, error_message = ? WHERE id = ? AND user_id = ?', [
     next,
+    next === 'failed' ? String(errorMessage || '').slice(0, 500) : '',
     rows[0].id,
     userId,
   ]);
@@ -634,7 +635,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
 
     const statuses = parseWebhookStatuses(payload);
     for (const st of statuses) {
-      await updateMessageStatus(userId, st.waMessageId, st.status);
+      await updateMessageStatus(userId, st.waMessageId, st.status, st.errorMessage);
     }
 
     for (const item of items) {
@@ -1044,7 +1045,7 @@ export async function listChats(userId) {
 
 export async function listMessages(userId, chatId) {
   const [rows] = await pool.query(
-    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt, status
+    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt, status, error_message AS errorMessage
      FROM whatsapp_messages WHERE user_id = ? AND chat_id = ? ORDER BY message_at ASC, id ASC`,
     [userId, chatId]
   );
@@ -1062,6 +1063,7 @@ export async function listMessages(userId, chatId) {
       fromMe,
       messageAt: toIso(row.messageAt),
       status: fromMe ? status : undefined,
+      errorMessage: fromMe && status === 'failed' ? row.errorMessage || '' : undefined,
     };
   });
 }

@@ -41,6 +41,7 @@ type WaMessage = {
   messageAt: string;
   fromMe: boolean;
   status?: WaMsgStatus;
+  errorMessage?: string;
   media?: WaMediaPayload | null;
 };
 
@@ -195,8 +196,20 @@ const MessageContent = ({ message }: { message: WaMessage }) => {
   );
 };
 
-const MessageChecks = ({ status }: { status?: WaMsgStatus }) => {
-  if (!status || status === 'failed') return null;
+const MessageChecks = ({ status, errorMessage }: { status?: WaMsgStatus; errorMessage?: string }) => {
+  if (!status) return null;
+  if (status === 'failed') {
+    return (
+      <span
+        className="wa-msg-checks wa-msg-checks--failed"
+        title={errorMessage || 'Falha ao enviar'}
+        aria-label={`Falha ao enviar: ${errorMessage || 'motivo não informado'}`}
+      >
+        <i className="ti ti-alert-triangle-filled" aria-hidden="true" />
+        Não entregue
+      </span>
+    );
+  }
   const isRead = status === 'read';
   const isDelivered = status === 'delivered' || isRead;
   return (
@@ -222,6 +235,7 @@ const WhatsApp = () => {
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState('');
+  const [sendError, setSendError] = useState('');
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [newAttendanceOpen, setNewAttendanceOpen] = useState(false);
@@ -326,6 +340,7 @@ const WhatsApp = () => {
 
   useEffect(() => {
     activeChatIdRef.current = activeId;
+    setSendError('');
 
     if (!activeId) {
       setMessages([]);
@@ -429,8 +444,9 @@ const WhatsApp = () => {
 
   const sendMediaFile = async (file: File) => {
     if (!active || isClosed || sending) return;
+    setSendError('');
     if (file.size > 8 * 1024 * 1024) {
-      alert('Arquivo muito grande. O limite é 8 MB.');
+      setSendError('Arquivo muito grande. O limite é 8 MB.');
       return;
     }
     setSending(true);
@@ -449,7 +465,7 @@ const WhatsApp = () => {
       setDraft('');
       await loadChats();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Não foi possível enviar o arquivo');
+      setSendError(err instanceof Error ? err.message : 'Não foi possível enviar o arquivo.');
     } finally {
       setSending(false);
     }
@@ -463,6 +479,7 @@ const WhatsApp = () => {
 
   const startRecording = async () => {
     if (!active || isClosed || sending || recording) return;
+    setSendError('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordStreamRef.current = stream;
@@ -488,7 +505,7 @@ const WhatsApp = () => {
       recorder.start();
       setRecording(true);
     } catch {
-      alert('Não foi possível acessar o microfone. Verifique as permissões do navegador.');
+      setSendError('Não foi possível acessar o microfone. Verifique as permissões do navegador.');
     }
   };
 
@@ -523,6 +540,7 @@ const WhatsApp = () => {
     const text = draft.trim();
     if (!text || !active || isClosed) return;
     setSending(true);
+    setSendError('');
     try {
       const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/messages`, { text });
       scrollOnNextMessagesRef.current = true;
@@ -530,7 +548,7 @@ const WhatsApp = () => {
       setDraft('');
       await loadChats();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Não foi possível enviar a mensagem');
+      setSendError(err instanceof Error ? err.message : 'Não foi possível enviar a mensagem.');
     } finally {
       setSending(false);
     }
@@ -827,11 +845,17 @@ const WhatsApp = () => {
                       </div>
                     ) : (
                       <div key={item.key} className={`wa-bubble-wrap${item.message.fromMe ? ' out' : ' in'}`}>
-                        <div className={`wa-bubble${item.message.fromMe ? ' out' : ' in'}`}>
+                        <div
+                          className={`wa-bubble${item.message.fromMe ? ' out' : ' in'}${
+                            item.message.status === 'failed' ? ' wa-bubble--failed' : ''
+                          }`}
+                        >
                           <MessageContent message={item.message} />
                           <div className="wa-bubble-meta">
                             <time dateTime={item.message.messageAt}>{formatMessageTime(item.message.messageAt)}</time>
-                            {item.message.fromMe ? <MessageChecks status={item.message.status} /> : null}
+                            {item.message.fromMe ? (
+                              <MessageChecks status={item.message.status} errorMessage={item.message.errorMessage} />
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -863,6 +887,20 @@ const WhatsApp = () => {
                             com um modelo aprovado.
                           </p>
                         </div>
+                      </div>
+                    ) : null}
+                    {sendError ? (
+                      <div className="wa-send-error" role="alert">
+                        <i className="ti ti-alert-circle" aria-hidden="true" />
+                        <span>{sendError}</span>
+                        <button
+                          type="button"
+                          className="wa-send-error-close"
+                          aria-label="Fechar aviso de erro"
+                          onClick={() => setSendError('')}
+                        >
+                          <i className="ti ti-x" aria-hidden="true" />
+                        </button>
                       </div>
                     ) : null}
                     <form className="wa-compose" onSubmit={(e) => void sendMessage(e)}>

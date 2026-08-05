@@ -301,6 +301,25 @@ export function parseWebhookMessages(payload) {
 }
 
 /** Extrai atualizações de status (enviada, entregue, lida) do webhook da Meta. */
+/** Traduz os erros mais comuns da Meta para uma frase clara, sem jargão de API. */
+function friendlyStatusErrorMessage(err) {
+  const code = err?.code;
+  const raw = err?.error_data?.details || err?.title || err?.message || '';
+  if (code === 131047 || /24 hours|janela/i.test(raw)) {
+    return 'Fora da janela de 24 horas — o cliente precisa mandar uma mensagem antes, ou envie um modelo aprovado.';
+  }
+  if (code === 131026) {
+    return 'Número não está no WhatsApp ou não pôde ser alcançado.';
+  }
+  if (code === 131031) {
+    return 'Conta do WhatsApp Business restrita ou desabilitada pela Meta.';
+  }
+  if (code === 133010) {
+    return 'Número de telefone da empresa não está registrado na Meta.';
+  }
+  return raw || 'A Meta recusou o envio desta mensagem.';
+}
+
 export function parseWebhookStatuses(payload) {
   const items = [];
   if (payload?.object !== 'whatsapp_business_account') return items;
@@ -310,9 +329,12 @@ export function parseWebhookStatuses(payload) {
       if (change.field !== 'messages') continue;
       for (const status of change.value?.statuses || []) {
         if (!status.id || !status.status) continue;
+        const st = String(status.status).toLowerCase();
+        const firstError = Array.isArray(status.errors) ? status.errors[0] : null;
         items.push({
           waMessageId: status.id,
-          status: String(status.status).toLowerCase(),
+          status: st,
+          errorMessage: st === 'failed' && firstError ? friendlyStatusErrorMessage(firstError) : '',
         });
       }
     }

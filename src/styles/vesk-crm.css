@@ -2576,6 +2576,25 @@ body.vesk-app {
   top: 0;
 }
 
+.wa-msg-checks--failed {
+  width: auto;
+  height: auto;
+  gap: 4px;
+  color: #f87171;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.wa-msg-checks--failed i {
+  font-size: 12px;
+}
+
+.wa-bubble--failed {
+  border: 1px solid rgba(224, 82, 82, 0.5) !important;
+  background: rgba(224, 82, 82, 0.08) !important;
+}
+
 .wa-closed-banner {
   display: flex;
   align-items: center;
@@ -2654,6 +2673,51 @@ body.vesk-app {
 .wa-window-banner--hint p {
   font-size: 11.5px;
   color: #e8c896;
+}
+
+/* Erro ao enviar mensagem/mídia/áudio — aparece logo acima da barra de digitação */
+.wa-send-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: none;
+  border-bottom: 1px solid rgba(224, 82, 82, 0.4);
+  background: linear-gradient(180deg, rgba(224, 82, 82, 0.18) 0%, rgba(224, 82, 82, 0.08) 100%);
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.wa-send-error i:first-child {
+  flex-shrink: 0;
+  font-size: 17px;
+  color: #f87171;
+}
+
+.wa-send-error span {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-send-error-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wa-send-error-close:hover {
+  background: rgba(224, 82, 82, 0.2);
+  color: #fff;
 }
 
 .wa-messages {
