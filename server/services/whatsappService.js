@@ -1133,7 +1133,7 @@ async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filen
   }
 }
 
-export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename, caption }) {
+export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename, caption, previewUrl: existingPreviewUrl }) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
@@ -1165,13 +1165,9 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
   });
 
   const waMessageId = result?.messages?.[0]?.id || null;
-  const previewUrl = await resolveMediaPreviewUrl(
-    userId,
-    fileBuffer,
-    safeName,
-    normalizedMime,
-    sendKind
-  );
+  const previewUrl =
+    existingPreviewUrl ||
+    (await resolveMediaPreviewUrl(userId, fileBuffer, safeName, normalizedMime, sendKind));
   const body = serializeMediaMessage({ kind: sendKind, name: safeName, caption, url: previewUrl });
   const preview = caption?.trim() || mediaLabel({ kind: sendKind, name: safeName });
   const messageAt = new Date();

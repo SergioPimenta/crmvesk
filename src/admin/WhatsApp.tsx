@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { put } from '@vercel/blob/client';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
 import BulkMessagingModal from '../components/crm/BulkMessagingModal';
@@ -27,6 +28,21 @@ type MetaApprovedTemplate = {
   language: string;
   category: string;
 };
+
+// Espelha os limites reais da Meta Cloud API (server/routes/whatsapp.js).
+const MEDIA_BYTES_LIMITS: Record<string, number> = {
+  image: 5 * 1024 * 1024,
+  video: 16 * 1024 * 1024,
+  audio: 16 * 1024 * 1024,
+  document: 100 * 1024 * 1024,
+};
+
+function mediaKindFromMime(mimeType: string): keyof typeof MEDIA_BYTES_LIMITS {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'document';
+}
 
 const templateKey = (t: MetaApprovedTemplate) => `${t.id}-${t.language}`;
 
@@ -430,36 +446,44 @@ const WhatsApp = () => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   };
 
-  const fileToBase64 = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result || '');
-        const base64 = result.includes(',') ? result.split(',')[1] : result;
-        resolve(base64);
-      };
-      reader.onerror = () => reject(new Error('Não foi possível ler o arquivo'));
-      reader.readAsDataURL(file);
-    });
-
   const sendMediaFile = async (file: File) => {
     if (!active || isClosed || sending) return;
     setSendError('');
-    if (file.size > 8 * 1024 * 1024) {
-      setSendError('Arquivo muito grande. O limite é 8 MB.');
+    const mimeType = file.type || 'application/octet-stream';
+    const limit = MEDIA_BYTES_LIMITS[mediaKindFromMime(mimeType)];
+    if (file.size > limit) {
+      setSendError(`Arquivo muito grande. O limite é ${Math.floor(limit / 1024 / 1024)} MB.`);
       return;
     }
     setSending(true);
     setAttachOpen(false);
     try {
       const caption = draft.trim();
-      const payload = {
-        data: await fileToBase64(file),
-        mimeType: file.type || 'application/octet-stream',
+      const safeName = (file.name || 'arquivo').replace(/[^\w.\-()+]/g, '_');
+      const pathname = `wa/out/${Date.now()}-${safeName}`;
+      const tokenResponse = await api.post<{ type: string; clientToken: string }>(
+        '/whatsapp/blob-upload-token',
+        {
+          type: 'blob.generate-client-token',
+          payload: {
+            pathname,
+            callbackUrl: `${window.location.origin}/api/whatsapp/blob-upload-token`,
+            clientPayload: null,
+            multipart: false,
+          },
+        }
+      );
+      const blob = await put(pathname, file, {
+        access: 'public',
+        token: tokenResponse.clientToken,
+        contentType: mimeType,
+      });
+      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/media`, {
+        blobUrl: blob.url,
+        mimeType,
         filename: file.name || 'arquivo',
         caption,
-      };
-      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/media`, payload);
+      });
       scrollOnNextMessagesRef.current = true;
       setMessages(data.messages || []);
       setDraft('');

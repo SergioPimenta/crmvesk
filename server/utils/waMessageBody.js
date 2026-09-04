@@ -73,7 +73,7 @@ const EXT_TO_MIME = {
   txt: 'text/plain',
 };
 
-const META_SUPPORTED_MIMES = new Set([
+export const META_SUPPORTED_MIMES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',

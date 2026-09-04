@@ -1,5 +1,7 @@
 import express from 'express';
+import { handleUpload } from '@vercel/blob/client';
 import { verifyToken } from '../middleware/auth.js';
+import { detectMediaKind, META_SUPPORTED_MIMES } from '../utils/waMessageBody.js';
 import {
   deleteSettings,
   getConnectionView,
@@ -36,7 +38,17 @@ import {
 
 const router = express.Router();
 
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
+// Limites reais da Meta Cloud API por tipo de mídia.
+const MEDIA_BYTES_LIMITS = {
+  image: 5 * 1024 * 1024,
+  video: 16 * 1024 * 1024,
+  audio: 16 * 1024 * 1024,
+  document: 100 * 1024 * 1024,
+};
+
+function maxMediaBytesFor(mimeType) {
+  return MEDIA_BYTES_LIMITS[detectMediaKind(mimeType)] ?? MEDIA_BYTES_LIMITS.document;
+}
 
 router.get('/webhook/:userId/:secret', async (req, res) => {
   try {
@@ -342,25 +354,50 @@ router.post('/chats/:id/messages', async (req, res) => {
   }
 });
 
+// Emite um token de upload de curta duração para o navegador subir o arquivo
+// direto no Vercel Blob, sem passar pelo corpo da função serverless (limite
+// fixo de 4,5 MB da Vercel — ver https://vercel.com/docs/functions/limitations).
+router.post('/blob-upload-token', async (req, res) => {
+  try {
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async () => ({
+        allowedContentTypes: Array.from(META_SUPPORTED_MIMES),
+        addRandomSuffix: true,
+        maximumSizeInBytes: MEDIA_BYTES_LIMITS.document,
+        tokenPayload: JSON.stringify({ userId: req.userId }),
+      }),
+      onUploadCompleted: async () => {},
+    });
+    res.json(jsonResponse);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/chats/:id/media', async (req, res) => {
   const chatId = Number(req.params.id);
   if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
 
-  const { data, mimeType, filename, caption } = req.body ?? {};
-  if (!data || typeof data !== 'string') {
+  const { blobUrl, mimeType, filename, caption } = req.body ?? {};
+  if (!blobUrl || typeof blobUrl !== 'string') {
     return res.status(400).json({ message: 'Arquivo é obrigatório' });
   }
 
   let buffer;
   try {
-    buffer = Buffer.from(data, 'base64');
-  } catch {
-    return res.status(400).json({ message: 'Arquivo inválido' });
+    const fileRes = await fetch(blobUrl);
+    if (!fileRes.ok) throw new Error(`Falha ao baixar arquivo enviado (${fileRes.status})`);
+    buffer = Buffer.from(await fileRes.arrayBuffer());
+  } catch (err) {
+    return res.status(400).json({ message: err.message || 'Não foi possível ler o arquivo enviado' });
   }
 
   if (!buffer.length) return res.status(400).json({ message: 'Arquivo vazio' });
-  if (buffer.length > MAX_MEDIA_BYTES) {
-    return res.status(400).json({ message: 'Arquivo muito grande (máx. 8 MB)' });
+  const limit = maxMediaBytesFor(mimeType);
+  if (buffer.length > limit) {
+    return res.status(400).json({ message: `Arquivo muito grande (máx. ${Math.floor(limit / 1024 / 1024)} MB)` });
   }
 
   try {
@@ -369,6 +406,7 @@ router.post('/chats/:id/media', async (req, res) => {
       mimeType: mimeType || 'application/octet-stream',
       filename: filename || 'arquivo',
       caption: String(caption || '').trim(),
+      previewUrl: blobUrl,
     });
     res.json({ messages });
   } catch (err) {
