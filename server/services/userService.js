@@ -9,7 +9,7 @@ const stageMap = {
   fechado: { titulo: 'Fechado', cor: '#4caf82', pos: 4 },
 };
 
-async function ensureDefaultPipelineForUser(userId) {
+export async function ensureDefaultPipelineForUser(userId) {
   const [existing] = await pool.query('SELECT id FROM pipelines WHERE user_id = ? LIMIT 1', [userId]);
   let pipelineId = existing[0]?.id;
 
@@ -38,16 +38,18 @@ async function ensureDefaultPipelineForUser(userId) {
   return pipelineId;
 }
 
-export async function listUsers() {
+export async function listUsers(accountId) {
   const [rows] = await pool.query(
     `SELECT id, name, email, role, active, created_at AS createdAt
      FROM users
-     ORDER BY active DESC, name ASC, id ASC`
+     WHERE id = ? OR account_id = ?
+     ORDER BY active DESC, name ASC, id ASC`,
+    [accountId, accountId]
   );
   return rows;
 }
 
-export async function createUser({ name, email, password, role = 'user' }) {
+export async function createUser({ name, email, password, role = 'user', accountId }) {
   try {
     const trimmedName = String(name || '').trim();
     const trimmedEmail = String(email || '').trim().toLowerCase();
@@ -69,12 +71,13 @@ export async function createUser({ name, email, password, role = 'user' }) {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const [result] = await pool.query(
-      'INSERT INTO users (name, email, password, role, active) VALUES (?, ?, ?, ?, TRUE)',
-      [trimmedName, trimmedEmail, hashedPassword, role]
+      'INSERT INTO users (name, email, password, role, active, account_id) VALUES (?, ?, ?, ?, TRUE, ?)',
+      [trimmedName, trimmedEmail, hashedPassword, role, accountId]
     );
 
     const userId = result.insertId;
-    await ensureDefaultPipelineForUser(userId);
+    // Usuário passa a compartilhar os dados (leads, pipeline etc.) da conta que o cadastrou.
+    await ensureDefaultPipelineForUser(accountId);
 
     const [rows] = await pool.query(
       'SELECT id, name, email, role, active, created_at AS createdAt FROM users WHERE id = ?',
@@ -87,18 +90,21 @@ export async function createUser({ name, email, password, role = 'user' }) {
   }
 }
 
-export async function updateUser(id, { name, email, role, active, password }, actorId) {
+export async function updateUser(id, { name, email, role, active, password }, actorAuthUserId, accountId) {
   try {
     const userId = Number(id);
     if (!Number.isFinite(userId)) {
       throw new Error('Usuário inválido');
     }
 
-    if (actorId && userId === Number(actorId) && active === false) {
+    if (actorAuthUserId && userId === Number(actorAuthUserId) && active === false) {
       throw new Error('Você não pode desativar sua própria conta');
     }
 
-    const [currentRows] = await pool.query('SELECT id, email FROM users WHERE id = ?', [userId]);
+    const [currentRows] = await pool.query(
+      'SELECT id, email FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
+      [userId, accountId, accountId]
+    );
     if (currentRows.length === 0) {
       throw new Error('Usuário não encontrado');
     }
@@ -159,7 +165,7 @@ export async function updateUser(id, { name, email, role, active, password }, ac
   }
 }
 
-export async function setUserActive(id, active, actorId) {
+export async function setUserActive(id, active, actorAuthUserId, accountId) {
   try {
     const userId = Number(id);
     if (!Number.isFinite(userId)) {
@@ -170,19 +176,23 @@ export async function setUserActive(id, active, actorId) {
       throw new Error('Status inválido');
     }
 
-    if (actorId && userId === Number(actorId) && active === false) {
+    if (actorAuthUserId && userId === Number(actorAuthUserId) && active === false) {
       throw new Error('Você não pode desativar sua própria conta');
     }
 
-    const [currentRows] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+    const [currentRows] = await pool.query(
+      'SELECT id, role FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
+      [userId, accountId, accountId]
+    );
     if (currentRows.length === 0) {
       throw new Error('Usuário não encontrado');
     }
 
     if (currentRows[0].role === 'admin' && active === false) {
       const [adminRows] = await pool.query(
-        `SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin' AND active = TRUE AND id <> ?`,
-        [userId]
+        `SELECT COUNT(*)::int AS c FROM users
+         WHERE role = 'admin' AND active = TRUE AND id <> ? AND (id = ? OR account_id = ?)`,
+        [userId, accountId, accountId]
       );
       if (Number(adminRows[0]?.c) === 0) {
         throw new Error('Não é possível desativar o único administrador');
@@ -204,24 +214,30 @@ export async function setUserActive(id, active, actorId) {
   }
 }
 
-export async function deleteUser(id, actorId) {
+export async function deleteUser(id, actorAuthUserId, accountId) {
   try {
     const userId = Number(id);
     if (!Number.isFinite(userId)) {
       throw new Error('Usuário inválido');
     }
 
-    if (actorId && userId === Number(actorId)) {
+    if (actorAuthUserId && userId === Number(actorAuthUserId)) {
       throw new Error('Você não pode excluir sua própria conta');
     }
 
-    const [currentRows] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+    const [currentRows] = await pool.query(
+      'SELECT id, role FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
+      [userId, accountId, accountId]
+    );
     if (currentRows.length === 0) {
       throw new Error('Usuário não encontrado');
     }
 
     if (currentRows[0].role === 'admin') {
-      const [adminRows] = await pool.query(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin'`);
+      const [adminRows] = await pool.query(
+        `SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin' AND (id = ? OR account_id = ?)`,
+        [accountId, accountId]
+      );
       if (Number(adminRows[0]?.c) <= 1) {
         throw new Error('Não é possível excluir o único administrador');
       }

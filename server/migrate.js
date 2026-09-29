@@ -127,8 +127,39 @@ export async function runMigrations() {
   await migrateUsersActive();
   await migrateEnsureAdminUser();
   await migrateWhatsappWabaId();
+  await migrateAccounts();
+  await migrateInvites();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
+}
+
+async function migrateAccounts() {
+  if (!(await tableExists('users'))) return;
+  await pool.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_id INT REFERENCES users(id) ON DELETE CASCADE`
+  );
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_users_account ON users(account_id)');
+}
+
+async function migrateInvites() {
+  if (await tableExists('invites')) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invites (
+      id SERIAL PRIMARY KEY,
+      account_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invited_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(160) NOT NULL,
+      role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+      token VARCHAR(128) UNIQUE NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'revoked')),
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_invites_account ON invites(account_id)');
 }
 
 async function migrateUsersActive() {

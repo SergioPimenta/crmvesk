@@ -53,6 +53,11 @@ const KEY_ALIASES = {
   fieldvalues: 'fieldValues',
   emailsentat: 'emailSentAt',
   errormessage: 'errorMessage',
+  expiresat: 'expiresAt',
+  acceptedat: 'acceptedAt',
+  accountname: 'accountName',
+  accountid: 'accountId',
+  invitedby: 'invitedBy',
 };
 
 export function normalizeRow(row) {

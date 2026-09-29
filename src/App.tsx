@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
+import AceitarConvite from './pages/AceitarConvite';
 import Dashboard from './admin/Dashboard';
 import Contatos from './admin/Contatos';
 import Empresas from './admin/Empresas';
@@ -23,6 +24,8 @@ function App() {
       <Route element={<GuestRoute />}>
         <Route path="/" element={<Login />} />
       </Route>
+
+      <Route path="/convite/:token" element={<AceitarConvite />} />
 
       <Route path="/admin" element={<PrivateRoute />}>
         <Route index element={<Dashboard />} />

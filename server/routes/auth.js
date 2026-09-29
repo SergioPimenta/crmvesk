@@ -42,7 +42,7 @@ router.get('/me', verifyToken, async (req, res) => {
   try {
     const [rows] = await pool.query(
       'SELECT id, name, email, role, active FROM users WHERE id = ?',
-      [req.userId]
+      [req.authUserId]
     );
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });

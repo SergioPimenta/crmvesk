@@ -7,8 +7,30 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('admin', 'user')),
   active BOOLEAN DEFAULT TRUE,
+  -- Workspace ao qual o usuário pertence. NULL = é dono do próprio workspace (conta raiz).
+  -- Usuários convidados apontam para o id do administrador que os convidou e passam
+  -- a compartilhar todos os dados (leads, pipeline, whatsapp, relatórios) dessa conta.
+  account_id INT REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_account ON users(account_id);
+
+CREATE TABLE IF NOT EXISTS invites (
+  id SERIAL PRIMARY KEY,
+  account_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  token VARCHAR(128) UNIQUE NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'revoked')),
+  expires_at TIMESTAMPTZ NOT NULL,
+  accepted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invites_account ON invites(account_id);
 
 CREATE TABLE IF NOT EXISTS companies (
   id SERIAL PRIMARY KEY,

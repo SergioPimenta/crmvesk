@@ -16,12 +16,30 @@ type CrmUser = {
   createdAt?: string;
 };
 
+type CrmInvite = {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: string;
+  expiresAt?: string;
+  createdAt?: string;
+};
+
+type InviteForm = {
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
 type UserForm = {
   name: string;
   email: string;
   password: string;
   role: UserRole;
 };
+
+const emptyInviteForm = (): InviteForm => ({ name: '', email: '', role: 'user' });
 
 const emptyForm = (): UserForm => ({
   name: '',
@@ -42,26 +60,39 @@ const formatDate = (value?: string) => {
 const Usuarios = () => {
   const { user: authUser } = useAuth();
   const [users, setUsers] = useState<CrmUser[]>([]);
+  const [invites, setInvites] = useState<CrmInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState<InviteForm>(emptyInviteForm());
+  const [inviting, setInviting] = useState(false);
+
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [togglingId, setTogglingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [form, setForm] = useState<UserForm>(emptyForm());
 
-  const loadUsers = useCallback(async () => {
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await api.get<CrmUser[]>('/users');
-      setUsers(Array.isArray(data) ? data : []);
+      const [usersData, invitesData] = await Promise.all([
+        api.get<CrmUser[]>('/users'),
+        api.get<CrmInvite[]>('/invites'),
+      ]);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+      setInvites(Array.isArray(invitesData) ? invitesData : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar usuários');
       setUsers([]);
+      setInvites([]);
     } finally {
       setLoading(false);
     }
@@ -69,9 +100,9 @@ const Usuarios = () => {
 
   useEffect(() => {
     if (authUser?.role === 'admin') {
-      void loadUsers();
+      void loadAll();
     }
-  }, [authUser?.role, loadUsers]);
+  }, [authUser?.role, loadAll]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -81,9 +112,10 @@ const Usuarios = () => {
     );
   }, [users, query]);
 
-  const openCreate = () => {
-    setForm(emptyForm());
-    setIsCreateOpen(true);
+  const openInvite = () => {
+    setInviteForm(emptyInviteForm());
+    setNotice('');
+    setIsInviteOpen(true);
   };
 
   const openEdit = (id: number) => {
@@ -99,23 +131,42 @@ const Usuarios = () => {
     setIsEditOpen(true);
   };
 
-  const createUser = async (e: React.FormEvent) => {
+  const sendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
+    setInviting(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api.post<{ invite: CrmInvite; emailSent: boolean; emailError?: string }>('/invites', {
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
+        role: inviteForm.role,
+      });
+      setInvites((prev) => [result.invite, ...prev.filter((i) => i.email !== result.invite.email)]);
+      setIsInviteOpen(false);
+      setNotice(
+        result.emailSent
+          ? `Convite enviado por e-mail para ${result.invite.email}.`
+          : `Convite criado para ${result.invite.email}, mas o e-mail não pôde ser enviado (${result.emailError ?? 'verifique a configuração de SMTP'}).`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar convite');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleRevoke = async (invite: CrmInvite) => {
+    if (!window.confirm(`Cancelar o convite enviado para "${invite.email}"?`)) return;
+    setRevokingId(invite.id);
     setError('');
     try {
-      const created = await api.post<CrmUser>('/users', {
-        name: form.name.trim(),
-        email: form.email.trim(),
-        password: form.password,
-        role: form.role,
-      });
-      setUsers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
-      setIsCreateOpen(false);
+      await api.delete(`/invites/${invite.id}`);
+      setInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao cadastrar usuário');
+      setError(err instanceof Error ? err.message : 'Erro ao cancelar convite');
     } finally {
-      setSaving(false);
+      setRevokingId(null);
     }
   };
 
@@ -203,7 +254,7 @@ const Usuarios = () => {
             Usuários <span>({filtered.length})</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            Gerencie contas de acesso ao CRM
+            Convide sua equipe para acessar os mesmos leads, pipeline, relatórios e conversas de WhatsApp
           </div>
         </div>
         <div className="crm-page-actions">
@@ -216,17 +267,69 @@ const Usuarios = () => {
               aria-label="Buscar usuários"
             />
           </div>
-          <button type="button" className="crm-btn-primary" onClick={openCreate}>
+          <button type="button" className="crm-btn-primary" onClick={openInvite}>
             <i className="ti ti-user-plus" style={{ fontSize: 13 }} aria-hidden="true" />
-            Novo usuário
+            Convidar usuário
           </button>
         </div>
       </div>
+
+      {notice ? (
+        <div className="integration-hint" style={{ marginBottom: 12 }}>
+          <i className="ti ti-mail-check" aria-hidden="true" />
+          <span>{notice}</span>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="integration-hint" style={{ marginBottom: 12, borderColor: '#e0525240', color: '#e05252' }}>
           <i className="ti ti-alert-circle" aria-hidden="true" />
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {invites.length > 0 ? (
+        <div className="crm-card" style={{ marginBottom: 16 }}>
+          <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--vesk-border, #26262a)' }}>
+            Convites pendentes ({invites.length})
+          </div>
+          <table className="crm-table" aria-label="Convites pendentes">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Perfil</th>
+                <th>Expira em</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {invites.map((inv) => (
+                <tr key={inv.id}>
+                  <td style={{ fontWeight: 600 }}>{inv.name}</td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{inv.email}</td>
+                  <td>
+                    <span className={`pill-status ${inv.role === 'admin' ? 'ok' : ''}`}>{roleLabel(inv.role)}</span>
+                  </td>
+                  <td style={{ color: 'var(--vesk-muted)' }}>{formatDate(inv.expiresAt)}</td>
+                  <td>
+                    <div className="crm-row-actions">
+                      <button
+                        type="button"
+                        className="crm-action-btn crm-action-btn-danger"
+                        onClick={() => void handleRevoke(inv)}
+                        disabled={revokingId === inv.id}
+                        aria-label={`Cancelar convite de ${inv.name}`}
+                      >
+                        <i className="ti ti-x" aria-hidden="true" />
+                        Cancelar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : null}
 
@@ -254,7 +357,10 @@ const Usuarios = () => {
 
                 return (
                   <tr key={u.id} className={u.active ? undefined : 'crm-user-row-inactive'}>
-                    <td style={{ fontWeight: 600 }}>{u.name}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {u.name}
+                      {isSelf ? <span style={{ color: 'var(--vesk-muted)', fontWeight: 400 }}> (você)</span> : null}
+                    </td>
                     <td style={{ color: 'var(--vesk-muted)' }}>{u.email}</td>
                     <td>
                       <span className={`pill-status ${u.role === 'admin' ? 'ok' : ''}`}>{roleLabel(u.role)}</span>
@@ -306,59 +412,51 @@ const Usuarios = () => {
       </div>
 
       <Modal
-        open={isCreateOpen}
-        title="Novo usuário"
-        description="Cadastre um usuário com acesso ao CRM. Um funil padrão será criado automaticamente."
-        onClose={() => setIsCreateOpen(false)}
+        open={isInviteOpen}
+        title="Convidar usuário"
+        description="Enviamos um e-mail com um link para a pessoa criar a própria senha. Ela passa a ver os mesmos leads, pipeline, relatórios e conversas de WhatsApp desta conta."
+        onClose={() => setIsInviteOpen(false)}
       >
-        <form className="crm-form" onSubmit={createUser}>
+        <form className="crm-form" onSubmit={sendInvite}>
           <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="u_nome">Nome</label>
+            <label htmlFor="i_nome">Nome</label>
             <input
-              id="u_nome"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              id="i_nome"
+              value={inviteForm.name}
+              onChange={(e) => setInviteForm((p) => ({ ...p, name: e.target.value }))}
               required
               autoComplete="name"
             />
           </div>
           <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="u_email">E-mail</label>
+            <label htmlFor="i_email">E-mail</label>
             <input
-              id="u_email"
+              id="i_email"
               type="email"
-              value={form.email}
-              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+              value={inviteForm.email}
+              onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
               required
               autoComplete="off"
             />
           </div>
-          <div className="crm-field">
-            <label htmlFor="u_senha">Senha</label>
-            <input
-              id="u_senha"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-              required
-              minLength={6}
-              autoComplete="new-password"
-            />
-          </div>
-          <div className="crm-field">
-            <label htmlFor="u_role">Perfil</label>
-            <select id="u_role" value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as UserRole }))}>
-              <option value="user">Usuário</option>
-              <option value="admin">Administrador</option>
+          <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="i_role">Perfil</label>
+            <select
+              id="i_role"
+              value={inviteForm.role}
+              onChange={(e) => setInviteForm((p) => ({ ...p, role: e.target.value as UserRole }))}
+            >
+              <option value="user">Usuário (acesso total, exceto gerenciar usuários)</option>
+              <option value="admin">Administrador (pode convidar e gerenciar usuários)</option>
             </select>
           </div>
 
           <div className="crm-form-actions" style={{ gridColumn: '1 / -1' }}>
-            <button type="button" className="crm-btn-secondary" onClick={() => setIsCreateOpen(false)} disabled={saving}>
+            <button type="button" className="crm-btn-secondary" onClick={() => setIsInviteOpen(false)} disabled={inviting}>
               Cancelar
             </button>
-            <button type="submit" className="crm-btn-primary" style={{ marginLeft: 'auto' }} disabled={saving}>
-              {saving ? 'Salvando…' : 'Cadastrar usuário'}
+            <button type="submit" className="crm-btn-primary" style={{ marginLeft: 'auto' }} disabled={inviting}>
+              {inviting ? 'Enviando…' : 'Enviar convite'}
             </button>
           </div>
         </form>

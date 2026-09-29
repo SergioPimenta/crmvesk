@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.use(verifyToken, requireAdmin);
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const rows = await listUsers();
+    const rows = await listUsers(req.userId);
     res.json(normalizeRows(rows));
   } catch (error) {
     res.status(500).json({ message: error.message || 'Erro ao listar usuários' });
@@ -18,7 +18,7 @@ router.get('/', async (_req, res) => {
 
 router.post('/', async (req, res) => {
   const { name, email, password, role } = req.body || {};
-  const result = await createUser({ name, email, password, role });
+  const result = await createUser({ name, email, password, role, accountId: req.userId });
 
   if (result.success) {
     res.status(201).json(normalizeRow(result.user));
@@ -30,7 +30,12 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   const { name, email, role, active, password } = req.body || {};
-  const result = await updateUser(req.params.id, { name, email, role, active, password }, req.userId);
+  const result = await updateUser(
+    req.params.id,
+    { name, email, role, active, password },
+    req.authUserId,
+    req.userId
+  );
 
   if (result.success) {
     res.json(normalizeRow(result.user));
@@ -43,7 +48,7 @@ router.put('/:id', async (req, res) => {
 
 router.patch('/:id/active', async (req, res) => {
   const { active } = req.body || {};
-  const result = await setUserActive(req.params.id, active, req.userId);
+  const result = await setUserActive(req.params.id, active, req.authUserId, req.userId);
 
   if (result.success) {
     res.json(normalizeRow(result.user));
@@ -55,7 +60,7 @@ router.patch('/:id/active', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const result = await deleteUser(req.params.id, req.userId);
+  const result = await deleteUser(req.params.id, req.authUserId, req.userId);
 
   if (result.success) {
     res.status(204).send();

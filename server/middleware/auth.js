@@ -20,9 +20,13 @@ export const verifyToken = (req, res, next) => {
     if (err) {
       return res.status(401).json({ message: 'Unauthorized - invalid token' });
     }
-    
-    // Save user id for use in other routes
-    req.userId = decoded.id;
+
+    // authUserId = identidade real de quem logou (para "sou eu mesmo?", subscriptions de push etc.)
+    // userId = id do workspace/conta (dono original convidou membros) — usado para escopar todos os
+    // dados do CRM (leads, pipeline, whatsapp, relatórios), que agora são compartilhados pela conta.
+    // Tokens antigos (emitidos antes dos workspaces) não têm accountId: caem no próprio id.
+    req.authUserId = decoded.id;
+    req.userId = decoded.accountId ?? decoded.id;
     req.userRole = decoded.role;
     next();
   });

@@ -49,9 +49,12 @@ export const loginUser = async (email, password) => {
       throw new Error('Invalid email or password');
     }
 
+    // accountId identifica o workspace: usuários convidados compartilham a conta de quem os convidou.
+    const accountId = user.account_id || user.id;
+
     // Generate token — sessão expira em 4 horas a partir do login
     const token = jwt.sign(
-      { id: user.id, role: user.role, email: user.email },
+      { id: user.id, role: user.role, email: user.email, accountId },
       process.env.JWT_SECRET,
       { expiresIn: '4h' }
     );
