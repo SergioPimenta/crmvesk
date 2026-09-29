@@ -7,6 +7,7 @@ import { CrmDataProvider } from './contexts/CrmDataContext.tsx';
 import { registerServiceWorker } from './utils/push';
 import { initPwaInstall } from './utils/pwaInstall';
 import { applyTheme, getStoredTheme } from './utils/theme';
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
 applyTheme(getStoredTheme());
