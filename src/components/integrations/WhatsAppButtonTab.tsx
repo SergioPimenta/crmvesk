@@ -15,6 +15,7 @@ type WaWidget = {
   pipelineName: string;
   stageTitle: string;
   active: boolean;
+  useForm: boolean;
   pageViews: number;
   buttonClicks: number;
   lastSeenAt: string | null;
@@ -30,6 +31,7 @@ type FormState = {
   pipelineId: string;
   stageKey: string;
   active: boolean;
+  useForm: boolean;
 };
 
 const formatDate = (value: string | null) => {
@@ -60,6 +62,7 @@ const WhatsAppButtonTab = () => {
     pipelineId: '',
     stageKey: 'prospeccao',
     active: true,
+    useForm: true,
   });
 
   const defaultPipelineId = useMemo(
@@ -90,6 +93,7 @@ const WhatsAppButtonTab = () => {
       pipelineId,
       stageKey: firstStageKey(pipelineId),
       active: true,
+      useForm: true,
     };
   }, [defaultPipelineId, firstStageKey]);
 
@@ -129,6 +133,7 @@ const WhatsAppButtonTab = () => {
       pipelineId: widget.pipelineId || defaultPipelineId,
       stageKey: widget.stageKey || firstStageKey(widget.pipelineId || defaultPipelineId),
       active: widget.active,
+      useForm: widget.useForm !== false,
     });
     setError('');
     setModalOpen(true);
@@ -190,9 +195,9 @@ const WhatsAppButtonTab = () => {
           <div style={{ flex: 1 }}>
             <h3 className="integration-panel-title">Botão WhatsApp</h3>
             <p className="integration-panel-desc">
-              Cadastre a URL do site e o número do WhatsApp. O script exibe um formulário de captura
-              (nome, telefone e e-mail) antes de abrir o WhatsApp. Cada envio cria um lead em{' '}
-              <strong>Contatos</strong> e um negócio no pipeline.
+              Cadastre a URL do site e o número do WhatsApp. Com o formulário ativado, o script pede
+              nome, telefone e e-mail antes de abrir o WhatsApp e cada envio cria um lead em{' '}
+              <strong>Contatos</strong> e um negócio no pipeline. Desativado, o botão abre o WhatsApp direto.
             </p>
           </div>
           <button type="button" className="crm-btn-primary" onClick={openCreate}>
@@ -264,7 +269,7 @@ const WhatsAppButtonTab = () => {
                   </div>
                 </div>
 
-                {(widget.pipelineName || widget.stageTitle) && (
+                {widget.useForm !== false && (widget.pipelineName || widget.stageTitle) && (
                   <div className="wa-widget-field">
                     <label>Destino no CRM</label>
                     <div className="wa-widget-funnel">
@@ -369,6 +374,17 @@ const WhatsAppButtonTab = () => {
             />
           </div>
 
+          <label className="crm-checkbox-label" style={{ gridColumn: '1 / -1' }}>
+            <input
+              type="checkbox"
+              checked={form.useForm}
+              onChange={(e) => setForm((f) => ({ ...f, useForm: e.target.checked }))}
+            />
+            Exibir formulário de captura antes de abrir o WhatsApp
+          </label>
+
+          {form.useForm ? (
+            <>
           <div className="crm-field">
             <label htmlFor="wa_pipeline">Funil</label>
             <select
@@ -417,9 +433,16 @@ const WhatsAppButtonTab = () => {
             </select>
           </div>
 
+            </>
+          ) : null}
+
           <div className="integration-hint" style={{ gridColumn: '1 / -1' }}>
             <i className="ti ti-info-circle" aria-hidden="true" />
-            <span>Leads capturados por este botão entram no funil e etapa selecionados.</span>
+            <span>
+              {form.useForm
+                ? 'Leads capturados por este botão entram no funil e etapa selecionados.'
+                : 'Sem formulário, o botão abre o WhatsApp direto e nenhum lead é criado no CRM.'}
+            </span>
           </div>
 
           {editing ? (

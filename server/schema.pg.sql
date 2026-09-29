@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_button_widgets (
   message TEXT DEFAULT '',
   pipeline_id INT REFERENCES pipelines(id) ON DELETE SET NULL,
   stage_key VARCHAR(64) DEFAULT 'prospeccao',
+  use_form BOOLEAN DEFAULT TRUE,
   active BOOLEAN DEFAULT TRUE,
   page_views INT DEFAULT 0,
   button_clicks INT DEFAULT 0,

@@ -109,6 +109,7 @@ function mapWidgetRow(row, base) {
     pipelineName: normalized.pipelineName || '',
     stageTitle: normalized.stageTitle || '',
     active: Boolean(normalized.active),
+    useForm: normalized.useForm !== false,
     pageViews: Number(normalized.pageViews) || 0,
     buttonClicks: Number(normalized.buttonClicks) || 0,
     lastSeenAt: normalized.lastSeenAt,
@@ -120,7 +121,7 @@ function mapWidgetRow(row, base) {
 export async function listWidgets(userId) {
   const [rows] = await pool.query(
     `SELECT w.id, w.site_url AS siteUrl, w.site_name AS siteName, w.phone, w.monitor_code AS monitorCode,
-            w.message, w.active, w.page_views AS pageViews, w.button_clicks AS buttonClicks,
+            w.message, w.active, w.use_form AS useForm, w.page_views AS pageViews, w.button_clicks AS buttonClicks,
             w.last_seen_at AS lastSeenAt, w.created_at AS createdAt,
             w.pipeline_id AS pipelineId, w.stage_key AS stageKey,
             p.nome AS pipelineName, ps.titulo AS stageTitle
@@ -141,7 +142,7 @@ export function buildEmbedSnippet(monitorCode, base = getPublicApiBase()) {
 
 export async function createWidget(
   userId,
-  { siteUrl, siteName = '', phone, message = '', pipelineId, stageKey }
+  { siteUrl, siteName = '', phone, message = '', pipelineId, stageKey, useForm = true }
 ) {
   const normalizedUrl = normalizeSiteUrl(siteUrl);
   const phoneDigits = digitsOnly(phone);
@@ -151,8 +152,8 @@ export async function createWidget(
   const pipeline = await resolveWidgetPipeline(userId, pipelineId, stageKey);
   const monitorCode = crypto.randomBytes(16).toString('hex');
   const [result] = await pool.query(
-    `INSERT INTO whatsapp_button_widgets (user_id, site_url, site_name, phone, monitor_code, message, pipeline_id, stage_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO whatsapp_button_widgets (user_id, site_url, site_name, phone, monitor_code, message, pipeline_id, stage_key, use_form)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
       normalizedUrl,
@@ -162,6 +163,7 @@ export async function createWidget(
       message.trim(),
       pipeline.pipelineId,
       pipeline.stageKey,
+      !!useForm,
     ]
   );
 
@@ -172,7 +174,7 @@ export async function createWidget(
 export async function updateWidget(
   userId,
   id,
-  { siteUrl, siteName, phone, message, active, pipelineId, stageKey }
+  { siteUrl, siteName, phone, message, active, pipelineId, stageKey, useForm }
 ) {
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) throw new Error('ID inválido');
@@ -194,7 +196,7 @@ export async function updateWidget(
 
   await pool.query(
     `UPDATE whatsapp_button_widgets
-     SET site_url = ?, site_name = ?, phone = ?, message = ?, active = ?,
+     SET site_url = ?, site_name = ?, phone = ?, message = ?, active = ?, use_form = ?,
          pipeline_id = ?, stage_key = ?, updated_at = NOW()
      WHERE id = ? AND user_id = ?`,
     [
@@ -203,6 +205,7 @@ export async function updateWidget(
       phoneDigits,
       message !== undefined ? String(message).trim() : existing.message || '',
       active !== undefined ? !!active : !!existing.active,
+      useForm !== undefined ? !!useForm : existing.useForm !== false,
       pipeline.pipelineId,
       pipeline.stageKey,
       numericId,
@@ -226,7 +229,7 @@ export async function deleteWidget(userId, id) {
 
 async function getWidgetById(userId, id) {
   const [rows] = await pool.query(
-    `SELECT id, site_url AS siteUrl, site_name AS siteName, phone, message, active,
+    `SELECT id, site_url AS siteUrl, site_name AS siteName, phone, message, active, use_form AS useForm,
             pipeline_id AS pipelineId, stage_key AS stageKey
      FROM whatsapp_button_widgets WHERE id = ? AND user_id = ? LIMIT 1`,
     [id, userId]
@@ -236,7 +239,7 @@ async function getWidgetById(userId, id) {
 
 export async function getWidgetByMonitorCode(monitorCode) {
   const [rows] = await pool.query(
-    `SELECT id, user_id AS userId, site_url AS siteUrl, site_name AS siteName, phone, message, active,
+    `SELECT id, user_id AS userId, site_url AS siteUrl, site_name AS siteName, phone, message, active, use_form AS useForm,
             monitor_code AS monitorCode, pipeline_id AS pipelineId, stage_key AS stageKey
      FROM whatsapp_button_widgets WHERE monitor_code = ? LIMIT 1`,
     [monitorCode]
@@ -256,6 +259,7 @@ function buildWaLeadMessage(widget, { name, email, phone, siteLabel }) {
 export async function submitWidgetLead(monitorCode, { nome, email = '', telefone, pageUrl = '' }) {
   const widget = await getWidgetByMonitorCode(monitorCode);
   if (!widget) throw new Error('Widget não encontrado ou inativo');
+  if (widget.useForm === false) throw new Error('Formulário desativado para este botão');
 
   const name = String(nome || '').trim();
   const emailStr = String(email || '').trim();
@@ -322,6 +326,10 @@ function escapeJsString(value) {
 export function buildWidgetScript(widget) {
   const base = getPublicApiBase();
   const code = widget.monitorCode;
+  const useForm = widget.useForm !== false;
+  const waDirect = `https://wa.me/${digitsOnly(widget.phone)}?text=${encodeURIComponent(
+    widget.message?.trim() || 'Olá, gostaria de um atendimento personalizado?'
+  )}`;
   const greeting = escapeJsString(
     widget.message?.trim() || 'Olá, gostaria de um atendimento personalizado?'
   );
@@ -334,6 +342,8 @@ export function buildWidgetScript(widget) {
   var API = '${base}';
   var CODE = '${code}';
   var GREETING = '${greeting}';
+  var USE_FORM = ${useForm};
+  var WA_URL = '${escapeJsString(waDirect)}';
   var PFX = 'vesk-wa-' + CODE;
 
   function ping(event) {
@@ -431,6 +441,11 @@ export function buildWidgetScript(widget) {
   });
 
   btn.addEventListener('click', function() {
+    if (!USE_FORM) {
+      ping('click');
+      window.open(WA_URL, '_blank', 'noopener,noreferrer');
+      return;
+    }
     openPanel();
   });
 

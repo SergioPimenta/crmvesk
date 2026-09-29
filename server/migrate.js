@@ -392,6 +392,9 @@ async function migrateWhatsappWidgetPipeline() {
   await pool.query(
     `ALTER TABLE whatsapp_button_widgets ADD COLUMN IF NOT EXISTS stage_key VARCHAR(64) DEFAULT 'prospeccao'`
   );
+  await pool.query(
+    `ALTER TABLE whatsapp_button_widgets ADD COLUMN IF NOT EXISTS use_form BOOLEAN DEFAULT TRUE`
+  );
 }
 
 async function migrateContactFormWidgets() {
