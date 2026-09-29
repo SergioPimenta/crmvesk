@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import CrmLayout from '../components/crm/CrmLayout';
 import ContactFormTab from '../components/integrations/ContactFormTab';
 import WhatsAppButtonTab from '../components/integrations/WhatsAppButtonTab';
 import MessageTemplatesModal from '../components/integrations/MessageTemplatesModal';
+import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 
 type IntegrationTab = 'whatsapp' | 'formulario' | 'botao';
@@ -29,6 +30,7 @@ const TABS: { id: IntegrationTab; label: string; icon: string }[] = [
 ];
 
 const Integracoes = () => {
+  const { user: authUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as IntegrationTab | null;
   const activeTab: IntegrationTab = TABS.some((t) => t.id === tabParam) ? tabParam! : 'whatsapp';
@@ -91,6 +93,7 @@ const Integracoes = () => {
   }, []);
 
   useEffect(() => {
+    if (authUser?.role !== 'admin') return;
     void (async () => {
       setLoading(true);
       try {
@@ -212,6 +215,10 @@ const Integracoes = () => {
   };
 
   const isLocked = status === 'connected';
+
+  if (authUser?.role !== 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
 
   return (
     <CrmLayout>

@@ -1,6 +1,6 @@
 import express from 'express';
 import { handleUpload } from '@vercel/blob/client';
-import { verifyToken } from '../middleware/auth.js';
+import { verifyToken, requireAdmin } from '../middleware/auth.js';
 import { detectMediaKind, META_SUPPORTED_MIMES } from '../utils/waMessageBody.js';
 import {
   deleteSettings,
@@ -90,7 +90,9 @@ router.post('/webhook/:userId/:secret', async (req, res) => {
 
 router.use(verifyToken);
 
-router.get('/diagnostics', async (req, res) => {
+// Configuração do canal (chaves/segredos, conexão) é restrita a administradores —
+// membros comuns só usam o chat (rotas abaixo, fora deste bloco).
+router.get('/diagnostics', requireAdmin, async (req, res) => {
   try {
     const data = await getWebhookDiagnostics(req.userId);
     res.json(data);
@@ -99,12 +101,12 @@ router.get('/diagnostics', async (req, res) => {
   }
 });
 
-router.get('/config', async (req, res) => {
+router.get('/config', requireAdmin, async (req, res) => {
   const settings = await getSettings(req.userId);
   res.json({ configured: Boolean(settings), settings: maskSettings(settings) });
 });
 
-router.put('/config', async (req, res) => {
+router.put('/config', requireAdmin, async (req, res) => {
   try {
     const body = req.body ?? {};
     const existing = await getSettings(req.userId);
@@ -145,12 +147,12 @@ router.put('/config', async (req, res) => {
   }
 });
 
-router.delete('/config', async (req, res) => {
+router.delete('/config', requireAdmin, async (req, res) => {
   await deleteSettings(req.userId);
   res.status(204).send();
 });
 
-router.get('/status', async (req, res) => {
+router.get('/status', requireAdmin, async (req, res) => {
   try {
     const view = await getConnectionView(req.userId);
     res.json(view);
@@ -230,7 +232,7 @@ router.delete('/dispatch-groups/:id', async (req, res) => {
   }
 });
 
-router.post('/connect', async (req, res) => {
+router.post('/connect', requireAdmin, async (req, res) => {
   try {
     const result = await startConnection(req.userId);
     res.json(result);
@@ -239,7 +241,7 @@ router.post('/connect', async (req, res) => {
   }
 });
 
-router.post('/sync', async (req, res) => {
+router.post('/sync', requireAdmin, async (req, res) => {
   try {
     const status = await refreshConnectionStatus(req.userId);
     if (status.status !== 'connected') {

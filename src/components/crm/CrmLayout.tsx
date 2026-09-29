@@ -132,33 +132,35 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
               <span className="crm-nav-text">Scraping</span>
             </NavLink>
           </div>
-          <div className="crm-nav-section">
-            <div className="crm-nav-label">Integrações</div>
-            <NavLink to="/admin/integracoes" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Integrações">
-              <i className="ti ti-plug-connected" aria-hidden="true" />
-              <span className="crm-nav-text">Integrações</span>
-            </NavLink>
-          </div>
           {user?.role === 'admin' ? (
-            <div className="crm-nav-section">
-              <div className="crm-nav-label">Administração</div>
-              <NavLink to="/admin/usuarios" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Usuários">
-                <i className="ti ti-user-cog" aria-hidden="true" />
-                <span className="crm-nav-text">Usuários</span>
-              </NavLink>
-            </div>
+            <>
+              <div className="crm-nav-section">
+                <div className="crm-nav-label">Integrações</div>
+                <NavLink to="/admin/integracoes" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Integrações">
+                  <i className="ti ti-plug-connected" aria-hidden="true" />
+                  <span className="crm-nav-text">Integrações</span>
+                </NavLink>
+              </div>
+              <div className="crm-nav-section">
+                <div className="crm-nav-label">Administração</div>
+                <NavLink to="/admin/usuarios" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Usuários">
+                  <i className="ti ti-user-cog" aria-hidden="true" />
+                  <span className="crm-nav-text">Usuários</span>
+                </NavLink>
+              </div>
+              <div className="crm-nav-section">
+                <div className="crm-nav-label">Automação</div>
+                <button type="button" className="crm-nav-item" title="Fluxos">
+                  <i className="ti ti-robot" aria-hidden="true" />
+                  <span className="crm-nav-text">Fluxos</span>
+                </button>
+                <button type="button" className="crm-nav-item" title="Campanhas">
+                  <i className="ti ti-target" aria-hidden="true" />
+                  <span className="crm-nav-text">Campanhas</span>
+                </button>
+              </div>
+            </>
           ) : null}
-          <div className="crm-nav-section">
-            <div className="crm-nav-label">Automação</div>
-            <button type="button" className="crm-nav-item" title="Fluxos">
-              <i className="ti ti-robot" aria-hidden="true" />
-              <span className="crm-nav-text">Fluxos</span>
-            </button>
-            <button type="button" className="crm-nav-item" title="Campanhas">
-              <i className="ti ti-target" aria-hidden="true" />
-              <span className="crm-nav-text">Campanhas</span>
-            </button>
-          </div>
           <div className="crm-sidebar-bottom">
             <NavLink to="/admin/instalar-app" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Baixar app">
               <i className="ti ti-device-mobile-down" aria-hidden="true" />

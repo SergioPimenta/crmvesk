@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyToken } from '../middleware/auth.js';
+import { verifyToken, requireAdmin } from '../middleware/auth.js';
 import {
   createWidget,
   deleteWidget,
@@ -9,7 +9,8 @@ import {
 
 const router = express.Router();
 
-router.use(verifyToken);
+// Configuração de integração (widgets de botão) é restrita a administradores.
+router.use(verifyToken, requireAdmin);
 
 router.get('/widgets', async (req, res) => {
   try {
