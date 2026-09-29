@@ -150,11 +150,11 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
               </div>
               <div className="crm-nav-section">
                 <div className="crm-nav-label">Automação</div>
-                <button type="button" className="crm-nav-item" title="Fluxos">
+                <NavLink to="/admin/fluxos" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Fluxos">
                   <i className="ti ti-robot" aria-hidden="true" />
                   <span className="crm-nav-text">Fluxos</span>
-                </button>
-                <button type="button" className="crm-nav-item" title="Campanhas">
+                </NavLink>
+                <button type="button" className="crm-nav-item" title="Campanhas (em breve)" disabled>
                   <i className="ti ti-target" aria-hidden="true" />
                   <span className="crm-nav-text">Campanhas</span>
                 </button>

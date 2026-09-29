@@ -137,6 +137,14 @@ CREATE TABLE IF NOT EXISTS proposals (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS automation_settings (
+  account_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  welcome_message_enabled BOOLEAN DEFAULT FALSE,
+  welcome_message_text TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS whatsapp_settings (
   user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   provider VARCHAR(32) DEFAULT 'evolution',

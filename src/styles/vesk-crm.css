@@ -672,6 +672,16 @@ body.vesk-app {
   color: var(--vesk-text);
 }
 
+.crm-nav-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.crm-nav-item:disabled:hover {
+  background: none;
+  color: var(--vesk-muted);
+}
+
 .crm-nav-item.active {
   background: var(--vesk-orange-glow);
   color: var(--vesk-orange);

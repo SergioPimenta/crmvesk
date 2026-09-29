@@ -60,6 +60,8 @@ const KEY_ALIASES = {
   invitedby: 'invitedBy',
   assignedto: 'assignedTo',
   assignedtoname: 'assignedToName',
+  welcomemessageenabled: 'welcomeMessageEnabled',
+  welcomemessagetext: 'welcomeMessageText',
 };
 
 export function normalizeRow(row) {

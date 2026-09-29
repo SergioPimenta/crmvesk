@@ -14,6 +14,7 @@ import scrapingRoutes from './routes/scraping.js';
 import usersRoutes from './routes/users.js';
 import invitesRoutes from './routes/invites.js';
 import notificationsRoutes from './routes/notifications.js';
+import automationRoutes from './routes/automation.js';
 
 dotenv.config();
 
@@ -78,6 +79,7 @@ export async function createApp() {
   app.use('/api/invites', invitesRoutes);
   app.use('/api/whatsapp', whatsappRoutes);
   app.use('/api/notifications', notificationsRoutes);
+  app.use('/api/automation', automationRoutes);
 
   app.get('/api', (req, res) => {
     res.json({ message: 'API is running on Vercel Postgres' });

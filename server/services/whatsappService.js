@@ -31,6 +31,7 @@ import {
   resolveWabaId,
 } from './metaWhatsAppClient.js';
 import { sendPushToUser } from './pushService.js';
+import { getAutomationSettings, renderWelcomeMessage } from './automationService.js';
 import { computeMessagingWindow } from '../utils/whatsappWindow.js';
 import { canonicalWhatsAppPhone, phoneToCanonicalJid, phonesMatch } from '../utils/whatsappPhone.js';
 import {
@@ -164,6 +165,19 @@ async function logWebhookEvent(userId, { eventType, payload, processed, error = 
   } catch (err) {
     console.warn('Webhook log:', err.message);
   }
+}
+
+// Dispara a mensagem de boas-vindas configurada em Fluxos, se estiver ativa, sempre que
+// um contato fala pela primeira vez com o workspace. Não atribui a conversa a ninguém —
+// ela continua em "Aguardando" esperando um humano assumir.
+async function sendWelcomeMessageIfEnabled(userId, chatId, contactName) {
+  const settings = await getAutomationSettings(userId);
+  if (!settings.welcomeMessageEnabled) return;
+
+  const text = renderWelcomeMessage(settings.welcomeMessageText, { name: contactName }).trim();
+  if (!text) return;
+
+  await sendChatMessage(userId, chatId, text);
 }
 
 export async function getWebhookDiagnostics(userId) {
@@ -491,7 +505,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
       [name || '', lastMessage || '', lastMessageAt, unread, resolvedId]
     );
     await mergeDuplicatesIntoChat(userId, resolvedId, phone);
-    return resolvedId;
+    return { chatId: resolvedId, isNew: false };
   }
 
   let contactId = null;
@@ -521,7 +535,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
   if (newId) {
     await mergeDuplicatesIntoChat(userId, newId, phone);
   }
-  return newId;
+  return { chatId: newId, isNew: true };
 }
 
 export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
@@ -664,9 +678,10 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
         }
 
         const remoteJid = phoneToCanonicalJid(item.from);
-        const chatId = await upsertChat(userId, {
+        const senderName = item.contactName || item.from;
+        const { chatId, isNew } = await upsertChat(userId, {
           remoteJid,
-          name: item.contactName || item.from,
+          name: senderName,
           lastMessage: preview,
           lastMessageAt: item.messageAt,
           incrementUnread: true,
@@ -682,7 +697,12 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
           messageAt: item.messageAt,
         });
 
-        const senderName = item.contactName || item.from;
+        if (isNew) {
+          void sendWelcomeMessageIfEnabled(userId, chatId, senderName).catch((welcomeErr) =>
+            console.warn('Mensagem de boas-vindas:', welcomeErr.message)
+          );
+        }
+
         void sendPushToUser(userId, {
           title: `WhatsApp — ${senderName}`,
           body: (preview || 'Nova mensagem').slice(0, 120),
@@ -738,7 +758,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       ? new Date(Number(item.messageTimestamp) * 1000)
       : new Date();
 
-    const chatId = await upsertChat(userId, {
+    const { chatId, isNew } = await upsertChat(userId, {
       remoteJid,
       name: item?.pushName || '',
       lastMessage: text,
@@ -752,6 +772,12 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       fromMe,
       messageAt,
     });
+
+    if (isNew && !fromMe) {
+      void sendWelcomeMessageIfEnabled(userId, chatId, item?.pushName || '').catch((welcomeErr) =>
+        console.warn('Mensagem de boas-vindas:', welcomeErr.message)
+      );
+    }
   }
 
   return { ok: true };
@@ -811,13 +837,13 @@ export async function openChatFromContact(userId, { phone, contactId, name, acto
       [name || '', contactId || null, chatId, userId]
     );
   } else {
-    chatId = await upsertChat(userId, {
+    ({ chatId } = await upsertChat(userId, {
       remoteJid,
       name: name || digits,
       lastMessage: '',
       lastMessageAt: new Date(),
       incrementUnread: false,
-    });
+    }));
     if (contactId) {
       await pool.query('UPDATE whatsapp_chats SET contact_id = ? WHERE id = ? AND user_id = ?', [
         contactId,
