@@ -374,13 +374,19 @@ const WhatsAppButtonTab = () => {
             />
           </div>
 
-          <label className="crm-checkbox-label" style={{ gridColumn: '1 / -1' }}>
-            <input
-              type="checkbox"
-              checked={form.useForm}
-              onChange={(e) => setForm((f) => ({ ...f, useForm: e.target.checked }))}
-            />
-            Exibir formulário de captura antes de abrir o WhatsApp
+          <label className="crm-switch-row" style={{ gridColumn: '1 / -1' }}>
+            <span className="crm-switch">
+              <input
+                type="checkbox"
+                checked={form.useForm}
+                onChange={(e) => setForm((f) => ({ ...f, useForm: e.target.checked }))}
+              />
+              <span className="crm-switch-slider" aria-hidden="true" />
+            </span>
+            <span className="crm-switch-row-text">
+              <strong>Formulário de captura</strong>
+              <small>Pede nome, telefone e e-mail antes de abrir o WhatsApp.</small>
+            </span>
           </label>
 
           {form.useForm ? (
@@ -446,15 +452,21 @@ const WhatsAppButtonTab = () => {
           </div>
 
           {editing ? (
-            <label className="crm-checkbox-label" style={{ gridColumn: '1 / -1' }}>
-              <input
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-              />
-              Widget ativo no site
+            <label className="crm-switch-row" style={{ gridColumn: '1 / -1' }}>
+              <span className="crm-switch">
+                <input
+                  type="checkbox"
+                  checked={form.active}
+                  onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
+                />
+                <span className="crm-switch-slider" aria-hidden="true" />
+              </span>
+              <span className="crm-switch-row-text">
+                <strong>Widget ativo no site</strong>
+                <small>Desative para esconder o botão sem excluir o código.</small>
+              </span>
             </label>
-          ) : null}
+            ) : null}
 
           <div className="crm-form-actions" style={{ gridColumn: '1 / -1' }}>
             <button type="button" className="crm-btn-secondary" onClick={closeModal}>
