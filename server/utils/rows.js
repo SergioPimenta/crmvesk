@@ -58,6 +58,8 @@ const KEY_ALIASES = {
   accountname: 'accountName',
   accountid: 'accountId',
   invitedby: 'invitedBy',
+  assignedto: 'assignedTo',
+  assignedtoname: 'assignedToName',
 };
 
 export function normalizeRow(row) {
