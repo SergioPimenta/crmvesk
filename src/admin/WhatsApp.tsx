@@ -288,6 +288,7 @@ const WhatsApp = () => {
   const recordStreamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevActiveIdRef = useRef<string | null>(null);
+  const scrolledForChatRef = useRef<string | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const scrollOnNextMessagesRef = useRef(false);
 
@@ -446,6 +447,15 @@ const WhatsApp = () => {
   const messagesReady = Boolean(active?.id) && messagesLoadedFor === active.id && !messagesLoading;
   const outsideWindow =
     messagesReady && !isClosed && waStatus === 'connected' && !messagingWindow.withinWindow;
+
+  // Ao abrir uma conversa (ou trocar de conversa), sempre pula direto para a
+  // mensagem mais recente — só uma vez por conversa, sem animação de rolagem.
+  useEffect(() => {
+    if (!messagesReady || !active) return;
+    if (scrolledForChatRef.current === active.id) return;
+    scrolledForChatRef.current = active.id;
+    scrollMessagesToBottom(false);
+  }, [messagesReady, active, scrollMessagesToBottom]);
 
   useEffect(() => {
     // No mobile a lista aparece primeiro; o usuário toca para abrir a conversa.
