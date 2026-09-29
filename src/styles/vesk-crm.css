@@ -2369,6 +2369,7 @@ body.vesk-app {
   flex-shrink: 0;
   padding: 10px;
   cursor: pointer;
+  position: relative;
 }
 
 .wa-conv-row {
@@ -2442,6 +2443,8 @@ body.vesk-app {
   background: #25d36618;
   border: 1px solid #25d36640;
   color: #25d366;
+  position: absolute;
+  right: 10px;
 }
 
 .wa-avatar {
