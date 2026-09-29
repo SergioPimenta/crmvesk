@@ -2420,17 +2420,28 @@ body.vesk-app {
   font-weight: 600;
 }
 
-.wa-conv-assignee {
-  margin-top: 2px;
-  font-size: 10.5px;
-  color: var(--vesk-muted);
+.wa-conv-row-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.wa-assignee-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 120px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.wa-conv-assignee--unassigned {
-  color: #ef9f27;
+  background: #25d36618;
+  border: 1px solid #25d36640;
+  color: #25d366;
 }
 
 .wa-avatar {

@@ -870,15 +870,17 @@ const WhatsApp = () => {
                     <div className="wa-conv-body">
                       <div className="inbox-row">
                         <div className="inbox-from">{c.nome}</div>
-                        <div className="inbox-when">{c.when}</div>
+                        <div className="wa-conv-row-right">
+                          <div className="inbox-when">{c.when}</div>
+                          {listTab === 'andamento' && c.assignedTo !== String(authUser?.id) ? (
+                            <span className="wa-assignee-tag">{c.assignedToName || 'Outro usuário'}</span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="wa-conv-preview">
                         <span className="inbox-preview">{c.lastMessage}</span>
                         {c.unread > 0 ? <span className="wa-unread">{c.unread}</span> : null}
                       </div>
-                      {listTab === 'andamento' && c.assignedTo !== String(authUser?.id) ? (
-                        <div className="wa-conv-assignee">Com {c.assignedToName || 'outro usuário'}</div>
-                      ) : null}
                     </div>
                   </div>
                 </button>
