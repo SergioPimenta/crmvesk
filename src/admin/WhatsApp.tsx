@@ -5,6 +5,7 @@ import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
 import BulkMessagingModal from '../components/crm/BulkMessagingModal';
 import { useCrmData, type Contact } from '../contexts/CrmDataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import {
   buildChatTimeline,
@@ -70,6 +71,13 @@ type WaConversation = {
   when: string;
   unread: number;
   attendanceStatus?: 'open' | 'closed';
+  assignedTo?: string;
+  assignedToName?: string;
+};
+
+type TeamMember = {
+  id: number;
+  name: string;
 };
 
 const initials = (name: string) => {
@@ -238,6 +246,7 @@ const MessageChecks = ({ status, errorMessage }: { status?: WaMsgStatus; errorMe
 
 const WhatsApp = () => {
   const { contacts, getCompanyName, setWhatsappUnread } = useCrmData();
+  const { user: authUser } = useAuth();
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
@@ -250,6 +259,9 @@ const WhatsApp = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [error, setError] = useState('');
   const [sendError, setSendError] = useState('');
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
@@ -340,13 +352,22 @@ const WhatsApp = () => {
     }
   }, []);
 
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const data = await api.get<TeamMember[]>('/whatsapp/team-members');
+      setTeamMembers(Array.isArray(data) ? data : []);
+    } catch {
+      setTeamMembers([]);
+    }
+  }, []);
+
   useEffect(() => {
     void (async () => {
       setLoading(true);
-      await loadChats();
+      await Promise.all([loadChats(), loadTeamMembers()]);
       setLoading(false);
     })();
-  }, [loadChats]);
+  }, [loadChats, loadTeamMembers]);
 
   useEffect(() => {
     if (waStatus !== 'connected') return undefined;
@@ -597,6 +618,21 @@ const WhatsApp = () => {
     }
   };
 
+  const transferChat = async (targetUserId: number | null) => {
+    if (!active) return;
+    const chatId = active.id;
+    setTransferring(true);
+    try {
+      await api.put(`/whatsapp/chats/${chatId}/assign`, { userId: targetUserId });
+      setTransferOpen(false);
+      await loadChats();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível transferir a conversa');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   const contactCompany = active?.contatoId
     ? getCompanyName(contacts.find((c) => c.id === active.contatoId)?.empresaId)
     : null;
@@ -805,6 +841,11 @@ const WhatsApp = () => {
                         <span className="inbox-preview">{c.lastMessage}</span>
                         {c.unread > 0 ? <span className="wa-unread">{c.unread}</span> : null}
                       </div>
+                      {!c.assignedTo ? (
+                        <div className="wa-conv-assignee wa-conv-assignee--unassigned">Sem responsável</div>
+                      ) : c.assignedTo !== String(authUser?.id) ? (
+                        <div className="wa-conv-assignee">Com {c.assignedToName || 'outro usuário'}</div>
+                      ) : null}
                     </div>
                   </div>
                 </button>
@@ -842,8 +883,25 @@ const WhatsApp = () => {
                         {contactCompany}
                       </div>
                     ) : null}
+                    <div className="wa-chat-meta">
+                      <i className="ti ti-user-circle" aria-hidden="true" />
+                      {active.assignedTo
+                        ? active.assignedTo === String(authUser?.id)
+                          ? 'Atribuído a você'
+                          : `Atribuído a ${active.assignedToName || 'outro usuário'}`
+                        : 'Sem responsável — visível para toda a equipe'}
+                    </div>
                   </div>
                   <div className="wa-chat-head-actions">
+                    <button
+                      type="button"
+                      className="crm-btn-secondary"
+                      onClick={() => setTransferOpen(true)}
+                      disabled={isClosed || teamMembers.length === 0}
+                    >
+                      <i className="ti ti-arrow-forward-up" aria-hidden="true" />
+                      Transferir conversa
+                    </button>
                     <button
                       type="button"
                       className="crm-btn-secondary wa-finish-btn"
@@ -1214,6 +1272,58 @@ const WhatsApp = () => {
               <div className="kanban-empty">Nenhum contato encontrado.</div>
             ) : null}
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={transferOpen}
+        title="Transferir conversa"
+        description={active ? `Escolha quem vai assumir o atendimento de ${active.nome}.` : undefined}
+        onClose={() => setTransferOpen(false)}
+      >
+        <div className="wa-contact-picker-list" role="list">
+          {active?.assignedTo ? (
+            <button
+              type="button"
+              className="wa-contact-picker-item"
+              disabled={transferring}
+              onClick={() => void transferChat(null)}
+              role="listitem"
+            >
+              <div className="wa-avatar">
+                <i className="ti ti-users" aria-hidden="true" />
+              </div>
+              <div className="wa-contact-picker-body">
+                <div className="wa-contact-picker-name">Devolver para a equipe</div>
+                <div className="wa-contact-picker-meta">Remove o responsável — fica visível para todos</div>
+              </div>
+              <i className="ti ti-chevron-right" aria-hidden="true" />
+            </button>
+          ) : null}
+          {teamMembers
+            .filter((m) => String(m.id) !== active?.assignedTo)
+            .map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className="wa-contact-picker-item"
+                disabled={transferring}
+                onClick={() => void transferChat(m.id)}
+                role="listitem"
+              >
+                <div className="wa-avatar">{initials(m.name)}</div>
+                <div className="wa-contact-picker-body">
+                  <div className="wa-contact-picker-name">
+                    {m.name}
+                    {m.id === authUser?.id ? ' (você)' : ''}
+                  </div>
+                </div>
+                <i className="ti ti-chevron-right" aria-hidden="true" />
+              </button>
+            ))}
+          {teamMembers.length === 0 ? (
+            <div className="kanban-empty">Nenhum outro usuário no workspace ainda.</div>
+          ) : null}
         </div>
       </Modal>
 

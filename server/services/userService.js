@@ -38,6 +38,14 @@ export async function ensureDefaultPipelineForUser(userId) {
   return pipelineId;
 }
 
+export async function listTeamMembers(accountId) {
+  const [rows] = await pool.query(
+    `SELECT id, name FROM users WHERE (id = ? OR account_id = ?) AND active = TRUE ORDER BY name ASC`,
+    [accountId, accountId]
+  );
+  return rows;
+}
+
 export async function listUsers(accountId) {
   const [rows] = await pool.query(
     `SELECT id, name, email, role, active, created_at AS createdAt

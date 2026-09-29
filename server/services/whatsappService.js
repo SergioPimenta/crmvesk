@@ -791,7 +791,7 @@ export async function syncChatsFromProvider(userId) {
   return listChats(userId);
 }
 
-export async function openChatFromContact(userId, { phone, contactId, name }) {
+export async function openChatFromContact(userId, { phone, contactId, name, actorId }) {
   const digits = canonicalWhatsAppPhone(phone);
   if (digits.length < 12) throw new Error('Informe um telefone com DDI + DDD + número');
 
@@ -831,6 +831,14 @@ export async function openChatFromContact(userId, { phone, contactId, name }) {
     ]);
   }
 
+  if (actorId) {
+    // Quem abre/inicia a conversa assume o atendimento, se ainda não tiver dono.
+    await pool.query(
+      'UPDATE whatsapp_chats SET assigned_to = COALESCE(assigned_to, ?) WHERE id = ? AND user_id = ?',
+      [actorId, chatId, userId]
+    );
+  }
+
   const chats = await listChats(userId);
   const chat = chats.find((c) => c.id === String(chatId));
   if (!chat) throw new Error('Não foi possível abrir a conversa');
@@ -861,7 +869,7 @@ export async function getWindowForPhone(userId, phone) {
   return { chatId: String(match.id), chatName: match.name || '', withinWindow: window.withinWindow };
 }
 
-export async function sendTemplateMessage(userId, chatId, { templateName, templateLanguage, bodyPreview }) {
+export async function sendTemplateMessage(userId, chatId, { templateName, templateLanguage, bodyPreview, actorId }) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
@@ -898,15 +906,16 @@ export async function sendTemplateMessage(userId, chatId, { templateName, templa
 
   await mergeDuplicatesIntoChat(userId, Number(chatId), number);
   await pool.query(
-    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open',
+            assigned_to = COALESCE(assigned_to, ?)
      WHERE id = ? AND user_id = ?`,
-    [phoneToCanonicalJid(number), displayBody, messageAt, chatId, userId]
+    [phoneToCanonicalJid(number), displayBody, messageAt, actorId ?? null, chatId, userId]
   );
 
   return listMessages(userId, chatId);
 }
 
-export async function startNewAttendance(userId, { phone, name, contactId: contactIdParam, templateName, templateLanguage, templateBody }) {
+export async function startNewAttendance(userId, { phone, name, contactId: contactIdParam, templateName, templateLanguage, templateBody, actorId }) {
   const digits = canonicalWhatsAppPhone(phone);
   if (digits.length < 12) throw new Error('Informe um telefone com DDI + DDD + número');
 
@@ -934,12 +943,14 @@ export async function startNewAttendance(userId, { phone, name, contactId: conta
     phone: digits,
     contactId,
     name: contactName,
+    actorId,
   });
 
   const messages = await sendTemplateMessage(userId, Number(chat.id), {
     templateName: tplName,
     templateLanguage: tplLang,
     bodyPreview: templateBody,
+    actorId,
   });
 
   const chats = await listChats(userId);
@@ -959,7 +970,7 @@ function bulkSendDelayMs() {
   return BULK_SEND_DELAY_MS_MIN + Math.floor(Math.random() * (BULK_SEND_DELAY_MS_MAX - BULK_SEND_DELAY_MS_MIN + 1));
 }
 
-export async function sendBulkTemplates(userId, { phones, templateName, templateLanguage, templateBody }) {
+export async function sendBulkTemplates(userId, { phones, templateName, templateLanguage, templateBody, actorId }) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.provider !== 'meta') {
@@ -989,11 +1000,12 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
       await sleep(bulkSendDelayMs());
     }
     try {
-      const chat = await openChatFromContact(userId, { phone, name: '' });
+      const chat = await openChatFromContact(userId, { phone, name: '', actorId });
       await sendTemplateMessage(userId, Number(chat.id), {
         templateName: tplName,
         templateLanguage: tplLang,
         bodyPreview: templateBody,
+        actorId,
       });
       sent.push(phone);
     } catch (err) {
@@ -1004,27 +1016,64 @@ export async function sendBulkTemplates(userId, { phones, templateName, template
   return { sent: sent.length, failed, phones: sent };
 }
 
-export async function getUnreadCount(userId) {
+export async function getUnreadCount(userId, viewer = {}) {
+  const { viewerId, viewerRole } = viewer;
+  const params = [userId];
+  let visibilityClause = '';
+  if (viewerRole !== 'admin' && viewerId) {
+    visibilityClause = ' AND (assigned_to IS NULL OR assigned_to = ?)';
+    params.push(viewerId);
+  }
+
   const [rows] = await pool.query(
     `SELECT COALESCE(SUM(unread), 0) AS total FROM whatsapp_chats
-     WHERE user_id = ? AND COALESCE(attendance_status, 'open') = 'open'`,
-    [userId]
+     WHERE user_id = ? AND COALESCE(attendance_status, 'open') = 'open'${visibilityClause}`,
+    params
   );
   return Number(rows[0]?.total) || 0;
 }
 
-export async function listChats(userId) {
+export async function assignChat(accountId, chatId, targetUserId) {
+  if (targetUserId !== null) {
+    const [memberRows] = await pool.query(
+      'SELECT id FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
+      [targetUserId, accountId, accountId]
+    );
+    if (!memberRows.length) throw new Error('Usuário não faz parte deste workspace');
+  }
+
+  const [result] = await pool.query(
+    'UPDATE whatsapp_chats SET assigned_to = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
+    [targetUserId, chatId, accountId]
+  );
+  if (!result.affectedRows) throw new Error('Conversa não encontrada');
+  return { assignedTo: targetUserId };
+}
+
+// viewer: quando informado (viewerId + viewerRole !== 'admin'), restringe às conversas sem dono
+// ou atribuídas ao próprio viewer. Chamadas internas (sem viewer) enxergam tudo do workspace.
+export async function listChats(userId, viewer = {}) {
   await dedupeUserChats(userId);
+  const { viewerId, viewerRole } = viewer;
+
+  const params = [userId];
+  let visibilityClause = '';
+  if (viewerRole !== 'admin' && viewerId) {
+    visibilityClause = ' AND (c.assigned_to IS NULL OR c.assigned_to = ?)';
+    params.push(viewerId);
+  }
 
   const [rows] = await pool.query(
     `SELECT c.id, c.remote_jid AS remoteJid, c.contact_id AS contactId, c.name, c.last_message AS lastMessage,
             c.last_message_at AS lastMessageAt, c.unread, c.attendance_status AS attendanceStatus,
+            c.assigned_to AS assignedTo, au.name AS assignedToName,
             ct.nome AS contactName
      FROM whatsapp_chats c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
-     WHERE c.user_id = ? AND COALESCE(c.attendance_status, 'open') = 'open'
+     LEFT JOIN users au ON au.id = c.assigned_to
+     WHERE c.user_id = ? AND COALESCE(c.attendance_status, 'open') = 'open'${visibilityClause}
      ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`,
-    [userId]
+    params
   );
 
   return rows.map((r) => {
@@ -1039,6 +1088,8 @@ export async function listChats(userId) {
       when: formatWhenLocal(row.lastMessageAt),
       unread: Number(row.unread) || 0,
       attendanceStatus: row.attendanceStatus === 'closed' ? 'closed' : 'open',
+      assignedTo: row.assignedTo ? String(row.assignedTo) : undefined,
+      assignedToName: row.assignedToName || undefined,
     };
   });
 }
@@ -1133,7 +1184,7 @@ async function sendMediaToMeta(settings, number, { kind, buffer, mimeType, filen
   }
 }
 
-export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename, caption, previewUrl: existingPreviewUrl }) {
+export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename, caption, previewUrl: existingPreviewUrl, actorId }) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
@@ -1182,9 +1233,10 @@ export async function sendChatMedia(userId, chatId, { buffer, mimeType, filename
 
   await mergeDuplicatesIntoChat(userId, Number(chatId), number);
   await pool.query(
-    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open',
+            assigned_to = COALESCE(assigned_to, ?)
      WHERE id = ? AND user_id = ?`,
-    [phoneToCanonicalJid(number), preview, messageAt, chatId, userId]
+    [phoneToCanonicalJid(number), preview, messageAt, actorId ?? null, chatId, userId]
   );
 
   return listMessages(userId, chatId);
@@ -1225,7 +1277,7 @@ export async function loadMessagesFromProvider(userId, chatId) {
   return listMessages(userId, chatId);
 }
 
-export async function sendChatMessage(userId, chatId, text) {
+export async function sendChatMessage(userId, chatId, text, actorId) {
   const settings = await getSettings(userId);
   if (!settings) throw new Error('WhatsApp não configurado');
   if (settings.status !== 'connected') throw new Error('WhatsApp não está conectado');
@@ -1261,9 +1313,10 @@ export async function sendChatMessage(userId, chatId, text) {
 
   await mergeDuplicatesIntoChat(userId, Number(chatId), number);
   await pool.query(
-    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open'
+    `UPDATE whatsapp_chats SET remote_jid = ?, last_message = ?, last_message_at = ?, attendance_status = 'open',
+            assigned_to = COALESCE(assigned_to, ?)
      WHERE id = ? AND user_id = ?`,
-    [phoneToCanonicalJid(number), text, messageAt, chatId, userId]
+    [phoneToCanonicalJid(number), text, messageAt, actorId ?? null, chatId, userId]
   );
 
   return listMessages(userId, chatId);

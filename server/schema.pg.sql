@@ -162,10 +162,14 @@ CREATE TABLE IF NOT EXISTS whatsapp_chats (
   last_message TEXT,
   last_message_at TIMESTAMPTZ,
   unread INT DEFAULT 0,
+  -- Dono do atendimento dentro do workspace. NULL = sem dono, visível pra equipe toda até alguém assumir.
+  assigned_to INT REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, remote_jid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_wa_chats_assigned ON whatsapp_chats(assigned_to);
 
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
   id SERIAL PRIMARY KEY,

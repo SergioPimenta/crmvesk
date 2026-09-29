@@ -3,6 +3,7 @@ import { handleUpload } from '@vercel/blob/client';
 import { verifyToken, requireAdmin } from '../middleware/auth.js';
 import { detectMediaKind, META_SUPPORTED_MIMES } from '../utils/waMessageBody.js';
 import {
+  assignChat,
   deleteSettings,
   getConnectionView,
   getSettings,
@@ -29,6 +30,8 @@ import {
   getWindowForPhone,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
+import { normalizeRow } from '../utils/rows.js';
+import { listTeamMembers } from '../services/userService.js';
 import {
   listDispatchGroups,
   createDispatchGroup,
@@ -179,6 +182,7 @@ router.post('/bulk-send', async (req, res) => {
       templateName,
       templateLanguage,
       templateBody,
+      actorId: req.authUserId,
     });
     res.json(data);
   } catch (err) {
@@ -259,16 +263,26 @@ router.get('/chats', async (req, res) => {
   if (!status.configured) {
     return res.json({ configured: false, status: 'disconnected', chats: [] });
   }
-  const chats = await listChats(req.userId);
+  const chats = await listChats(req.userId, { viewerId: req.authUserId, viewerRole: req.userRole });
   res.json({ configured: true, status: status.status, provider: status.provider, chats });
 });
 
 router.get('/unread-count', async (req, res) => {
   try {
-    const count = await getUnreadCount(req.userId);
+    const count = await getUnreadCount(req.userId, { viewerId: req.authUserId, viewerRole: req.userRole });
     res.json({ count });
   } catch (err) {
     res.status(500).json({ message: err.message, count: 0 });
+  }
+});
+
+// Membros do workspace disponíveis para transferir uma conversa.
+router.get('/team-members', async (req, res) => {
+  try {
+    const rows = await listTeamMembers(req.userId);
+    res.json(rows.map(normalizeRow));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -293,6 +307,7 @@ router.post('/chats', async (req, res) => {
         templateName: templateName.trim(),
         templateLanguage: templateLanguage.trim(),
         templateBody: templateBody?.trim(),
+        actorId: req.authUserId,
       });
       return res.status(201).json(result);
     }
@@ -300,8 +315,27 @@ router.post('/chats', async (req, res) => {
       phone,
       contactId: contactId ? Number(contactId) : undefined,
       name,
+      actorId: req.authUserId,
     });
     res.status(201).json({ chat, messages: [] });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.put('/chats/:id/assign', async (req, res) => {
+  const chatId = Number(req.params.id);
+  if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
+
+  const rawUserId = req.body?.userId;
+  const targetUserId = rawUserId === null || rawUserId === undefined || rawUserId === '' ? null : Number(rawUserId);
+  if (targetUserId !== null && !Number.isFinite(targetUserId)) {
+    return res.status(400).json({ message: 'Usuário inválido' });
+  }
+
+  try {
+    const result = await assignChat(req.userId, chatId, targetUserId);
+    res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -349,7 +383,7 @@ router.post('/chats/:id/messages', async (req, res) => {
   if (!text?.trim()) return res.status(400).json({ message: 'Mensagem é obrigatória' });
 
   try {
-    const messages = await sendChatMessage(req.userId, chatId, text.trim());
+    const messages = await sendChatMessage(req.userId, chatId, text.trim(), req.authUserId);
     res.json({ messages });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -409,6 +443,7 @@ router.post('/chats/:id/media', async (req, res) => {
       filename: filename || 'arquivo',
       caption: String(caption || '').trim(),
       previewUrl: blobUrl,
+      actorId: req.authUserId,
     });
     res.json({ messages });
   } catch (err) {

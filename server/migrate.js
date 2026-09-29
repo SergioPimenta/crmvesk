@@ -129,6 +129,7 @@ export async function runMigrations() {
   await migrateWhatsappWabaId();
   await migrateAccounts();
   await migrateInvites();
+  await migrateWhatsappChatAssignee();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -139,6 +140,14 @@ async function migrateAccounts() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_id INT REFERENCES users(id) ON DELETE CASCADE`
   );
   await pool.query('CREATE INDEX IF NOT EXISTS idx_users_account ON users(account_id)');
+}
+
+async function migrateWhatsappChatAssignee() {
+  if (!(await tableExists('whatsapp_chats'))) return;
+  await pool.query(
+    `ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS assigned_to INT REFERENCES users(id) ON DELETE SET NULL`
+  );
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_chats_assigned ON whatsapp_chats(assigned_to)');
 }
 
 async function migrateInvites() {
