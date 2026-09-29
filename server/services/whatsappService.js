@@ -1071,7 +1071,7 @@ export async function listChats(userId, viewer = {}) {
      FROM whatsapp_chats c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      LEFT JOIN users au ON au.id = c.assigned_to
-     WHERE c.user_id = ? AND COALESCE(c.attendance_status, 'open') = 'open'${visibilityClause}
+     WHERE c.user_id = ?${visibilityClause}
      ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`,
     params
   );

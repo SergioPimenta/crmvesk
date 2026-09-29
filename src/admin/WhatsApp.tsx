@@ -259,7 +259,7 @@ const WhatsApp = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
-  const [listTab, setListTab] = useState<'aguardando' | 'andamento'>('aguardando');
+  const [listTab, setListTab] = useState<'aguardando' | 'andamento' | 'finalizados'>('aguardando');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferring, setTransferring] = useState(false);
@@ -434,9 +434,11 @@ const WhatsApp = () => {
     );
   }, [conversations, query]);
 
-  const waitingChats = useMemo(() => filtered.filter((c) => !c.assignedTo), [filtered]);
-  const ongoingChats = useMemo(() => filtered.filter((c) => Boolean(c.assignedTo)), [filtered]);
-  const tabChats = listTab === 'aguardando' ? waitingChats : ongoingChats;
+  const openConversations = useMemo(() => filtered.filter((c) => c.attendanceStatus !== 'closed'), [filtered]);
+  const closedChats = useMemo(() => filtered.filter((c) => c.attendanceStatus === 'closed'), [filtered]);
+  const waitingChats = useMemo(() => openConversations.filter((c) => !c.assignedTo), [openConversations]);
+  const ongoingChats = useMemo(() => openConversations.filter((c) => Boolean(c.assignedTo)), [openConversations]);
+  const tabChats = listTab === 'aguardando' ? waitingChats : listTab === 'andamento' ? ongoingChats : closedChats;
 
   const active = useMemo(
     () => filtered.find((c) => c.id === activeId) ?? tabChats[0] ?? null,
@@ -618,9 +620,10 @@ const WhatsApp = () => {
     if (!active || isClosed) return;
     const closedId = active.id;
 
-    setConversations((prev) => prev.filter((c) => c.id !== closedId));
-    setActiveId(null);
-    setMessages([]);
+    setConversations((prev) =>
+      prev.map((c) => (c.id === closedId ? { ...c, attendanceStatus: 'closed' } : c))
+    );
+    setListTab('finalizados');
 
     setFinishing(true);
     try {
@@ -852,6 +855,14 @@ const WhatsApp = () => {
                 Em andamento
                 {ongoingChats.length > 0 ? <span className="pipeline-badge">{ongoingChats.length}</span> : null}
               </button>
+              <button
+                type="button"
+                className={`crm-tab${listTab === 'finalizados' ? ' active' : ''}`}
+                onClick={() => setListTab('finalizados')}
+              >
+                Finalizados
+                {closedChats.length > 0 ? <span className="pipeline-badge">{closedChats.length}</span> : null}
+              </button>
             </div>
 
             {loading ? <div className="kanban-empty">Carregando…</div> : null}
@@ -872,7 +883,7 @@ const WhatsApp = () => {
                         <div className="inbox-from">{c.nome}</div>
                         <div className="wa-conv-row-right">
                           <div className="inbox-when">{c.when}</div>
-                          {listTab === 'andamento' && c.assignedTo !== String(authUser?.id) ? (
+                          {listTab !== 'aguardando' && c.assignedTo && c.assignedTo !== String(authUser?.id) ? (
                             <span className="wa-assignee-tag">{c.assignedToName || 'Outro usuário'}</span>
                           ) : null}
                         </div>
@@ -889,7 +900,9 @@ const WhatsApp = () => {
                 <div className="kanban-empty">
                   {listTab === 'aguardando'
                     ? 'Nenhuma conversa aguardando atendimento.'
-                    : 'Nenhuma conversa em andamento.'}
+                    : listTab === 'andamento'
+                      ? 'Nenhuma conversa em andamento.'
+                      : 'Nenhuma conversa finalizada ainda.'}
                 </div>
               ) : null}
             </div>
