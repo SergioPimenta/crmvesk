@@ -259,6 +259,7 @@ const WhatsApp = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [listTab, setListTab] = useState<'aguardando' | 'andamento'>('aguardando');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferring, setTransferring] = useState(false);
@@ -433,9 +434,13 @@ const WhatsApp = () => {
     );
   }, [conversations, query]);
 
+  const waitingChats = useMemo(() => filtered.filter((c) => !c.assignedTo), [filtered]);
+  const ongoingChats = useMemo(() => filtered.filter((c) => Boolean(c.assignedTo)), [filtered]);
+  const tabChats = listTab === 'aguardando' ? waitingChats : ongoingChats;
+
   const active = useMemo(
-    () => filtered.find((c) => c.id === activeId) ?? filtered[0] ?? null,
-    [activeId, filtered]
+    () => filtered.find((c) => c.id === activeId) ?? tabChats[0] ?? null,
+    [activeId, filtered, tabChats]
   );
 
   const chatTimeline = useMemo(() => buildChatTimeline(messages), [messages]);
@@ -463,8 +468,8 @@ const WhatsApp = () => {
     const isMobile =
       typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
     if (isMobile) return;
-    if (!activeId && filtered[0]) setActiveId(filtered[0].id);
-  }, [filtered, activeId]);
+    if (!activeId && tabChats[0]) setActiveId(tabChats[0].id);
+  }, [tabChats, activeId]);
 
   const totalUnread = useMemo(() => conversations.reduce((n, c) => n + c.unread, 0), [conversations]);
 
@@ -635,6 +640,7 @@ const WhatsApp = () => {
     try {
       await api.put(`/whatsapp/chats/${chatId}/assign`, { userId: targetUserId });
       setTransferOpen(false);
+      setListTab(targetUserId ? 'andamento' : 'aguardando');
       await loadChats();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Não foi possível transferir a conversa');
@@ -829,10 +835,29 @@ const WhatsApp = () => {
               </div>
             </div>
 
+            <div className="crm-tabs wa-list-tabs" aria-label="Fila de atendimento">
+              <button
+                type="button"
+                className={`crm-tab${listTab === 'aguardando' ? ' active' : ''}`}
+                onClick={() => setListTab('aguardando')}
+              >
+                Aguardando
+                {waitingChats.length > 0 ? <span className="pipeline-badge">{waitingChats.length}</span> : null}
+              </button>
+              <button
+                type="button"
+                className={`crm-tab${listTab === 'andamento' ? ' active' : ''}`}
+                onClick={() => setListTab('andamento')}
+              >
+                Em andamento
+                {ongoingChats.length > 0 ? <span className="pipeline-badge">{ongoingChats.length}</span> : null}
+              </button>
+            </div>
+
             {loading ? <div className="kanban-empty">Carregando…</div> : null}
 
             <div className="inbox-items" role="list">
-              {filtered.map((c) => (
+              {tabChats.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -851,18 +876,18 @@ const WhatsApp = () => {
                         <span className="inbox-preview">{c.lastMessage}</span>
                         {c.unread > 0 ? <span className="wa-unread">{c.unread}</span> : null}
                       </div>
-                      {!c.assignedTo ? (
-                        <div className="wa-conv-assignee wa-conv-assignee--unassigned">Sem responsável</div>
-                      ) : c.assignedTo !== String(authUser?.id) ? (
+                      {listTab === 'andamento' && c.assignedTo !== String(authUser?.id) ? (
                         <div className="wa-conv-assignee">Com {c.assignedToName || 'outro usuário'}</div>
                       ) : null}
                     </div>
                   </div>
                 </button>
               ))}
-              {!loading && filtered.length === 0 ? (
+              {!loading && tabChats.length === 0 ? (
                 <div className="kanban-empty">
-                  Nenhuma conversa. Envie ou receba mensagens no WhatsApp e clique em Atualizar.
+                  {listTab === 'aguardando'
+                    ? 'Nenhuma conversa aguardando atendimento.'
+                    : 'Nenhuma conversa em andamento.'}
                 </div>
               ) : null}
             </div>

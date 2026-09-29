@@ -1852,6 +1852,17 @@ body.vesk-app {
   gap: 8px;
 }
 
+.wa-list-tabs {
+  margin-bottom: 8px;
+}
+
+.wa-list-tabs .crm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
 .wa-list-header-actions {
   margin-left: auto;
   display: flex;
