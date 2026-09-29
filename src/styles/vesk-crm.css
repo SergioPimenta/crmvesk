@@ -4415,6 +4415,10 @@ body.vesk-app {
   border-radius: 12px;
   background: var(--vesk-surface);
   overflow: hidden;
+  /* Sem isso, o flex column da lista espreme cada card abaixo da altura do
+     próprio conteúdo (o overflow:hidden zera o min-height automático do
+     flexbox), cortando o corpo da mensagem sem aviso nenhum. */
+  flex-shrink: 0;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
