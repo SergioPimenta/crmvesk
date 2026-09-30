@@ -5350,3 +5350,18 @@ body.vesk-app {
 .wa-recorder-wave.paused span {
   opacity: 0.5;
 }
+
+.wa-audio-play svg {
+  display: block;
+}
+
+.wa-audio-mic svg {
+  width: 11px;
+  height: 11px;
+}
+
+.wa-msg-checks--failed svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
