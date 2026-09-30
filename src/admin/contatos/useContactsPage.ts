@@ -20,6 +20,7 @@ export function useContactsPage({ query, tab, onlyUnowned, refreshKey }: Options
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [items, setItems] = useState<Contact[]>([]);
   const [total, setTotal] = useState(0);
+  const [unownedTotal, setUnownedTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export function useContactsPage({ query, tab, onlyUnowned, refreshKey }: Options
     if (tab !== 'Todos') params.set('tipo', tab);
     if (onlyUnowned) params.set('unowned', '1');
     api
-      .get<{ items: Contact[]; total: number }>(`/crm/contacts?${params.toString()}`)
+      .get<{ items: Contact[]; total: number; unownedTotal?: number }>(`/crm/contacts?${params.toString()}`)
       .then((data) => {
         if (cancelled) return;
         // A última página ficou vazia (ex.: contatos excluídos): volta para a última que existe.
@@ -56,6 +57,7 @@ export function useContactsPage({ query, tab, onlyUnowned, refreshKey }: Options
           }))
         );
         setTotal(data.total);
+        if (data.unownedTotal !== undefined) setUnownedTotal(data.unownedTotal);
       })
       .catch(() => {
         if (!cancelled) setItems([]);
@@ -70,5 +72,5 @@ export function useContactsPage({ query, tab, onlyUnowned, refreshKey }: Options
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  return { items, total, page, setPage, totalPages, loading, debouncedQuery };
+  return { items, total, unownedTotal, page, setPage, totalPages, loading, debouncedQuery };
 }

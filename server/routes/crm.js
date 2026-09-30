@@ -354,7 +354,16 @@ async function listContactsPage(req, res) {
      FROM contacts c WHERE ${whereSql} ORDER BY c.id DESC LIMIT ? OFFSET ?`,
     [...params, pageSize, (page - 1) * pageSize]
   );
-  res.json({ items: normalizeRows(rows), total, page, pageSize });
+  // Administradores também recebem quantos contatos do workspace estão sem responsável (não depende dos filtros).
+  let unownedTotal;
+  if (isAdmin(req)) {
+    const [unownedRows] = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM contacts WHERE user_id = ? AND created_by IS NULL',
+      [req.userId]
+    );
+    unownedTotal = Number(unownedRows[0]?.total) || 0;
+  }
+  res.json({ items: normalizeRows(rows), total, page, pageSize, unownedTotal });
 }
 
 router.get('/contacts', async (req, res) => {

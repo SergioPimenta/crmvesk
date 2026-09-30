@@ -5851,3 +5851,101 @@ body.vesk-app {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Checkbox do CRM ─────────────────────────────────────────────────────────────────────────────── */
+.crm-check {
+  position: relative;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.crm-check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.crm-check-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  border: 1.5px solid var(--vesk-sub);
+  background: var(--vesk-surface2);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.crm-check:hover .crm-check-box {
+  border-color: var(--vesk-orange);
+}
+
+.crm-check input:active + .crm-check-box {
+  transform: scale(0.92);
+}
+
+.crm-check input:focus-visible + .crm-check-box {
+  box-shadow: 0 0 0 3px var(--vesk-orange-glow);
+  border-color: var(--vesk-orange);
+}
+
+.crm-check-tick,
+.crm-check-dash {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.crm-check input:checked + .crm-check-box,
+.crm-check input:indeterminate + .crm-check-box {
+  background: var(--vesk-orange);
+  border-color: var(--vesk-orange);
+}
+
+.crm-check input:checked + .crm-check-box .crm-check-tick,
+.crm-check input:indeterminate + .crm-check-box .crm-check-dash {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.crm-check input:disabled + .crm-check-box {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Coluna de seleção da tabela: estreita e alinhada com os demais rótulos do cabeçalho. */
+.crm-table th.col-check,
+.crm-table td.col-check {
+  width: 44px;
+  padding-left: 14px;
+  padding-right: 0;
+}
+
+.crm-table th {
+  vertical-align: bottom;
+}
+
+.crm-table th.col-check {
+  padding-bottom: 10px;
+}
+
+.crm-table td.col-check {
+  vertical-align: middle;
+}

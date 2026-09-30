@@ -1,3 +1,4 @@
+import CrmCheckbox from '../../components/crm/CrmCheckbox';
 import type { Contact } from '../../contexts/CrmDataContext';
 import { contactOrigin } from '../../utils/contactOrigin';
 import { initials } from '../../utils/initials';
@@ -42,12 +43,13 @@ const ContactsTable = ({
       <thead>
         <tr>
           {isAdmin ? (
-            <th style={{ width: 32 }}>
-              <input
-                type="checkbox"
-                aria-label="Selecionar todos os contatos listados"
+            <th className="col-check">
+              <CrmCheckbox
+                ariaLabel="Selecionar todos os contatos listados"
                 checked={rows.length > 0 && rows.every((c) => selectedIds.has(c.id))}
-                onChange={(e) => onSelectAll(e.target.checked ? rows.map((c) => c.id) : [])}
+                indeterminate={rows.some((c) => selectedIds.has(c.id))}
+                disabled={rows.length === 0}
+                onChange={(checked) => onSelectAll(checked ? rows.map((c) => c.id) : [])}
               />
             </th>
           ) : null}
@@ -65,10 +67,9 @@ const ContactsTable = ({
         {rows.map((c) => (
           <tr key={c.id}>
             {isAdmin ? (
-              <td>
-                <input
-                  type="checkbox"
-                  aria-label={`Selecionar ${c.nome}`}
+              <td className="col-check">
+                <CrmCheckbox
+                  ariaLabel={`Selecionar ${c.nome}`}
                   checked={selectedIds.has(c.id)}
                   onChange={() => onToggleSelected(c.id)}
                 />

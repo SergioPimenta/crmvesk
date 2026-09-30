@@ -169,7 +169,7 @@ const Contatos = () => {
 
         {isAdmin ? (
           <OwnerAssignBar
-            unownedCount={contacts.filter((c) => !c.ownerId).length}
+            unownedCount={list.unownedTotal}
             onlyUnowned={onlyUnowned}
             onToggleOnlyUnowned={() => setOnlyUnowned((v) => !v)}
             selectedCount={owners.selectedIds.size}
