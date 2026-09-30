@@ -14,7 +14,7 @@ if (!connectionString) {
   console.warn('POSTGRES_URL não definida — necessária para Vercel Postgres / Neon.');
 }
 
-const sql = neon(connectionString || 'postgresql://localhost:5432/placeholder');
+const sql = neon(connectionString || 'postgresql://user:pass@localhost:5432/placeholder');
 
 function toPgSql(text) {
   let i = 0;

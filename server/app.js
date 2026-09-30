@@ -16,6 +16,8 @@ import usersRoutes from './routes/users.js';
 import invitesRoutes from './routes/invites.js';
 import notificationsRoutes from './routes/notifications.js';
 import automationRoutes from './routes/automation.js';
+import healthRoutes from './routes/health.js';
+import { logger, newRequestId } from './utils/logger.js';
 
 dotenv.config();
 
@@ -29,6 +31,11 @@ export async function createApp() {
 
   const app = express();
   app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    req.id = newRequestId();
+    res.setHeader('X-Request-Id', req.id);
+    next();
+  });
   app.set('trust proxy', 1);
 
   // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
@@ -70,6 +77,7 @@ export async function createApp() {
     },
   }));
 
+  app.use('/api', healthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/upload', uploadRoutes);
   app.use('/api/crm', crmRoutes);
@@ -91,11 +99,19 @@ export async function createApp() {
   // Erros inesperados (inclusive de rotas async) não vazam detalhes internos (SQL, stack) para o cliente.
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    console.error(`[${req.method} ${req.originalUrl}]`, err);
-    if (res.headersSent) return;
     const status = Number(err.statusCode || err.status) || 500;
+    logger[status >= 500 ? 'error' : 'warn']('request_failed', {
+      requestId: req.id,
+      method: req.method,
+      path: req.originalUrl.split('?')[0],
+      status,
+      userId: req.authUserId,
+      error: err,
+    });
+    if (res.headersSent) return;
     res.status(status).json({
       message: status < 500 && err.message ? err.message : 'Erro interno do servidor',
+      requestId: req.id,
     });
   });
 

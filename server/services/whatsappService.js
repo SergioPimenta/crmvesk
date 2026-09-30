@@ -18,7 +18,6 @@ import {
   jidToPhone as metaJidToPhone,
   parseWebhookMessages,
   parseWebhookStatuses,
-  phoneToJid,
   sendText as metaSendText,
   sendTemplate as metaSendTemplate,
   uploadMetaMedia,

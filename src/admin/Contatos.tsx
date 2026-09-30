@@ -4,7 +4,7 @@ import CrmLayout from '../components/crm/CrmLayout';
 
 import Modal from '../components/crm/Modal';
 
-import { useCrmData, type ContactStage, type ContactType, type PipelineStage } from '../contexts/CrmDataContext';
+import { useCrmData, type Contact, type ContactStage, type ContactType, type PipelineStage } from '../contexts/CrmDataContext';
 
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,6 +13,8 @@ import { stageToContactEtapa } from '../utils/crmStage';
 import { contactOrigin } from '../utils/contactOrigin';
 
 
+
+const PAGE_SIZE = 50;
 
 const initials = (name: string) => {
 
@@ -123,29 +125,60 @@ const Contatos = () => {
 
 
 
-  const filtered = useMemo(() => {
+  // Lista paginada no servidor: a busca, o filtro por tipo e "sem responsável" são aplicados no banco.
+  const [page, setPage] = useState(1);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [filtered, setFiltered] = useState<Contact[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingPage, setLoadingPage] = useState(false);
 
-    const q = query.trim().toLowerCase();
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
-    return contacts.filter((c) => {
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+  }, [activeTab, debouncedQuery, onlyUnowned]);
 
-      const matchesTab = activeTab === 'Todos' ? true : c.tipo === activeTab;
+  // "contacts" (contexto) muda quando um contato é criado, editado, excluído ou atribuído: recarrega a página.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPage(true);
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (debouncedQuery) params.set('q', debouncedQuery);
+    if (activeTab !== 'Todos') params.set('tipo', activeTab);
+    if (onlyUnowned) params.set('unowned', '1');
+    api
+      .get<{ items: Contact[]; total: number }>(`/crm/contacts?${params.toString()}`)
+      .then((data) => {
+        if (cancelled) return;
+        if (data.items.length === 0 && page > 1 && data.total > 0) {
+          setPage(Math.ceil(data.total / PAGE_SIZE));
+          return;
+        }
+        setFiltered(
+          data.items.map((c) => ({
+            ...c,
+            id: String((c as { id: unknown }).id),
+            empresaId: c.empresaId ? String(c.empresaId) : undefined,
+          }))
+        );
+        setTotal(data.total);
+      })
+      .catch(() => {
+        if (!cancelled) setFiltered([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPage(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedQuery, activeTab, onlyUnowned, contacts]);
 
-      const matchesQuery =
-
-        q.length === 0 ||
-
-        c.nome.toLowerCase().includes(q) ||
-
-        c.email.toLowerCase().includes(q) ||
-
-        getCompanyName(c.empresaId).toLowerCase().includes(q);
-
-      return matchesTab && matchesQuery && (!onlyUnowned || !c.ownerId);
-
-    });
-
-  }, [activeTab, contacts, getCompanyName, query, onlyUnowned]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   useEffect(() => {
     if (!isCreateOpen || form.pipelineId) return;
@@ -657,7 +690,7 @@ const Contatos = () => {
 
                 <td colSpan={isAdmin ? 8 : 6} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
 
-                  Nenhum contato encontrado.
+                  {loadingPage ? 'Carregando…' : 'Nenhum contato encontrado.'}
 
                 </td>
 
@@ -668,6 +701,33 @@ const Contatos = () => {
           </tbody>
 
         </table>
+
+        <div className="contacts-pagination" aria-label="Paginação de contatos">
+          <span className="contacts-assign-count">
+            {total === 0
+              ? '0 contatos'
+              : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} de ${total}`}
+          </span>
+          <button
+            type="button"
+            className="crm-action-btn"
+            disabled={page <= 1 || loadingPage}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Anterior
+          </button>
+          <span className="contacts-assign-count">
+            Página {page} de {totalPages}
+          </span>
+          <button
+            type="button"
+            className="crm-action-btn"
+            disabled={page >= totalPages || loadingPage}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Próxima
+          </button>
+        </div>
 
       </div>
 

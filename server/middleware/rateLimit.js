@@ -1,4 +1,5 @@
 import pool from '../db.js';
+import { logger } from '../utils/logger.js';
 
 // Limitador de requisições persistido no Postgres: na Vercel cada requisição pode cair numa instância
 // diferente, então contadores em memória não protegem. Janelas fixas; se o banco falhar, a requisição passa
@@ -56,7 +57,7 @@ export function rateLimit({ name, limit, windowSec, key, onLimited }) {
         return res.status(429).json({ message: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' });
       }
     } catch (err) {
-      console.warn('rateLimit:', err.message);
+      logger.warn('rate_limit_unavailable', { error: err });
     }
     return next();
   };

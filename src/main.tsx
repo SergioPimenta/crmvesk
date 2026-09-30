@@ -7,10 +7,13 @@ import { CrmDataProvider } from './contexts/CrmDataContext.tsx';
 import { registerServiceWorker } from './utils/push';
 import { initPwaInstall } from './utils/pwaInstall';
 import { applyTheme, getStoredTheme } from './utils/theme';
+import { installGlobalErrorReporting } from './utils/reportError';
+import ErrorBoundary from './components/ErrorBoundary';
 import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
 applyTheme(getStoredTheme());
+installGlobalErrorReporting();
 initPwaInstall();
 
 if ('serviceWorker' in navigator) {
@@ -21,12 +24,14 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <AuthProvider>
-        <CrmDataProvider>
-          <App />
-        </CrmDataProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <AuthProvider>
+          <CrmDataProvider>
+            <App />
+          </CrmDataProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

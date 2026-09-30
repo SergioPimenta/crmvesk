@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import pool from '../db.js';
+import { logger } from '../utils/logger.js';
 
 dotenv.config();
 
@@ -59,7 +60,7 @@ export const verifyToken = async (req, res, next) => {
   try {
     user = await loadAuthUser(Number(decoded.id));
   } catch (err) {
-    console.error('verifyToken:', err.message);
+    logger.error('verify_token_db_failed', { error: err });
     return res.status(503).json({ message: 'Serviço temporariamente indisponível' });
   }
 

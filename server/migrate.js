@@ -164,6 +164,7 @@ async function runAllMigrations() {
   await migrateAccounts();
   await migrateRateLimits();
   await migrateDeletedRecords();
+  await migrateIndexes();
   await migrateDispatchGroupOwners();
   await migrateWidgetLeadOwners();
   await migrateRecordOwners();
@@ -181,6 +182,23 @@ async function migrateRecordOwners() {
     await pool.query(
       `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
     );
+  }
+}
+
+// Índices das consultas por workspace/dono (listas do CRM e busca paginada de contatos).
+async function migrateIndexes() {
+  const indexes = [
+    ['idx_contacts_owner', 'contacts', 'user_id, created_by, id DESC'],
+    ['idx_contacts_tipo', 'contacts', 'user_id, tipo'],
+    ['idx_deals_owner', 'deals', 'user_id, created_by'],
+    ['idx_deals_contact', 'deals', 'contact_id'],
+    ['idx_activities_owner', 'activities', 'user_id, created_by'],
+    ['idx_emails_owner', 'emails', 'user_id, created_by'],
+    ['idx_proposals_owner', 'proposals', 'user_id, created_by'],
+  ];
+  for (const [name, table, columns] of indexes) {
+    if (!(await tableExists(table))) continue;
+    await pool.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${table}(${columns})`);
   }
 }
 

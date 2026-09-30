@@ -303,7 +303,62 @@ router.put('/companies/:id', async (req, res) => {
 });
 
 // Contacts
+const CONTACT_TYPES = new Set(['Lead', 'Cliente', 'Prospect']);
+const likeEscape = (v) => String(v).replace(/[\\%_]/g, (m) => `\\${m}`);
+
+// Listagem paginada com busca no servidor (?page=1&pageSize=50&q=texto&tipo=Lead&unowned=1).
+// Sem "page" a rota devolve a lista completa (usada pelo contexto do CRM: dashboard, funil, seletores).
+async function listContactsPage(req, res) {
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(200, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 50));
+
+  const where = ['c.user_id = ?'];
+  const params = [req.userId];
+  if (!isAdmin(req)) {
+    where.push('c.created_by = ?');
+    params.push(req.authUserId);
+  } else if (req.query.unowned === '1') {
+    where.push('c.created_by IS NULL');
+  }
+  if (CONTACT_TYPES.has(req.query.tipo)) {
+    where.push('c.tipo = ?');
+    params.push(req.query.tipo);
+  }
+
+  const q = String(req.query.q ?? '').trim().slice(0, 100);
+  if (q) {
+    const like = `%${likeEscape(q)}%`;
+    const clauses = [
+      "c.nome ILIKE ? ESCAPE '\\'",
+      "c.email ILIKE ? ESCAPE '\\'",
+      "c.site ILIKE ? ESCAPE '\\'",
+      "c.telefone ILIKE ? ESCAPE '\\'",
+      "EXISTS (SELECT 1 FROM companies co WHERE co.id = c.company_id AND co.nome ILIKE ? ESCAPE '\\')",
+    ];
+    params.push(like, like, like, like, like);
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 3) {
+      clauses.push("REGEXP_REPLACE(c.telefone, '\\D', '', 'g') LIKE ?");
+      params.push(`%${digits}%`);
+    }
+    where.push(`(${clauses.join(' OR ')})`);
+  }
+
+  const whereSql = where.join(' AND ');
+  const [countRows] = await pool.query(`SELECT COUNT(*)::int AS total FROM contacts c WHERE ${whereSql}`, params);
+  const total = Number(countRows[0]?.total) || 0;
+
+  const [rows] = await pool.query(
+    `SELECT c.id, c.company_id AS empresaId, c.nome, c.email, c.telefone, c.site, c.tipo, c.etapa,
+            c.ultima_interacao AS ultimaInteracao, c.precisa_followup AS precisaFollowUp, c.created_by AS ownerId
+     FROM contacts c WHERE ${whereSql} ORDER BY c.id DESC LIMIT ? OFFSET ?`,
+    [...params, pageSize, (page - 1) * pageSize]
+  );
+  res.json({ items: normalizeRows(rows), total, page, pageSize });
+}
+
 router.get('/contacts', async (req, res) => {
+  if (req.query.page !== undefined) return listContactsPage(req, res);
   const [rows] = await pool.query(
     `SELECT id, company_id AS empresaId, nome, email, telefone, site, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp,
             created_by AS ownerId

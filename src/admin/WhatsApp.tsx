@@ -765,7 +765,6 @@ const WhatsApp = () => {
     clearPending();
     dragDepthRef.current = 0;
     setDragActive(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
 
   useEffect(
