@@ -5193,3 +5193,38 @@ body.vesk-app {
   font-size: 11px;
   color: var(--vesk-muted);
 }
+
+.wa-conv-item {
+  flex-direction: column;
+}
+
+.wa-conv-item .wa-conv-row {
+  width: 100%;
+}
+
+.wa-claim-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vesk-orange);
+  background: var(--vesk-orange-glow);
+  color: var(--vesk-orange);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wa-claim-btn:hover:not(:disabled) {
+  background: var(--vesk-orange);
+  color: #fff;
+}
+
+.wa-claim-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

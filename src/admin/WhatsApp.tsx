@@ -247,6 +247,7 @@ const MessageChecks = ({ status, errorMessage }: { status?: WaMsgStatus; errorMe
 const WhatsApp = () => {
   const { contacts, getCompanyName, setWhatsappUnread } = useCrmData();
   const { user: authUser } = useAuth();
+  const [claimingId, setClaimingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
@@ -652,6 +653,21 @@ const WhatsApp = () => {
     }
   };
 
+  const claimChat = async (chatId: string) => {
+    if (!authUser?.id) return;
+    setClaimingId(chatId);
+    try {
+      await api.put(`/whatsapp/chats/${chatId}/assign`, { userId: Number(authUser.id) });
+      setListTab('andamento');
+      await loadChats();
+      selectConversation(chatId);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Não foi possível assumir a conversa');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   const contactCompany = active?.contatoId
     ? getCompanyName(contacts.find((c) => c.id === active.contatoId)?.empresaId)
     : null;
@@ -869,12 +885,18 @@ const WhatsApp = () => {
 
             <div className="inbox-items" role="list">
               {tabChats.map((c) => (
-                <button
+                <div
                   key={c.id}
-                  type="button"
                   className={`inbox-item wa-conv-item${active?.id === c.id ? ' active' : ''}${c.unread > 0 ? ' unread' : ''}`}
                   onClick={() => selectConversation(c.id)}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      selectConversation(c.id);
+                    }
+                  }}
                   role="listitem"
+                  tabIndex={0}
                 >
                   <div className="wa-conv-row">
                     <div className="wa-avatar">{initials(c.nome)}</div>
@@ -892,9 +914,23 @@ const WhatsApp = () => {
                         <span className="inbox-preview">{c.lastMessage}</span>
                         {c.unread > 0 ? <span className="wa-unread">{c.unread}</span> : null}
                       </div>
+                      {listTab === 'aguardando' ? (
+                        <button
+                          type="button"
+                          className="wa-claim-btn"
+                          disabled={claimingId === c.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void claimChat(c.id);
+                          }}
+                        >
+                          <i className="ti ti-user-check" aria-hidden="true" />
+                          {claimingId === c.id ? 'Assumindo…' : 'Assumir conversa'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
               {!loading && tabChats.length === 0 ? (
                 <div className="kanban-empty">
