@@ -94,6 +94,8 @@ const formatAudioTime = (seconds: number) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+const RECORD_BARS = 28;
+
 const WaAudioPlayer = ({ src }: { src: string }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -281,6 +283,13 @@ const WhatsApp = () => {
   const [startingAttendance, setStartingAttendance] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordPaused, setRecordPaused] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [recordLevels, setRecordLevels] = useState<number[]>(() => Array(RECORD_BARS).fill(0));
+  const recordCancelledRef = useRef(false);
+  const recordPausedRef = useRef(false);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const recordAudioCtxRef = useRef<AudioContext | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -548,6 +557,22 @@ const WhatsApp = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordStreamRef.current = stream;
+      recordCancelledRef.current = false;
+      recordPausedRef.current = false;
+      setRecordPaused(false);
+      setRecordSeconds(0);
+      setRecordLevels(Array(RECORD_BARS).fill(0));
+      try {
+        const ctx = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        recordAudioCtxRef.current = ctx;
+        analyserRef.current = analyser;
+      } catch {
+        analyserRef.current = null;
+      }
       // A Meta só aceita ogg/opus, mp4 (AAC) ou mp3. Chrome/Edge gravam WebM, que é convertido para MP3.
       const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
         ? 'audio/ogg;codecs=opus'
@@ -564,6 +589,13 @@ const WhatsApp = () => {
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         recordStreamRef.current = null;
+        analyserRef.current = null;
+        void recordAudioCtxRef.current?.close();
+        recordAudioCtxRef.current = null;
+        if (recordCancelledRef.current) {
+          audioChunksRef.current = [];
+          return;
+        }
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         void (async () => {
           try {
@@ -589,12 +621,50 @@ const WhatsApp = () => {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') rec.stop();
     mediaRecorderRef.current = null;
     setRecording(false);
+    setRecordPaused(false);
   };
+
+  const cancelRecording = () => {
+    recordCancelledRef.current = true;
+    stopRecording();
+  };
+
+  const togglePauseRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (!rec) return;
+    if (rec.state === 'recording') {
+      rec.pause();
+      recordPausedRef.current = true;
+      setRecordPaused(true);
+    } else if (rec.state === 'paused') {
+      rec.resume();
+      recordPausedRef.current = false;
+      setRecordPaused(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!recording) return undefined;
+    const data = new Uint8Array(128);
+    const id = window.setInterval(() => {
+      if (recordPausedRef.current) return;
+      setRecordSeconds((s) => s + 0.1);
+      const analyser = analyserRef.current;
+      let level = 0;
+      if (analyser) {
+        analyser.getByteTimeDomainData(data);
+        let peak = 0;
+        for (let i = 0; i < data.length; i += 1) peak = Math.max(peak, Math.abs(data[i] - 128));
+        level = Math.min(1, (peak / 128) * 2.2);
+      }
+      setRecordLevels((prev) => [...prev.slice(1), level]);
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [recording]);
 
   useEffect(() => {
     if (!attachOpen) return undefined;
@@ -609,7 +679,9 @@ const WhatsApp = () => {
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      recordCancelledRef.current = true;
+      const rec = mediaRecorderRef.current;
+      if (rec && rec.state !== 'inactive') rec.stop();
       recordStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -1110,6 +1182,48 @@ const WhatsApp = () => {
                       hidden
                       onChange={onFileSelected}
                     />
+                    {recording ? (
+                      <div className="wa-recorder" role="group" aria-label="Gravando áudio">
+                        <button
+                          type="button"
+                          className="wa-recorder-icon"
+                          title="Descartar gravação"
+                          aria-label="Descartar gravação"
+                          onClick={cancelRecording}
+                        >
+                          <i className="ti ti-trash" aria-hidden="true" />
+                        </button>
+                        <span className={`wa-recorder-dot${recordPaused ? ' paused' : ''}`} aria-hidden="true" />
+                        <span className="wa-recorder-time">{formatAudioTime(recordSeconds)}</span>
+                        <div className={`wa-recorder-wave${recordPaused ? ' paused' : ''}`} aria-hidden="true">
+                          {recordLevels.map((lv, i) => (
+                            <span key={i} style={{ height: `${Math.max(12, Math.round(lv * 100))}%` }} />
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          className="wa-recorder-icon wa-recorder-pause"
+                          title={recordPaused ? 'Continuar gravação' : 'Pausar gravação'}
+                          aria-label={recordPaused ? 'Continuar gravação' : 'Pausar gravação'}
+                          onClick={togglePauseRecording}
+                        >
+                          <i
+                            className={`ti ${recordPaused ? 'ti-microphone' : 'ti-player-pause-filled'}`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          className="wa-send-btn"
+                          title="Enviar áudio"
+                          aria-label="Enviar áudio"
+                          onClick={stopRecording}
+                        >
+                          <i className="ti ti-send" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                    <>
                     <div className="wa-compose-attach" ref={attachMenuRef}>
                       <button
                         type="button"
@@ -1160,28 +1274,16 @@ const WhatsApp = () => {
                         </div>
                       ) : null}
                     </div>
-                    {recording ? (
-                      <button
-                        type="button"
-                        className="wa-record-btn wa-record-btn--active"
-                        title="Parar gravação"
-                        aria-label="Parar gravação de áudio"
-                        onClick={stopRecording}
-                      >
-                        <i className="ti ti-player-stop" aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="crm-icon-btn wa-record-btn"
-                        title="Gravar áudio"
-                        aria-label="Gravar áudio"
-                        disabled={sending}
-                        onClick={() => void startRecording()}
-                      >
-                        <i className="ti ti-microphone" aria-hidden="true" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="crm-icon-btn wa-record-btn"
+                      title="Gravar áudio"
+                      aria-label="Gravar áudio"
+                      disabled={sending}
+                      onClick={() => void startRecording()}
+                    >
+                      <i className="ti ti-microphone" aria-hidden="true" />
+                    </button>
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
@@ -1204,6 +1306,8 @@ const WhatsApp = () => {
                     >
                       <i className="ti ti-send" aria-hidden="true" />
                     </button>
+                    </>
+                    )}
                     </form>
                   </>
                 )}

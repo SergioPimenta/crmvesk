@@ -5228,3 +5228,85 @@ body.vesk-app {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.wa-recorder {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 999px;
+  background: var(--vesk-surface);
+  border: 1px solid var(--vesk-border);
+}
+
+.wa-recorder-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--vesk-muted);
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wa-recorder-icon:hover {
+  background: var(--vesk-surface2);
+  color: var(--vesk-text);
+}
+
+.wa-recorder-pause {
+  color: #e05252;
+}
+
+.wa-recorder-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff6b81;
+  animation: wa-record-pulse 1.2s ease-in-out infinite;
+}
+
+.wa-recorder-dot.paused {
+  animation: none;
+  background: var(--vesk-muted);
+}
+
+.wa-recorder-time {
+  flex-shrink: 0;
+  min-width: 34px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vesk-text);
+}
+
+.wa-recorder-wave {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.wa-recorder-wave span {
+  flex-shrink: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--vesk-muted);
+  transition: height 0.1s linear;
+}
+
+.wa-recorder-wave.paused span {
+  opacity: 0.5;
+}
