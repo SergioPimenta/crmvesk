@@ -17,6 +17,7 @@ import ConversationList from './whatsapp/ConversationList';
 import MessageList from './whatsapp/MessageList';
 import NewAttendanceModal, { type NewAttendancePrefill } from './whatsapp/NewAttendanceModal';
 import QuickRepliesModal from './whatsapp/QuickRepliesModal';
+import ActivityModal, { type ActivityDefaults } from './agenda/ActivityModal';
 import TransferModal from './whatsapp/TransferModal';
 import {
   MEDIA_BYTES_LIMITS,
@@ -37,6 +38,7 @@ const WhatsApp = () => {
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [schedule, setSchedule] = useState<ActivityDefaults | null>(null);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
@@ -334,6 +336,23 @@ const WhatsApp = () => {
     }
   };
 
+  // Agendar um retorno a partir da conversa: abre a Agenda já com o contato, o telefone e um título sugerido.
+  const openSchedule = () => {
+    if (!active) return;
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    setSchedule({
+      start,
+      end: new Date(start.getTime() + 60 * 60_000),
+      allDay: false,
+      titulo: `Retorno: ${active.nome}`,
+      tipo: 'Follow-up',
+      contatoId: active.contatoId,
+      descricao: `WhatsApp: ${active.nome} · ${active.phone}`,
+    });
+  };
+
   const sendNote = async (text: string): Promise<boolean> => {
     if (!active || isClosed) return false;
     setSendError('');
@@ -564,6 +583,7 @@ const WhatsApp = () => {
                   onBack={() => setActiveId(null)}
                   onTransfer={() => setTransferOpen(true)}
                   onFinish={() => void finishAttendance()}
+                  onSchedule={openSchedule}
                 />
 
                 <MessageList
@@ -627,6 +647,15 @@ const WhatsApp = () => {
         authUserId={authUser?.id}
         onClose={() => setTransferOpen(false)}
         onTransfer={(target) => void transferChat(target)}
+      />
+
+      <ActivityModal
+        open={Boolean(schedule)}
+        activity={null}
+        defaults={schedule}
+        members={teamMembers}
+        currentUserId={authUser?.id}
+        onClose={() => setSchedule(null)}
       />
 
       <QuickRepliesModal

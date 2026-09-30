@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import CrmLayout from '../components/crm/CrmLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useCrmData, type Activity } from '../contexts/CrmDataContext';
-import { api } from '../services/api';
-import ActivityModal from './agenda/ActivityModal';
+import ActivityModal, { type ActivityDefaults } from './agenda/ActivityModal';
+import CompletionModal from './agenda/CompletionModal';
+import { useTeamMembers } from './agenda/useTeamMembers';
 import AgendaSidePanel from './agenda/AgendaSidePanel';
 import AgendaToolbar from './agenda/AgendaToolbar';
 import MonthView from './agenda/MonthView';
@@ -11,6 +12,7 @@ import TimeGridView from './agenda/TimeGridView';
 import { DEFAULT_FILTERS, type AgendaFilters, type CalendarEvent } from './agenda/activityStyle';
 import {
   activitySpan,
+  addDays,
   addMinutes,
   DEFAULT_DURATION_MIN,
   shiftCursor,
@@ -19,8 +21,7 @@ import {
   type AgendaView,
 } from './agenda/dateUtils';
 
-type Member = { id: number; name: string };
-type ModalState = { open: boolean; activity: Activity | null; defaults: { start: Date; end: Date; allDay: boolean } | null };
+type ModalState = { open: boolean; activity: Activity | null; defaults: ActivityDefaults | null };
 
 const CLOSED: ModalState = { open: false, activity: null, defaults: null };
 
@@ -39,20 +40,14 @@ const Agenda = () => {
   const [cursor, setCursor] = useState(() => new Date());
   const [filters, setFilters] = useState<AgendaFilters>(DEFAULT_FILTERS);
   const [now, setNow] = useState(() => new Date());
-  const [members, setMembers] = useState<Member[]>([]);
+  const members = useTeamMembers();
   const [modal, setModal] = useState<ModalState>(CLOSED);
+  const [completion, setCompletion] = useState<Activity | null>(null);
   const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    void api
-      .get<Member[]>('/whatsapp/team-members')
-      .then((list) => setMembers(Array.isArray(list) ? list : []))
-      .catch(() => setMembers([]));
   }, []);
 
   const me = user?.id;
@@ -138,8 +133,33 @@ const Agenda = () => {
     );
   };
 
+  // Reunião e ligação concluídas abrem "Como foi?" (resultado, etapa do negócio e próximo passo).
+  const offerResult = (a: Activity) => {
+    if (a.tipo === 'Reunião' || a.tipo === 'Ligação') setCompletion(a);
+  };
+
   const onToggleDone = (a: Activity) => {
-    setActivityStatus(a.id, 'Concluída').catch((err) => fail(err, 'Não foi possível concluir a atividade.'));
+    setActivityStatus(a.id, 'Concluída')
+      .then(() => offerResult(a))
+      .catch((err) => fail(err, 'Não foi possível concluir a atividade.'));
+  };
+
+  const scheduleNext = (a: Activity) => {
+    const at = addDays(startOfDay(new Date()), 1);
+    at.setHours(9, 0, 0, 0);
+    setModal({
+      open: true,
+      activity: null,
+      defaults: {
+        start: at,
+        end: addMinutes(at, DEFAULT_DURATION_MIN),
+        allDay: false,
+        titulo: `Follow-up: ${a.titulo}`,
+        tipo: 'Follow-up',
+        contatoId: a.contatoId,
+        dealId: a.dealId,
+      },
+    });
   };
 
   return (
@@ -231,7 +251,10 @@ const Agenda = () => {
         members={members}
         currentUserId={me}
         onClose={closeModal}
+        onCompleted={offerResult}
       />
+
+      <CompletionModal activity={completion} onClose={() => setCompletion(null)} onScheduleNext={scheduleNext} />
     </CrmLayout>
   );
 };

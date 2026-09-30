@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCrmData } from '../../contexts/CrmDataContext';
+import { api } from '../../services/api';
+import { useNotificationFeed, type FeedItem } from './useNotificationFeed';
+
+/** "há 5 min", "há 2 h", "ontem"… para a lista de lembretes. */
+const timeAgo = (iso: string) => {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  return `há ${Math.round(hours / 24)} d`;
+};
 
 const Switch = ({
   checked,
@@ -39,8 +52,46 @@ const NotificationMenu = () => {
     togglePush,
   } = useCrmData();
 
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [remindEmail, setRemindEmail] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Lembretes novos viram aviso do navegador (se ativado). No celular o push cuida disso com o CRM fechado.
+  const feed = useNotificationFeed((fresh: FeedItem[]) => {
+    if (!notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    fresh.forEach((item) => {
+      try {
+        new Notification(item.title, { body: item.body, icon: '/icons/icon-192.png', tag: `reminder-${item.id}` });
+      } catch {
+        /* alguns navegadores exigem service worker */
+      }
+    });
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    void api
+      .get<{ remindEmail: boolean }>('/notifications/prefs')
+      .then((p) => setRemindEmail(Boolean(p.remindEmail)))
+      .catch(() => {});
+  }, [open]);
+
+  const toggleRemindEmail = async () => {
+    const next = !remindEmail;
+    setRemindEmail(next);
+    try {
+      await api.put('/notifications/prefs', { remindEmail: next });
+    } catch {
+      setRemindEmail(!next);
+    }
+  };
+
+  const openItem = (item: FeedItem) => {
+    if (!item.read) void feed.markRead(item.id);
+    setOpen(false);
+    if (item.url) navigate(item.url);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -71,11 +122,53 @@ const NotificationMenu = () => {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <i className={`ti ${anyOn ? 'ti-bell-ringing' : 'ti-bell'}`} aria-hidden="true" />
+        <i className={`ti ${anyOn || feed.unread > 0 ? 'ti-bell-ringing' : 'ti-bell'}`} aria-hidden="true" />
+        {feed.unread > 0 ? (
+          <span className="crm-notif-badge" aria-label={`${feed.unread} lembretes não lidos`}>
+            {feed.unread > 9 ? '9+' : feed.unread}
+          </span>
+        ) : null}
       </button>
 
       {open ? (
         <div className="crm-notif-panel" role="menu">
+          <div className="crm-notif-title crm-notif-title-row">
+            Lembretes
+            {feed.unread > 0 ? (
+              <button type="button" className="crm-notif-link" onClick={() => void feed.markAllRead()}>
+                Marcar todas como lidas
+              </button>
+            ) : null}
+          </div>
+          <div className="crm-feed" role="list" aria-label="Lembretes recentes">
+            {feed.items.slice(0, 6).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="listitem"
+                className={`crm-feed-item${item.read ? '' : ' unread'}`}
+                onClick={() => openItem(item)}
+              >
+                <span className="crm-feed-title">{item.title}</span>
+                {item.body ? <span className="crm-feed-body">{item.body}</span> : null}
+                <span className="crm-feed-time">{timeAgo(item.createdAt)}</span>
+              </button>
+            ))}
+            {feed.items.length === 0 ? <div className="crm-feed-empty">Nenhum lembrete ainda.</div> : null}
+          </div>
+
+          <div className="crm-notif-row">
+            <div className="crm-notif-row-text">
+              <div className="crm-notif-row-label">
+                <i className="ti ti-mail" aria-hidden="true" /> Lembretes por e-mail
+              </div>
+              <div className="crm-notif-row-desc">Receba também os lembretes da Agenda no seu e-mail</div>
+            </div>
+            <Switch checked={remindEmail} onChange={() => void toggleRemindEmail()} label="Receber lembretes por e-mail" />
+          </div>
+
+          <div className="crm-notif-divider" />
+
           <div className="crm-notif-title">Notificações</div>
 
           <div className="crm-notif-row">

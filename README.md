@@ -73,6 +73,23 @@ Todas estão documentadas, agrupadas, em [`.env.example`](.env.example). As obri
   eles. Exclusões ficam copiadas em `deleted_records`.
 - O Dashboard mostra as atrasadas e as de hoje reais.
 
+### Lembretes da Agenda
+
+- Cada atividade com horário tem uma antecedência (na hora, 5 min… 1 dia antes; o padrão é 15 min). Ao chegar a hora,
+  o responsável (ou quem criou) recebe: um aviso no **sino** do sistema, **push no celular** (se ativado) e, se ligar
+  "Lembretes por e-mail" no sino, um e-mail. Remarcar ou mudar a antecedência reabilita o lembrete.
+- **Quem dispara:** enquanto alguém estiver com o CRM aberto, os lembretes vencidos são disparados sozinhos (a cada
+  consulta do sino, no máximo a cada 20 s). Para avisar **com o CRM fechado** (push e e-mail), configure um agendador
+  que chame `GET /api/cron/reminders` a cada minuto com o cabeçalho `Authorization: Bearer <CRON_SECRET>`:
+  - **Vercel Cron** (exige plano Pro para rodar a cada minuto; o plano Hobby só aceita uma vez por dia): em
+    `vercel.json`, `"crons": [{ "path": "/api/cron/reminders", "schedule": "* * * * *" }]` e a variável
+    `CRON_SECRET` no projeto (a Vercel envia o cabeçalho sozinha); ou
+  - um serviço externo gratuito (ex.: cron-job.org) chamando a URL a cada minuto com o cabeçalho acima.
+- Ao concluir uma **reunião ou ligação**, o sistema pergunta "Como foi?": registra o resultado na atividade, permite
+  mover o negócio de etapa e já agendar o próximo passo.
+- **Ligações com o restante do CRM:** botão "Agendar" na conversa do WhatsApp (já com contato e telefone) e lista de
+  atividades + "Agendar" na ficha do contato.
+
 ## Segurança e operação
 
 - Sessão JWT de 4 h, renovada automaticamente enquanto há uso; perfil e status do usuário são lidos do banco

@@ -17,6 +17,7 @@ import invitesRoutes from './routes/invites.js';
 import notificationsRoutes from './routes/notifications.js';
 import automationRoutes from './routes/automation.js';
 import healthRoutes from './routes/health.js';
+import cronRoutes from './routes/cron.js';
 import { logger, newRequestId } from './utils/logger.js';
 
 dotenv.config();
@@ -78,6 +79,7 @@ export async function createApp() {
   }));
 
   app.use('/api', healthRoutes);
+  app.use('/api/cron', cronRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/upload', uploadRoutes);
   app.use('/api/crm', crmRoutes);

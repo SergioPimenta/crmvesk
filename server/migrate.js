@@ -167,6 +167,7 @@ async function runAllMigrations() {
   await migrateIndexes();
   await migrateChatNotesAndQuickReplies();
   await migrateActivityCalendar();
+  await migrateReminders();
   await migrateDispatchGroupOwners();
   await migrateWidgetLeadOwners();
   await migrateRecordOwners();
@@ -208,6 +209,36 @@ async function migrateActivityCalendar() {
   }
   await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_start ON activities(user_id, start_at)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_assigned ON activities(assigned_to)');
+}
+
+// Lembretes da Agenda: antecedência por atividade, marca de "já avisado", feed de notificações e preferência
+// de lembrete por e-mail.
+async function migrateReminders() {
+  if (await tableExists('activities')) {
+    await pool.query('ALTER TABLE activities ADD COLUMN IF NOT EXISTS remind_minutes INT');
+    await pool.query('ALTER TABLE activities ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ');
+    await pool.query(
+      'CREATE INDEX IF NOT EXISTS idx_activities_due_reminder ON activities(start_at) WHERE reminded_at IS NULL AND remind_minutes IS NOT NULL'
+    );
+  }
+  if (await tableExists('users')) {
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS remind_email BOOLEAN DEFAULT FALSE');
+  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      account_id INT,
+      type VARCHAR(30) NOT NULL DEFAULT 'reminder',
+      title VARCHAR(200) NOT NULL,
+      body TEXT DEFAULT '',
+      url VARCHAR(255) DEFAULT '',
+      ref_id INT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      read_at TIMESTAMPTZ
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at DESC)');
 }
 
 // Notas internas e eventos da conversa (kind = 'note' | 'event') e respostas rápidas da equipe.

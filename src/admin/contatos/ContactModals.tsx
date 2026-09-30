@@ -7,6 +7,7 @@ import type {
   PipelineStage,
 } from '../../contexts/CrmDataContext';
 import { stageToContactEtapa } from '../../utils/crmStage';
+import ContactActivities from './ContactActivities';
 import ContactFormFields from './ContactFormFields';
 import type { ContactFormState } from './types';
 
@@ -107,8 +108,14 @@ export const CreateContactModal = ({
   </Modal>
 );
 
-/** "Editar contato": dados do contato e a etapa exibida na lista. */
-export const EditContactModal = ({ open, form, setForm, companies, onClose, onSubmit }: BaseProps) => (
+type EditProps = BaseProps & {
+  contactId: string | null;
+  /** Fecha esta tela e abre a Agenda já com o contato. */
+  onSchedule: () => void;
+};
+
+/** "Editar contato": dados do contato, a etapa exibida na lista e as atividades dele. */
+export const EditContactModal = ({ open, form, setForm, companies, contactId, onSchedule, onClose, onSubmit }: EditProps) => (
   <Modal open={open} title="Editar contato" description="Atualize as informações do contato." onClose={onClose}>
     <form className="crm-form" onSubmit={onSubmit}>
       <ContactFormFields idPrefix="ec" form={form} setForm={setForm} companies={companies} />
@@ -127,6 +134,8 @@ export const EditContactModal = ({ open, form, setForm, companies, onClose, onSu
           <option value="Fechado">Fechado</option>
         </select>
       </div>
+
+      {contactId ? <ContactActivities contactId={contactId} onSchedule={onSchedule} /> : null}
 
       <div className="crm-form-actions" style={{ gridColumn: '1 / -1' }}>
         <button type="button" className="crm-btn-secondary" onClick={onClose}>

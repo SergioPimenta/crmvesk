@@ -87,6 +87,8 @@ export type Activity = {
   assignedToName?: string | null;
   completedAt?: string | null;
   createdBy?: number | null;
+  /** Minutos antes do início para avisar (0 = na hora); null/ausente = sem lembrete. */
+  remindMinutes?: number | null;
 };
 
 /** O que o formulário envia ao criar/editar (campos calculados pelo servidor ficam de fora). */

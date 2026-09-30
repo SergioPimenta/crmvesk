@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS activities (
   deal_id INT REFERENCES deals(id) ON DELETE SET NULL,
   assigned_to INT REFERENCES users(id) ON DELETE SET NULL,
   completed_at TIMESTAMPTZ,
+  remind_minutes INT,
+  reminded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

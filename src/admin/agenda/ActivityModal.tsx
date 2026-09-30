@@ -6,15 +6,29 @@ import { activitySpan, addMinutes, DEFAULT_DURATION_MIN, fromInputs, toInputs } 
 
 type Member = { id: number; name: string };
 
+/** Dados iniciais ao criar: horário e, opcionalmente, o que já se sabe (ex.: vindo de uma conversa do WhatsApp). */
+export type ActivityDefaults = {
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  titulo?: string;
+  tipo?: AgendaType;
+  contatoId?: string;
+  dealId?: string;
+  descricao?: string;
+};
+
 type Props = {
   open: boolean;
   /** Atividade em edição; null ao criar. */
   activity: Activity | null;
   /** Data/hora inicial ao criar (clique no calendário ou botão "Nova atividade"). */
-  defaults: { start: Date; end: Date; allDay: boolean } | null;
+  defaults: ActivityDefaults | null;
   members: Member[];
   currentUserId?: number | string;
   onClose: () => void;
+  /** Chamado depois de concluir pelo botão "Concluir" (para oferecer registrar o resultado). */
+  onCompleted?: (activity: Activity) => void;
 };
 
 type FormState = {
@@ -32,7 +46,21 @@ type FormState = {
   local: string;
   link: string;
   descricao: string;
+  /** Antecedência do lembrete em minutos (texto do select); '' = sem lembrete. */
+  remind: string;
 };
+
+const REMIND_CHOICES: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Sem lembrete' },
+  { value: '0', label: 'Na hora' },
+  { value: '5', label: '5 minutos antes' },
+  { value: '10', label: '10 minutos antes' },
+  { value: '15', label: '15 minutos antes' },
+  { value: '30', label: '30 minutos antes' },
+  { value: '60', label: '1 hora antes' },
+  { value: '120', label: '2 horas antes' },
+  { value: '1440', label: '1 dia antes' },
+];
 
 const STATUSES: ActivityStatus[] = ['Pendente', 'Concluída', 'Cancelada'];
 const PRIORITIES: ActivityPriority[] = ['Alta', 'Média', 'Baixa'];
@@ -64,31 +92,33 @@ function buildForm(activity: Activity | null, defaults: Props['defaults'], curre
       local: activity.local ?? '',
       link: activity.link ?? '',
       descricao: activity.descricao ?? '',
+      remind: activity.remindMinutes === null || activity.remindMinutes === undefined ? '' : String(activity.remindMinutes),
     };
   }
   const start = defaults?.start ?? new Date();
   const end = defaults?.end ?? addMinutes(start, DEFAULT_DURATION_MIN);
   return {
-    titulo: '',
-    tipo: 'Reunião',
+    titulo: defaults?.titulo ?? '',
+    tipo: defaults?.tipo ?? 'Reunião',
     allDay: defaults?.allDay ?? false,
     date: toInputs(start).date,
     start: toInputs(start).time,
     end: toInputs(end).time,
-    contatoId: '',
-    dealId: '',
+    contatoId: defaults?.contatoId ?? '',
+    dealId: defaults?.dealId ?? '',
     assignedTo: currentUserId ? String(currentUserId) : '',
     prioridade: 'Média',
     status: 'Pendente',
     local: '',
     link: '',
-    descricao: '',
+    descricao: defaults?.descricao ?? '',
+    remind: '15',
   };
 }
 
 /** Criar e editar uma atividade da agenda. */
-const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClose }: Props) => {
-  const { contacts, deals, addActivity, updateActivity, deleteActivity } = useCrmData();
+const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClose, onCompleted }: Props) => {
+  const { contacts, deals, addActivity, updateActivity, deleteActivity, setActivityStatus } = useCrmData();
   const [form, setForm] = useState<FormState>(() => buildForm(null, null));
   const [contactQuery, setContactQuery] = useState('');
   const [contactListOpen, setContactListOpen] = useState(false);
@@ -167,6 +197,8 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
       link: form.link,
       prioridade: form.prioridade,
       assignedTo: form.assignedTo ? Number(form.assignedTo) : null,
+      // Lembrete só existe para compromissos com horário.
+      remindMinutes: form.allDay || !startAt || form.remind === '' ? null : Number(form.remind),
       quando: activity?.quando,
     };
 
@@ -178,6 +210,19 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar a atividade.');
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const complete = async () => {
+    if (!activity) return;
+    setSaving(true);
+    try {
+      await setActivityStatus(activity.id, 'Concluída');
+      onClose();
+      onCompleted?.({ ...activity, status: 'Concluída' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Não foi possível concluir a atividade.');
       setSaving(false);
     }
   };
@@ -359,6 +404,22 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
         </div>
 
         <div className="crm-field">
+          <label htmlFor="ag_remind">Lembrete</label>
+          <select
+            id="ag_remind"
+            value={form.allDay ? '' : form.remind}
+            onChange={(e) => set('remind', e.target.value)}
+            disabled={form.allDay}
+          >
+            {REMIND_CHOICES.map((c) => (
+              <option key={c.value || 'none'} value={c.value}>
+                {form.allDay && c.value === '' ? 'Indisponível para dia inteiro' : c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="crm-field">
           <label htmlFor="ag_prio">Prioridade</label>
           <select id="ag_prio" value={form.prioridade} onChange={(e) => set('prioridade', e.target.value as ActivityPriority)}>
             {PRIORITIES.map((p) => (
@@ -404,7 +465,13 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
               Excluir
             </button>
           ) : null}
-          <button type="button" className="crm-btn-secondary" onClick={onClose} disabled={saving} style={{ marginLeft: 'auto' }}>
+          {activity && activity.status === 'Pendente' ? (
+            <button type="button" className="crm-btn-secondary ag-done-btn" onClick={() => void complete()} disabled={saving}>
+              <i className="ti ti-circle-check" aria-hidden="true" />
+              Concluir
+            </button>
+          ) : null}
+          <button type="button" className="crm-btn-secondary" onClick={onClose} disabled={saving} style={{ marginLeft: activity && activity.status === 'Pendente' ? undefined : 'auto' }}>
             Cancelar
           </button>
           <button type="submit" className="crm-btn-primary" disabled={saving}>

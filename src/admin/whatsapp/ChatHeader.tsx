@@ -11,6 +11,8 @@ type Props = {
   onBack: () => void;
   onTransfer: () => void;
   onFinish: () => void;
+  /** Agendar um retorno com este contato (abre o formulário da Agenda já preenchido). */
+  onSchedule: () => void;
 };
 
 /** Cabeçalho da conversa: contato, responsável e ações (transferir, finalizar, ver contato). */
@@ -24,6 +26,7 @@ const ChatHeader = ({
   onBack,
   onTransfer,
   onFinish,
+  onSchedule,
 }: Props) => (
   <div className="wa-chat-head">
     <button
@@ -57,6 +60,10 @@ const ChatHeader = ({
       </div>
     </div>
     <div className="wa-chat-head-actions">
+      <button type="button" className="crm-btn-secondary" onClick={onSchedule}>
+        <i className="ti ti-calendar-plus" aria-hidden="true" />
+        Agendar
+      </button>
       <button
         type="button"
         className="crm-btn-secondary"

@@ -3,6 +3,8 @@ import CrmLayout from '../components/crm/CrmLayout';
 import { useCrmData } from '../contexts/CrmDataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { stageToContactEtapa } from '../utils/crmStage';
+import ActivityModal, { type ActivityDefaults } from './agenda/ActivityModal';
+import { useTeamMembers } from './agenda/useTeamMembers';
 import { CreateContactModal, EditContactModal } from './contatos/ContactModals';
 import ContactsTable from './contatos/ContactsTable';
 import OwnerAssignBar from './contatos/OwnerAssignBar';
@@ -34,6 +36,8 @@ const Contatos = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [schedule, setSchedule] = useState<ActivityDefaults | null>(null);
+  const members = useTeamMembers();
 
   // Lista paginada no servidor; recarrega quando o contexto muda (contato criado, editado, excluído, atribuído).
   const list = useContactsPage({ query, tab: activeTab, onlyUnowned, refreshKey: contacts });
@@ -87,6 +91,24 @@ const Contatos = () => {
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Não foi possível salvar o contato.');
     }
+  };
+
+  // "Agendar" na ficha do contato: fecha a edição e abre a Agenda já com o contato.
+  const scheduleForContact = () => {
+    const contact = contacts.find((x) => x.id === editingId);
+    if (!contact) return;
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    setIsEditOpen(false);
+    setSchedule({
+      start,
+      end: new Date(start.getTime() + 60 * 60_000),
+      allDay: false,
+      titulo: `Contato com ${contact.nome}`,
+      tipo: 'Follow-up',
+      contatoId: contact.id,
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -217,8 +239,19 @@ const Contatos = () => {
         form={form}
         setForm={setForm}
         companies={companies}
+        contactId={editingId}
+        onSchedule={scheduleForContact}
         onClose={() => setIsEditOpen(false)}
         onSubmit={saveEdit}
+      />
+
+      <ActivityModal
+        open={Boolean(schedule)}
+        activity={null}
+        defaults={schedule}
+        members={members}
+        currentUserId={authUser?.id}
+        onClose={() => setSchedule(null)}
       />
     </CrmLayout>
   );

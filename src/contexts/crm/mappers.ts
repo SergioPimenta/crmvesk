@@ -54,6 +54,7 @@ export const activityToInput = (a: Activity): ActivityInput => ({
   link: a.link ?? '',
   prioridade: a.prioridade ?? 'Média',
   assignedTo: a.assignedTo ?? null,
+  remindMinutes: a.remindMinutes ?? null,
   quando: a.quando,
 });
 

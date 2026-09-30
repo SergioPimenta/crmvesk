@@ -3,6 +3,7 @@ import pool from '../db.js';
 import { archiveRows } from '../utils/archive.js';
 import { normalizeRows } from '../utils/rows.js';
 import { isWorkspaceMember } from '../services/leadOwnerService.js';
+import { REMIND_OPTIONS } from '../services/reminderService.js';
 
 // Agenda: atividades com data e hora reais (UTC no banco), duração, participantes e responsável.
 // Visibilidade: administradores veem todas do workspace; os demais veem as que criaram OU que foram
@@ -100,6 +101,14 @@ async function parseInput(req) {
   if (link && !/^https?:\/\/\S+$/i.test(link)) throw new HttpError('O link deve começar com http:// ou https://');
   if (link.length > 512) throw new HttpError('O link é muito longo');
 
+  // Lembrete: só para compromissos com horário (dia inteiro e sem data não têm lembrete).
+  let remindMinutes = null;
+  if (b.remindMinutes !== undefined && b.remindMinutes !== null && b.remindMinutes !== '') {
+    remindMinutes = Number(b.remindMinutes);
+    if (!REMIND_OPTIONS.includes(remindMinutes)) throw new HttpError('Antecedência do lembrete inválida');
+  }
+  if (allDay || !start) remindMinutes = null;
+
   const contatoId = asId(b.contatoId);
   const empresaId = asId(b.empresaId);
   const dealId = asId(b.dealId);
@@ -126,6 +135,7 @@ async function parseInput(req) {
     empresaId,
     dealId,
     assignedTo,
+    remindMinutes,
     quando: whenLabel(start, allDay, b.quando),
   };
 }
@@ -134,7 +144,7 @@ const SELECT_ACTIVITY = `
   SELECT a.id, a.contact_id AS contatoId, a.company_id AS empresaId, a.deal_id AS dealId, a.titulo, a.tipo,
          a.quando, a.status, a.start_at AS startAt, a.end_at AS endAt, a.all_day AS allDay, a.descricao,
          a.local, a.link, a.prioridade, a.assigned_to AS assignedTo, u.name AS assignedToName,
-         a.completed_at AS completedAt, a.created_by AS createdBy
+         a.completed_at AS completedAt, a.created_by AS createdBy, a.remind_minutes AS remindMinutes
   FROM activities a LEFT JOIN users u ON u.id = a.assigned_to`;
 
 function toDto(row) {
@@ -182,8 +192,8 @@ router.post('/', async (req, res) => {
   const a = await parseInput(req);
   const [, rows] = await pool.query(
     `INSERT INTO activities (user_id, created_by, contact_id, company_id, deal_id, titulo, tipo, quando, status,
-                             start_at, end_at, all_day, descricao, local, link, prioridade, assigned_to, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                             start_at, end_at, all_day, descricao, local, link, prioridade, assigned_to, completed_at, remind_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [
       req.userId,
       req.authUserId,
@@ -203,6 +213,7 @@ router.post('/', async (req, res) => {
       a.prioridade,
       a.assignedTo,
       a.status === 'Concluída' ? new Date().toISOString() : null,
+      a.remindMinutes,
     ]
   );
   const id = rows?.[0]?.id;
@@ -220,11 +231,16 @@ router.put('/:id', async (req, res) => {
   const completedAt =
     a.status === 'Concluída' ? (current.status === 'Concluída' && current.completedAt ? current.completedAt : new Date()) : null;
 
+  // Remarcar ou mudar a antecedência reabilita o lembrete (reminded_at volta a nulo).
+  const sameStart = (current.startAt ? new Date(current.startAt).getTime() : null) === (a.start ? a.start.getTime() : null);
+  const resetReminder = !sameStart || current.remindMinutes !== a.remindMinutes;
+
   const v = visible(req);
   await pool.query(
     `UPDATE activities SET contact_id = ?, company_id = ?, deal_id = ?, titulo = ?, tipo = ?, quando = ?, status = ?,
             start_at = ?, end_at = ?, all_day = ?, descricao = ?, local = ?, link = ?, prioridade = ?,
-            assigned_to = ?, completed_at = ?, updated_at = NOW()
+            assigned_to = ?, completed_at = ?, remind_minutes = ?,
+            reminded_at = CASE WHEN ? THEN NULL ELSE reminded_at END, updated_at = NOW()
      WHERE id = ? AND user_id = ?${v.sql}`,
     [
       a.contatoId,
@@ -243,6 +259,8 @@ router.put('/:id', async (req, res) => {
       a.prioridade,
       a.assignedTo,
       completedAt ? new Date(completedAt).toISOString() : null,
+      a.remindMinutes,
+      resetReminder,
       id,
       req.userId,
       ...v.params,
