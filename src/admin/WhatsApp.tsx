@@ -4,6 +4,7 @@ import { put } from '@vercel/blob/client';
 import CrmLayout from '../components/crm/CrmLayout';
 import Modal from '../components/crm/Modal';
 import BulkMessagingModal from '../components/crm/BulkMessagingModal';
+import WaAttachPreview, { type PendingAttachment } from '../components/crm/WaAttachPreview';
 import { useCrmData, type Contact } from '../contexts/CrmDataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -379,6 +380,11 @@ const WhatsApp = () => {
   const [startingAttendance, setStartingAttendance] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [pendingIndex, setPendingIndex] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepthRef = useRef(0);
+  const pendingRef = useRef<PendingAttachment[]>([]);
   const [recordPaused, setRecordPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [recordLevels, setRecordLevels] = useState<number[]>(() => Array(RECORD_BARS).fill(0));
@@ -591,20 +597,20 @@ const WhatsApp = () => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
   };
 
-  const sendMediaFile = async (file: File) => {
-    if (!active || isClosed || sending) return;
+  const sendMediaFile = async (file: File, opts?: { caption?: string }): Promise<boolean> => {
+    if (!active || isClosed || sending) return false;
     setSendError('');
     // O Blob e a API da Meta não aceitam parâmetros de codec (ex.: "audio/webm;codecs=opus").
     const mimeType = (file.type || 'application/octet-stream').split(';')[0].trim();
     const limit = MEDIA_BYTES_LIMITS[mediaKindFromMime(mimeType)];
     if (file.size > limit) {
       setSendError(`Arquivo muito grande. O limite é ${Math.floor(limit / 1024 / 1024)} MB.`);
-      return;
+      return false;
     }
     setSending(true);
     setAttachOpen(false);
     try {
-      const caption = draft.trim();
+      const caption = opts?.caption !== undefined ? opts.caption.trim() : draft.trim();
       const safeName = (file.name || 'arquivo').replace(/[^\w.\-()+]/g, '_');
       const pathname = `wa/out/${Date.now()}-${safeName}`;
       const tokenResponse = await api.post<{ type: string; clientToken: string }>(
@@ -632,20 +638,142 @@ const WhatsApp = () => {
       });
       scrollOnNextMessagesRef.current = true;
       setMessages(data.messages || []);
-      setDraft('');
+      if (opts?.caption === undefined) setDraft('');
       await loadChats();
+      return true;
     } catch (err: unknown) {
       setSendError(err instanceof Error ? err.message : 'Não foi possível enviar o arquivo.');
+      return false;
     } finally {
       setSending(false);
     }
   };
 
-  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) void sendMediaFile(file);
+  const canAttach = Boolean(active) && !isClosed && messagesReady && !recording;
+
+  const clearPending = () => {
+    pendingRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    pendingRef.current = [];
+    setPending([]);
+    setPendingIndex(0);
   };
+
+  const addPendingFiles = (files: File[]) => {
+    if (!canAttach || files.length === 0) return;
+    const accepted: PendingAttachment[] = [];
+    const errors: string[] = [];
+    files.forEach((file) => {
+      const mime = (file.type || 'application/octet-stream').split(';')[0].trim();
+      const limit = MEDIA_BYTES_LIMITS[mediaKindFromMime(mime)];
+      if (file.size > limit) {
+        errors.push(`${file.name}: acima do limite de ${Math.floor(limit / 1024 / 1024)} MB`);
+        return;
+      }
+      accepted.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        url: URL.createObjectURL(file),
+        caption: '',
+      });
+    });
+    setSendError(errors.join(' · '));
+    if (accepted.length === 0) return;
+    // Texto já digitado no campo vira a legenda do primeiro anexo (como no WhatsApp Web).
+    if (pendingRef.current.length === 0 && draft.trim()) {
+      accepted[0].caption = draft.trim();
+      setDraft('');
+    }
+    const next = [...pendingRef.current, ...accepted];
+    if (pendingRef.current.length === 0) setPendingIndex(0);
+    else setPendingIndex(pendingRef.current.length);
+    pendingRef.current = next;
+    setPending(next);
+    setAttachOpen(false);
+  };
+
+  const removePending = (id: string) => {
+    const target = pendingRef.current.find((p) => p.id === id);
+    if (target) URL.revokeObjectURL(target.url);
+    const next = pendingRef.current.filter((p) => p.id !== id);
+    pendingRef.current = next;
+    setPending(next);
+    setPendingIndex((i) => Math.max(0, Math.min(i, next.length - 1)));
+  };
+
+  const sendPending = async () => {
+    if (sending) return;
+    let remaining = [...pendingRef.current];
+    for (const item of pendingRef.current) {
+      const ok = await sendMediaFile(item.file, { caption: item.caption });
+      if (!ok) {
+        pendingRef.current = remaining;
+        setPending(remaining);
+        setPendingIndex(0);
+        return;
+      }
+      URL.revokeObjectURL(item.url);
+      remaining = remaining.filter((p) => p.id !== item.id);
+      pendingRef.current = remaining;
+      setPending(remaining);
+    }
+    clearPending();
+  };
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    addPendingFiles(files);
+  };
+
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+
+  const onChatDragEnter = (e: React.DragEvent) => {
+    if (!canAttach || !hasFiles(e)) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  };
+
+  const onChatDragOver = (e: React.DragEvent) => {
+    if (!canAttach || !hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const onChatDragLeave = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  };
+
+  const onChatDrop = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    addPendingFiles(Array.from(e.dataTransfer.files));
+  };
+
+  const onComposerPaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.files ?? []);
+    if (files.length === 0) return;
+    e.preventDefault();
+    addPendingFiles(files);
+  };
+
+  useEffect(() => {
+    clearPending();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
+
+  useEffect(
+    () => () => {
+      pendingRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    },
+    []
+  );
 
   const startRecording = async () => {
     if (!active || isClosed || sending || recording) return;
@@ -1127,7 +1255,41 @@ const WhatsApp = () => {
             </div>
           </div>
 
-          <div className="wa-chat crm-card inbox-view" aria-label="Mensagens da conversa">
+          <div
+            className="wa-chat crm-card inbox-view"
+            aria-label="Mensagens da conversa"
+            onDragEnter={onChatDragEnter}
+            onDragOver={onChatDragOver}
+            onDragLeave={onChatDragLeave}
+            onDrop={onChatDrop}
+          >
+            {dragActive ? (
+              <div className="wa-drop-overlay" aria-hidden="true">
+                <div className="wa-drop-overlay-box">
+                  <i className="ti ti-cloud-upload" />
+                  <span>Arraste arquivo aqui</span>
+                </div>
+              </div>
+            ) : null}
+            {pending.length > 0 ? (
+              <WaAttachPreview
+                items={pending}
+                activeIndex={pendingIndex}
+                sending={sending}
+                error={sendError}
+                onSelect={setPendingIndex}
+                onCaptionChange={(id, caption) => {
+                  const next = pendingRef.current.map((p) => (p.id === id ? { ...p, caption } : p));
+                  pendingRef.current = next;
+                  setPending(next);
+                }}
+                onRemove={removePending}
+                onAddFiles={addPendingFiles}
+                onClose={clearPending}
+                onSend={() => void sendPending()}
+                onDismissError={() => setSendError('')}
+              />
+            ) : null}
             {active ? (
               <>
                 <div className="wa-chat-head">
@@ -1262,6 +1424,7 @@ const WhatsApp = () => {
                       ref={imageInputRef}
                       type="file"
                       accept="image/*"
+                      multiple
                       hidden
                       onChange={onFileSelected}
                     />
@@ -1269,6 +1432,7 @@ const WhatsApp = () => {
                       ref={videoInputRef}
                       type="file"
                       accept="video/*"
+                      multiple
                       hidden
                       onChange={onFileSelected}
                     />
@@ -1276,6 +1440,7 @@ const WhatsApp = () => {
                       ref={documentInputRef}
                       type="file"
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,application/*"
+                      multiple
                       hidden
                       onChange={onFileSelected}
                     />
@@ -1384,6 +1549,7 @@ const WhatsApp = () => {
                       placeholder={recording ? 'Gravando áudio…' : 'Digite uma mensagem…'}
                       rows={1}
                       aria-label="Mensagem"
+                      onPaste={onComposerPaste}
                       disabled={sending || recording}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
