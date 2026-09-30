@@ -657,12 +657,13 @@ const WhatsApp = () => {
     if (!authUser?.id) return;
     setClaimingId(chatId);
     try {
-      await api.put(`/whatsapp/chats/${chatId}/assign`, { userId: Number(authUser.id) });
+      await api.put(`/whatsapp/chats/${chatId}/assign`, { userId: Number(authUser.id), claim: true });
       setListTab('andamento');
       await loadChats();
       selectConversation(chatId);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Não foi possível assumir a conversa');
+      await loadChats();
     } finally {
       setClaimingId(null);
     }

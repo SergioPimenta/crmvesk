@@ -334,7 +334,9 @@ router.put('/chats/:id/assign', async (req, res) => {
   }
 
   try {
-    const result = await assignChat(req.userId, chatId, targetUserId);
+    const result = await assignChat(req.userId, chatId, targetUserId, {
+      claim: req.body?.claim === true && targetUserId !== null,
+    });
     res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });

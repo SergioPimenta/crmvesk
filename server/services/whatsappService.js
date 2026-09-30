@@ -1070,7 +1070,9 @@ export async function getUnreadCount(userId, viewer = {}) {
   return Number(rows[0]?.total) || 0;
 }
 
-export async function assignChat(accountId, chatId, targetUserId) {
+// claim: só atribui se a conversa ainda não tiver responsável ("Assumir conversa"); transferências
+// normais (sem claim) continuam podendo reatribuir ou devolver para a equipe.
+export async function assignChat(accountId, chatId, targetUserId, { claim = false } = {}) {
   if (targetUserId !== null) {
     const [memberRows] = await pool.query(
       'SELECT id FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
@@ -1080,10 +1082,21 @@ export async function assignChat(accountId, chatId, targetUserId) {
   }
 
   const [result] = await pool.query(
-    'UPDATE whatsapp_chats SET assigned_to = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
+    `UPDATE whatsapp_chats SET assigned_to = ?, updated_at = NOW() WHERE id = ? AND user_id = ?${
+      claim ? ' AND assigned_to IS NULL' : ''
+    }`,
     [targetUserId, chatId, accountId]
   );
-  if (!result.affectedRows) throw new Error('Conversa não encontrada');
+  if (!result.affectedRows) {
+    if (claim) {
+      const [exists] = await pool.query('SELECT assigned_to FROM whatsapp_chats WHERE id = ? AND user_id = ?', [
+        chatId,
+        accountId,
+      ]);
+      if (exists.length) throw new Error('Esta conversa já foi assumida por outro usuário');
+    }
+    throw new Error('Conversa não encontrada');
+  }
   return { assignedTo: targetUserId };
 }
 
