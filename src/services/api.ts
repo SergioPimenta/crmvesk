@@ -50,6 +50,9 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
+      // Sessão deslizante: o servidor devolve um token novo de tempos em tempos enquanto o usuário está ativo.
+      const refreshedToken = response.headers.get('x-refresh-token');
+      if (refreshedToken) localStorage.setItem('token', refreshedToken);
       if (!response.ok) {
         const isJson = response.headers.get('content-type')?.includes('application/json');
         const errBody = isJson ? await response.json() : await response.text();

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Modal from '../crm/Modal';
 import { useCrmData } from '../../contexts/CrmDataContext';
 import { api } from '../../services/api';
+import LeadOwnerField, { ownerPayload, ownerValueFrom } from './LeadOwnerField';
 
 type WaWidget = {
   id: string;
@@ -16,6 +17,8 @@ type WaWidget = {
   stageTitle: string;
   active: boolean;
   useForm: boolean;
+  ownerUserId?: string | null;
+  ownerRoundRobin?: boolean;
   pageViews: number;
   buttonClicks: number;
   lastSeenAt: string | null;
@@ -32,6 +35,7 @@ type FormState = {
   stageKey: string;
   active: boolean;
   useForm: boolean;
+  ownerValue: string;
 };
 
 const formatDate = (value: string | null) => {
@@ -63,6 +67,7 @@ const WhatsAppButtonTab = () => {
     stageKey: 'prospeccao',
     active: true,
     useForm: true,
+    ownerValue: '',
   });
 
   const defaultPipelineId = useMemo(
@@ -94,6 +99,7 @@ const WhatsAppButtonTab = () => {
       stageKey: firstStageKey(pipelineId),
       active: true,
       useForm: true,
+      ownerValue: '',
     };
   }, [defaultPipelineId, firstStageKey]);
 
@@ -134,6 +140,7 @@ const WhatsAppButtonTab = () => {
       stageKey: widget.stageKey || firstStageKey(widget.pipelineId || defaultPipelineId),
       active: widget.active,
       useForm: widget.useForm !== false,
+      ownerValue: ownerValueFrom(widget),
     });
     setError('');
     setModalOpen(true);
@@ -154,10 +161,12 @@ const WhatsAppButtonTab = () => {
     setSaving(true);
     setError('');
     try {
+      const { ownerValue, ...rest } = form;
+      const payload = { ...rest, ...ownerPayload(ownerValue) };
       if (editing) {
-        await api.put(`/whatsapp-button/widgets/${editing.id}`, form);
+        await api.put(`/whatsapp-button/widgets/${editing.id}`, payload);
       } else {
-        await api.post('/whatsapp-button/widgets', form);
+        await api.post('/whatsapp-button/widgets', payload);
       }
       await loadWidgets();
       closeModal();
@@ -439,6 +448,11 @@ const WhatsAppButtonTab = () => {
             </select>
           </div>
 
+              <LeadOwnerField
+                id="wa_owner"
+                value={form.ownerValue}
+                onChange={(ownerValue) => setForm((f) => ({ ...f, ownerValue }))}
+              />
             </>
           ) : null}
 

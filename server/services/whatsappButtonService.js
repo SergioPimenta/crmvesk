@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
+import { normalizeOwnerSetting, resolveLeadOwner } from './leadOwnerService.js';
 
 const publicBase = () =>
   process.env.WHATSAPP_WEBHOOK_PUBLIC_URL ||
@@ -110,6 +111,8 @@ function mapWidgetRow(row, base) {
     stageTitle: normalized.stageTitle || '',
     active: Boolean(normalized.active),
     useForm: normalized.useForm !== false,
+    ownerUserId: normalized.ownerUserId != null ? String(normalized.ownerUserId) : null,
+    ownerRoundRobin: Boolean(normalized.ownerRoundRobin),
     pageViews: Number(normalized.pageViews) || 0,
     buttonClicks: Number(normalized.buttonClicks) || 0,
     lastSeenAt: normalized.lastSeenAt,
@@ -121,7 +124,8 @@ function mapWidgetRow(row, base) {
 export async function listWidgets(userId) {
   const [rows] = await pool.query(
     `SELECT w.id, w.site_url AS siteUrl, w.site_name AS siteName, w.phone, w.monitor_code AS monitorCode,
-            w.message, w.active, w.use_form AS useForm, w.page_views AS pageViews, w.button_clicks AS buttonClicks,
+            w.message, w.active, w.use_form AS useForm,
+            w.owner_user_id AS ownerUserId, w.owner_round_robin AS ownerRoundRobin, w.page_views AS pageViews, w.button_clicks AS buttonClicks,
             w.last_seen_at AS lastSeenAt, w.created_at AS createdAt,
             w.pipeline_id AS pipelineId, w.stage_key AS stageKey,
             p.nome AS pipelineName, ps.titulo AS stageTitle
@@ -142,7 +146,7 @@ export function buildEmbedSnippet(monitorCode, base = getPublicApiBase()) {
 
 export async function createWidget(
   userId,
-  { siteUrl, siteName = '', phone, message = '', pipelineId, stageKey, useForm = true }
+  { siteUrl, siteName = '', phone, message = '', pipelineId, stageKey, useForm = true, ownerUserId, ownerRoundRobin }
 ) {
   const normalizedUrl = normalizeSiteUrl(siteUrl);
   const phoneDigits = digitsOnly(phone);
@@ -150,10 +154,11 @@ export async function createWidget(
   if (phoneDigits.length < 10) throw new Error('Número de WhatsApp inválido (use DDI + DDD + número)');
 
   const pipeline = await resolveWidgetPipeline(userId, pipelineId, stageKey);
+  const owner = await normalizeOwnerSetting(userId, { ownerUserId, ownerRoundRobin });
   const monitorCode = crypto.randomBytes(16).toString('hex');
   const [result] = await pool.query(
-    `INSERT INTO whatsapp_button_widgets (user_id, site_url, site_name, phone, monitor_code, message, pipeline_id, stage_key, use_form)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO whatsapp_button_widgets (user_id, site_url, site_name, phone, monitor_code, message, pipeline_id, stage_key, use_form, owner_user_id, owner_round_robin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
       normalizedUrl,
@@ -164,6 +169,8 @@ export async function createWidget(
       pipeline.pipelineId,
       pipeline.stageKey,
       !!useForm,
+      owner.ownerUserId,
+      owner.ownerRoundRobin,
     ]
   );
 
@@ -174,7 +181,7 @@ export async function createWidget(
 export async function updateWidget(
   userId,
   id,
-  { siteUrl, siteName, phone, message, active, pipelineId, stageKey, useForm }
+  { siteUrl, siteName, phone, message, active, pipelineId, stageKey, useForm, ownerUserId, ownerRoundRobin }
 ) {
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) throw new Error('ID inválido');
@@ -193,11 +200,15 @@ export async function updateWidget(
     pipelineId !== undefined ? pipelineId : existing.pipelineId,
     stageKey !== undefined ? stageKey : existing.stageKey
   );
+  const owner =
+    ownerUserId !== undefined || ownerRoundRobin !== undefined
+      ? await normalizeOwnerSetting(userId, { ownerUserId, ownerRoundRobin })
+      : { ownerUserId: existing.ownerUserId ?? null, ownerRoundRobin: Boolean(existing.ownerRoundRobin) };
 
   await pool.query(
     `UPDATE whatsapp_button_widgets
      SET site_url = ?, site_name = ?, phone = ?, message = ?, active = ?, use_form = ?,
-         pipeline_id = ?, stage_key = ?, updated_at = NOW()
+         pipeline_id = ?, stage_key = ?, owner_user_id = ?, owner_round_robin = ?, updated_at = NOW()
      WHERE id = ? AND user_id = ?`,
     [
       normalizedUrl,
@@ -208,6 +219,8 @@ export async function updateWidget(
       useForm !== undefined ? !!useForm : existing.useForm !== false,
       pipeline.pipelineId,
       pipeline.stageKey,
+      owner.ownerUserId,
+      owner.ownerRoundRobin,
       numericId,
       userId,
     ]
@@ -230,6 +243,7 @@ export async function deleteWidget(userId, id) {
 async function getWidgetById(userId, id) {
   const [rows] = await pool.query(
     `SELECT id, site_url AS siteUrl, site_name AS siteName, phone, message, active, use_form AS useForm,
+            owner_user_id AS ownerUserId, owner_round_robin AS ownerRoundRobin,
             pipeline_id AS pipelineId, stage_key AS stageKey
      FROM whatsapp_button_widgets WHERE id = ? AND user_id = ? LIMIT 1`,
     [id, userId]
@@ -240,6 +254,7 @@ async function getWidgetById(userId, id) {
 export async function getWidgetByMonitorCode(monitorCode) {
   const [rows] = await pool.query(
     `SELECT id, user_id AS userId, site_url AS siteUrl, site_name AS siteName, phone, message, active, use_form AS useForm,
+            owner_user_id AS ownerUserId, owner_round_robin AS ownerRoundRobin,
             monitor_code AS monitorCode, pipeline_id AS pipelineId, stage_key AS stageKey
      FROM whatsapp_button_widgets WHERE monitor_code = ? LIMIT 1`,
     [monitorCode]
@@ -276,17 +291,18 @@ export async function submitWidgetLead(monitorCode, { nome, email = '', telefone
   const ultimaInteracao = `Lead via botão WhatsApp · ${siteLabel}${pageUrl ? ` · ${String(pageUrl).slice(0, 120)}` : ''} · ${new Date().toLocaleDateString('pt-BR')}`;
 
   const pipeline = await resolveWidgetPipeline(userId, widget.pipelineId, widget.stageKey);
+  const ownerId = await resolveLeadOwner(userId, widget);
 
   const [contactIns] = await pool.query(
-    `INSERT INTO contacts (user_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
-     VALUES (?, ?, ?, ?, 'Lead', ?, ?, TRUE)`,
-    [userId, name, emailStr, phoneDigits, pipeline.stageTitle || 'Prospecção', ultimaInteracao]
+    `INSERT INTO contacts (user_id, created_by, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
+     VALUES (?, ?, ?, ?, ?, 'Lead', ?, ?, TRUE)`,
+    [userId, ownerId, name, emailStr, phoneDigits, pipeline.stageTitle || 'Prospecção', ultimaInteracao]
   );
   const contactId = contactIns.insertId;
 
   await pool.query(
-    `INSERT INTO deals (user_id, pipeline_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, '', '20%', ?)`,
-    [userId, pipeline.pipelineId, contactId, name, pipeline.stageKey]
+    `INSERT INTO deals (user_id, created_by, pipeline_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, '', '20%', ?)`,
+    [userId, ownerId, pipeline.pipelineId, contactId, name, pipeline.stageKey]
   );
 
   await recordPing(monitorCode, 'click');

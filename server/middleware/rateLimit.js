@@ -11,10 +11,22 @@ export function clientIp(req) {
 
 let lastCleanup = 0;
 
+// Retenção: contadores do limitador (1 dia), logs de webhook com conteúdo de mensagens (30 dias) e
+// cópias de registros excluídos (180 dias).
+async function housekeeping(nowSec) {
+  const jobs = [
+    pool.query('DELETE FROM rate_limits WHERE window_start < ?', [nowSec - 86400]),
+    pool.query("DELETE FROM whatsapp_webhook_logs WHERE created_at < NOW() - INTERVAL '30 days'"),
+    pool.query("DELETE FROM deleted_records WHERE deleted_at < NOW() - INTERVAL '180 days'"),
+  ];
+  await Promise.allSettled(jobs);
+}
+
 async function hit(key, windowSec) {
   const nowSec = Math.floor(Date.now() / 1000);
   const windowStart = Math.floor(nowSec / windowSec) * windowSec;
-  const [rows] = await pool.query(
+  // Em INSERT/UPDATE/DELETE o pool devolve [meta, linhas] (ao contrário do SELECT, que devolve [linhas, meta]).
+  const [, rows] = await pool.query(
     `INSERT INTO rate_limits (key, window_start, hits) VALUES (?, ?, 1)
      ON CONFLICT (key, window_start) DO UPDATE SET hits = rate_limits.hits + 1
      RETURNING hits`,
@@ -23,7 +35,7 @@ async function hit(key, windowSec) {
 
   if (nowSec - lastCleanup > 3600) {
     lastCleanup = nowSec;
-    void pool.query('DELETE FROM rate_limits WHERE window_start < ?', [nowSec - 86400]).catch(() => {});
+    void housekeeping(nowSec);
   }
 
   return { hits: Number(rows?.[0]?.hits) || 1, retryAfter: windowStart + windowSec - nowSec };

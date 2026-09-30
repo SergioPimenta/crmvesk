@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Modal from '../crm/Modal';
 import { useCrmData } from '../../contexts/CrmDataContext';
 import { api } from '../../services/api';
+import LeadOwnerField, { ownerPayload, ownerValueFrom } from './LeadOwnerField';
 
 type CrmField = 'nome' | 'email' | 'telefone' | 'mensagem' | 'empresa';
 
@@ -32,6 +33,8 @@ type FormWidget = {
   pipelineName: string;
   stageTitle: string;
   active: boolean;
+  ownerUserId?: string | null;
+  ownerRoundRobin?: boolean;
   pageViews: number;
   formSubmissions: number;
   lastSeenAt: string | null;
@@ -47,6 +50,7 @@ type FormState = {
   pipelineId: string;
   stageKey: string;
   active: boolean;
+  ownerValue: string;
 };
 
 const CRM_FIELD_DEFS: {
@@ -206,6 +210,7 @@ const ContactFormTab = () => {
     pipelineId: '',
     stageKey: 'prospeccao',
     active: true,
+    ownerValue: '',
   });
 
   const defaultPipelineId = useMemo(
@@ -236,6 +241,7 @@ const ContactFormTab = () => {
       pipelineId,
       stageKey: firstStageKey(pipelineId),
       active: true,
+      ownerValue: '',
     };
   }, [defaultPipelineId, firstStageKey]);
 
@@ -287,6 +293,7 @@ const ContactFormTab = () => {
       pipelineId: widget.pipelineId || defaultPipelineId,
       stageKey: widget.stageKey || firstStageKey(widget.pipelineId || defaultPipelineId),
       active: widget.active,
+      ownerValue: ownerValueFrom(widget),
     });
     setError('');
     setModalOpen(true);
@@ -320,8 +327,9 @@ const ContactFormTab = () => {
     setSaving(true);
     setError('');
     try {
-      const payload = { ...form, fieldMappings: mappings };
+      const payload = { ...form, ...ownerPayload(form.ownerValue), fieldMappings: mappings };
       delete (payload as { fieldConfig?: FieldConfigState }).fieldConfig;
+      delete (payload as { ownerValue?: string }).ownerValue;
       if (editing) {
         await api.put(`/contact-form/widgets/${editing.id}`, payload);
       } else {
@@ -664,6 +672,12 @@ const ContactFormTab = () => {
               )}
             </select>
           </div>
+
+          <LeadOwnerField
+            id="cf_owner"
+            value={form.ownerValue}
+            onChange={(ownerValue) => setForm((f) => ({ ...f, ownerValue }))}
+          />
 
           {editing ? (
             <label className="crm-checkbox-label" style={{ gridColumn: '1 / -1' }}>

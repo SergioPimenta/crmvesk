@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -96,7 +97,40 @@ async function seedAdminIfNeeded() {
   console.log(`Admin seed criado: ${email}`);
 }
 
+// As migrações são idempotentes, mas rodavam (dezenas de consultas) em todo cold start da função.
+// Agora guardamos uma impressão digital do esquema/migrações no banco e só reexecutamos quando ela muda.
+// FORCE_MIGRATIONS=true força a execução (ex.: para reaplicar a promoção automática de administrador).
+function schemaFingerprint() {
+  const files = ['migrate.js', 'schema.pg.sql'].map((f) => fs.readFileSync(path.join(__dirname, f), 'utf8'));
+  return crypto
+    .createHash('sha1')
+    .update(files.join('\n--\n'))
+    .update(String(Boolean(process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD)))
+    .digest('hex');
+}
+
 export async function runMigrations() {
+  const fingerprint = schemaFingerprint();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key VARCHAR(64) PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  const [rows] = await pool.query("SELECT value FROM app_meta WHERE key = 'schema_fingerprint'");
+  if (process.env.FORCE_MIGRATIONS !== 'true' && rows[0]?.value === fingerprint) return;
+
+  await runAllMigrations();
+
+  await pool.query(
+    `INSERT INTO app_meta (key, value) VALUES ('schema_fingerprint', ?)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [fingerprint]
+  );
+}
+
+async function runAllMigrations() {
   if (!(await tableExists('users'))) {
     await applyBaseSchema();
     if (!(await tableExists('users'))) {
@@ -129,6 +163,9 @@ export async function runMigrations() {
   await migrateWhatsappWabaId();
   await migrateAccounts();
   await migrateRateLimits();
+  await migrateDeletedRecords();
+  await migrateDispatchGroupOwners();
+  await migrateWidgetLeadOwners();
   await migrateRecordOwners();
   await migrateInvites();
   await migrateWhatsappChatAssignee();
@@ -145,6 +182,42 @@ async function migrateRecordOwners() {
       `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
     );
   }
+}
+
+// Cópia das linhas excluídas (contatos, negócios, e-mails...) para recuperação manual.
+async function migrateDeletedRecords() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS deleted_records (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL,
+      table_name VARCHAR(40) NOT NULL,
+      record_id INT NOT NULL,
+      data JSONB NOT NULL,
+      deleted_by INT,
+      deleted_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_deleted_records_user ON deleted_records(user_id, deleted_at)');
+}
+
+// Responsável pelos leads captados por cada botão/formulário (fixo ou rodízio). Sem configuração, o lead fica
+// sem dono e só administradores o veem.
+async function migrateWidgetLeadOwners() {
+  for (const table of ['whatsapp_button_widgets', 'contact_form_widgets']) {
+    if (!(await tableExists(table))) continue;
+    await pool.query(
+      `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS owner_user_id INT REFERENCES users(id) ON DELETE SET NULL`
+    );
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS owner_round_robin BOOLEAN DEFAULT FALSE`);
+  }
+}
+
+// Grupos de disparo passam a ter dono: usuário comum só enxerga e edita os próprios.
+async function migrateDispatchGroupOwners() {
+  if (!(await tableExists('whatsapp_dispatch_groups'))) return;
+  await pool.query(
+    'ALTER TABLE whatsapp_dispatch_groups ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL'
+  );
 }
 
 async function migrateRateLimits() {

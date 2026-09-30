@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
+import { normalizeOwnerSetting, resolveLeadOwner } from './leadOwnerService.js';
 import { getPublicApiBase } from './whatsappButtonService.js';
 
 export const DEFAULT_FIELD_MAPPINGS = [
@@ -144,6 +145,8 @@ function mapWidgetRow(row, base) {
     pipelineName: normalized.pipelineName || '',
     stageTitle: normalized.stageTitle || '',
     active: Boolean(normalized.active),
+    ownerUserId: normalized.ownerUserId != null ? String(normalized.ownerUserId) : null,
+    ownerRoundRobin: Boolean(normalized.ownerRoundRobin),
     pageViews: Number(normalized.pageViews) || 0,
     formSubmissions: Number(normalized.formSubmissions) || 0,
     lastSeenAt: normalized.lastSeenAt,
@@ -156,6 +159,7 @@ export async function listFormWidgets(userId) {
   const [rows] = await pool.query(
     `SELECT w.id, w.site_url AS siteUrl, w.site_name AS siteName, w.monitor_code AS monitorCode,
             w.form_selector AS formSelector, w.field_mappings AS fieldMappings, w.active,
+            w.owner_user_id AS ownerUserId, w.owner_round_robin AS ownerRoundRobin,
             w.page_views AS pageViews, w.form_submissions AS formSubmissions,
             w.last_seen_at AS lastSeenAt, w.created_at AS createdAt,
             w.pipeline_id AS pipelineId, w.stage_key AS stageKey,
@@ -177,19 +181,20 @@ export function buildEmbedSnippet(monitorCode, base = getPublicApiBase()) {
 
 export async function createFormWidget(
   userId,
-  { siteUrl, siteName = '', formSelector = 'form', fieldMappings, pipelineId, stageKey }
+  { siteUrl, siteName = '', formSelector = 'form', fieldMappings, pipelineId, stageKey, ownerUserId, ownerRoundRobin }
 ) {
   const normalizedUrl = normalizeSiteUrl(siteUrl);
   if (!normalizedUrl) throw new Error('URL do site inválida');
 
   const pipeline = await resolveWidgetPipeline(userId, pipelineId, stageKey);
+  const owner = await normalizeOwnerSetting(userId, { ownerUserId, ownerRoundRobin });
   const mappings = parseFieldMappings(fieldMappings);
   const monitorCode = crypto.randomBytes(16).toString('hex');
 
   const [result] = await pool.query(
     `INSERT INTO contact_form_widgets
-     (user_id, site_url, site_name, monitor_code, form_selector, field_mappings, pipeline_id, stage_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     (user_id, site_url, site_name, monitor_code, form_selector, field_mappings, pipeline_id, stage_key, owner_user_id, owner_round_robin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
       normalizedUrl,
@@ -199,6 +204,8 @@ export async function createFormWidget(
       serializeFieldMappings(mappings),
       pipeline.pipelineId,
       pipeline.stageKey,
+      owner.ownerUserId,
+      owner.ownerRoundRobin,
     ]
   );
 
@@ -209,7 +216,7 @@ export async function createFormWidget(
 export async function updateFormWidget(
   userId,
   id,
-  { siteUrl, siteName, formSelector, fieldMappings, active, pipelineId, stageKey }
+  { siteUrl, siteName, formSelector, fieldMappings, active, pipelineId, stageKey, ownerUserId, ownerRoundRobin }
 ) {
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) throw new Error('ID inválido');
@@ -225,11 +232,15 @@ export async function updateFormWidget(
     pipelineId !== undefined ? pipelineId : existing.pipelineId,
     stageKey !== undefined ? stageKey : existing.stageKey
   );
+  const owner =
+    ownerUserId !== undefined || ownerRoundRobin !== undefined
+      ? await normalizeOwnerSetting(userId, { ownerUserId, ownerRoundRobin })
+      : { ownerUserId: existing.ownerUserId ?? null, ownerRoundRobin: Boolean(existing.ownerRoundRobin) };
 
   await pool.query(
     `UPDATE contact_form_widgets
      SET site_url = ?, site_name = ?, form_selector = ?, field_mappings = ?, active = ?,
-         pipeline_id = ?, stage_key = ?, updated_at = NOW()
+         pipeline_id = ?, stage_key = ?, owner_user_id = ?, owner_round_robin = ?, updated_at = NOW()
      WHERE id = ? AND user_id = ?`,
     [
       normalizedUrl,
@@ -239,6 +250,8 @@ export async function updateFormWidget(
       active !== undefined ? !!active : !!existing.active,
       pipeline.pipelineId,
       pipeline.stageKey,
+      owner.ownerUserId,
+      owner.ownerRoundRobin,
       numericId,
       userId,
     ]
@@ -261,7 +274,8 @@ export async function deleteFormWidget(userId, id) {
 async function getFormWidgetById(userId, id) {
   const [rows] = await pool.query(
     `SELECT id, site_url AS siteUrl, site_name AS siteName, form_selector AS formSelector,
-            field_mappings AS fieldMappings, active, pipeline_id AS pipelineId, stage_key AS stageKey
+            field_mappings AS fieldMappings, active, pipeline_id AS pipelineId, stage_key AS stageKey,
+            owner_user_id AS ownerUserId, owner_round_robin AS ownerRoundRobin
      FROM contact_form_widgets WHERE id = ? AND user_id = ? LIMIT 1`,
     [id, userId]
   );
@@ -274,7 +288,8 @@ export async function getFormWidgetByMonitorCode(monitorCode) {
   const [rows] = await pool.query(
     `SELECT id, user_id AS userId, site_url AS siteUrl, site_name AS siteName, active,
             monitor_code AS monitorCode, form_selector AS formSelector, field_mappings AS fieldMappings,
-            pipeline_id AS pipelineId, stage_key AS stageKey
+            pipeline_id AS pipelineId, stage_key AS stageKey,
+            owner_user_id AS ownerUserId, owner_round_robin AS ownerRoundRobin
      FROM contact_form_widgets WHERE monitor_code = ? LIMIT 1`,
     [monitorCode]
   );
@@ -338,18 +353,19 @@ export async function submitFormLead(monitorCode, body = {}) {
   const ultimaInteracao = parts.join(' · ');
 
   const pipeline = await resolveWidgetPipeline(userId, widget.pipelineId, widget.stageKey);
+  const ownerId = await resolveLeadOwner(userId, widget);
 
   const [contactIns] = await pool.query(
-    `INSERT INTO contacts (user_id, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
-     VALUES (?, ?, ?, ?, 'Lead', ?, ?, TRUE)`,
-    [userId, contactName, email, telefone, pipeline.stageTitle || 'Prospecção', ultimaInteracao]
+    `INSERT INTO contacts (user_id, created_by, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
+     VALUES (?, ?, ?, ?, ?, 'Lead', ?, ?, TRUE)`,
+    [userId, ownerId, contactName, email, telefone, pipeline.stageTitle || 'Prospecção', ultimaInteracao]
   );
   const contactId = contactIns.insertId;
 
   const dealTitle = empresa ? `${contactName} · ${empresa}` : contactName;
   await pool.query(
-    `INSERT INTO deals (user_id, pipeline_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, '', '20%', ?)`,
-    [userId, pipeline.pipelineId, contactId, dealTitle, pipeline.stageKey]
+    `INSERT INTO deals (user_id, created_by, pipeline_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, '', '20%', ?)`,
+    [userId, ownerId, pipeline.pipelineId, contactId, dealTitle, pipeline.stageKey]
   );
 
   const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -363,9 +379,9 @@ export async function submitFormLead(monitorCode, body = {}) {
   const preview = (previewParts.join('\n') || `Novo lead enviado por ${siteLabel}`).slice(0, 255);
 
   await pool.query(
-    `INSERT INTO emails (user_id, contact_id, company_id, de, assunto, preview, quando, status)
-     VALUES (?, ?, NULL, ?, ?, ?, ?, 'Não lido')`,
-    [userId, contactId, fromLabel, assunto, preview, quando]
+    `INSERT INTO emails (user_id, created_by, contact_id, company_id, de, assunto, preview, quando, status)
+     VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 'Não lido')`,
+    [userId, ownerId, contactId, fromLabel, assunto, preview, quando]
   );
 
   await recordFormPing(monitorCode, 'submit');

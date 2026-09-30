@@ -2,6 +2,8 @@ import express from 'express';
 import multer from 'multer';
 import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
+import { archiveRows } from '../utils/archive.js';
+import { isWorkspaceMember } from '../services/leadOwnerService.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
 import {
   listTemplates,
@@ -303,7 +305,8 @@ router.put('/companies/:id', async (req, res) => {
 // Contacts
 router.get('/contacts', async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT id, company_id AS empresaId, nome, email, telefone, site, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp
+    `SELECT id, company_id AS empresaId, nome, email, telefone, site, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp,
+            created_by AS ownerId
      FROM contacts WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
     [req.userId, ...ownParams(req)]
   );
@@ -460,6 +463,37 @@ router.post('/contacts/bulk-import', async (req, res) => {
   });
 });
 
+// Atribuição de responsável em massa (só administradores). Move também os negócios, atividades, propostas e
+// e-mails ligados aos contatos, para que o novo responsável veja o histórico completo. userId null = sem responsável.
+router.put('/contacts/assign-owner', async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ message: 'Acesso restrito a administradores' });
+
+  const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger))];
+  if (ids.length === 0) return res.status(400).json({ message: 'Selecione ao menos um contato' });
+  if (ids.length > 500) return res.status(400).json({ message: 'Selecione no máximo 500 contatos por vez' });
+
+  const rawOwner = req.body?.userId;
+  const ownerId = rawOwner === null || rawOwner === undefined || rawOwner === '' ? null : Number(rawOwner);
+  if (ownerId !== null && !Number.isInteger(ownerId)) return res.status(400).json({ message: 'Usuário inválido' });
+  if (ownerId !== null && !(await isWorkspaceMember(req.userId, ownerId))) {
+    return res.status(400).json({ message: 'Usuário não faz parte deste workspace' });
+  }
+
+  const marks = ids.map(() => '?').join(', ');
+  const [updated] = await pool.query(
+    `UPDATE contacts SET created_by = ?, updated_at = NOW() WHERE user_id = ? AND id IN (${marks})`,
+    [ownerId, req.userId, ...ids]
+  );
+  for (const table of ['deals', 'activities', 'proposals', 'emails']) {
+    await pool.query(`UPDATE ${table} SET created_by = ? WHERE user_id = ? AND contact_id IN (${marks})`, [
+      ownerId,
+      req.userId,
+      ...ids,
+    ]);
+  }
+  res.json({ updated: updated.affectedRows ?? ids.length });
+});
+
 router.put('/contacts/:id', async (req, res) => {
   const id = Number(req.params.id);
   const {
@@ -489,6 +523,7 @@ router.delete('/contacts/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
 
+  await archiveRows(req, 'contacts', `id = ? AND user_id = ?${ownSql(req)}`, [id, req.userId, ...ownParams(req)]);
   const [result] = await pool.query(`DELETE FROM contacts WHERE id = ? AND user_id = ?${ownSql(req)}`, [
     id,
     req.userId,
@@ -578,6 +613,7 @@ router.delete('/deals/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
 
+  await archiveRows(req, 'deals', `id = ? AND user_id = ?${ownSql(req)}`, [id, req.userId, ...ownParams(req)]);
   const [result] = await pool.query(`DELETE FROM deals WHERE id = ? AND user_id = ?${ownSql(req)}`, [
     id,
     req.userId,
@@ -661,6 +697,7 @@ router.put('/emails/:id', async (req, res) => {
 router.delete('/emails/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  await archiveRows(req, 'emails', `id = ? AND user_id = ?${ownSql(req)}`, [id, req.userId, ...ownParams(req)]);
   const [result] = await pool.query(`DELETE FROM emails WHERE id = ? AND user_id = ?${ownSql(req)}`, [
     id,
     req.userId,

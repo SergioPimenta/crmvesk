@@ -24,6 +24,8 @@ export type Contact = {
   etapa: ContactStage;
   ultimaInteracao: string;
   precisaFollowUp?: boolean;
+  /** Usuário responsável (criador) do contato; null/ausente = sem responsável. */
+  ownerId?: number | null;
 };
 
 export type CompanyStage = 'Prospecção' | 'Qualificação' | 'Proposta' | 'Negociação' | 'Fechado';

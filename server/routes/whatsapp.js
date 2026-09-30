@@ -190,9 +190,12 @@ router.post('/bulk-send', async (req, res) => {
   }
 });
 
+// Administradores enxergam todos os grupos do workspace; os demais só os que criaram.
+const dispatchOwner = (req) => (req.userRole === 'admin' ? null : req.authUserId);
+
 router.get('/dispatch-groups', async (req, res) => {
   try {
-    const groups = await listDispatchGroups(req.userId);
+    const groups = await listDispatchGroups(req.userId, dispatchOwner(req));
     res.json({ groups });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -201,10 +204,12 @@ router.get('/dispatch-groups', async (req, res) => {
 
 router.post('/dispatch-groups', async (req, res) => {
   try {
-    const group = await createDispatchGroup(req.userId, {
-      name: req.body?.name,
-      contactIds: req.body?.contactIds,
-    });
+    const group = await createDispatchGroup(
+      req.userId,
+      { name: req.body?.name, contactIds: req.body?.contactIds },
+      req.authUserId,
+      dispatchOwner(req)
+    );
     res.status(201).json({ group });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -215,10 +220,12 @@ router.put('/dispatch-groups/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   try {
-    const group = await updateDispatchGroup(req.userId, id, {
-      name: req.body?.name,
-      contactIds: req.body?.contactIds,
-    });
+    const group = await updateDispatchGroup(
+      req.userId,
+      id,
+      { name: req.body?.name, contactIds: req.body?.contactIds },
+      dispatchOwner(req)
+    );
     res.json({ group });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -229,7 +236,7 @@ router.delete('/dispatch-groups/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   try {
-    await deleteDispatchGroup(req.userId, id);
+    await deleteDispatchGroup(req.userId, id, dispatchOwner(req));
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ message: err.message });

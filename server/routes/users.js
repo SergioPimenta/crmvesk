@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyToken, requireAdmin } from '../middleware/auth.js';
+import { verifyToken, requireAdmin, invalidateAuthCache } from '../middleware/auth.js';
 import { createUser, deleteUser, listUsers, setUserActive, updateUser } from '../services/userService.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
 
@@ -38,6 +38,7 @@ router.put('/:id', async (req, res) => {
   );
 
   if (result.success) {
+    invalidateAuthCache(req.params.id);
     res.json(normalizeRow(result.user));
     return;
   }
@@ -51,6 +52,7 @@ router.patch('/:id/active', async (req, res) => {
   const result = await setUserActive(req.params.id, active, req.authUserId, req.userId);
 
   if (result.success) {
+    invalidateAuthCache(req.params.id);
     res.json(normalizeRow(result.user));
     return;
   }
@@ -63,6 +65,7 @@ router.delete('/:id', async (req, res) => {
   const result = await deleteUser(req.params.id, req.authUserId, req.userId);
 
   if (result.success) {
+    invalidateAuthCache(req.params.id);
     res.status(204).send();
     return;
   }

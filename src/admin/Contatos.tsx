@@ -7,6 +7,7 @@ import Modal from '../components/crm/Modal';
 import { useCrmData, type ContactStage, type ContactType, type PipelineStage } from '../contexts/CrmDataContext';
 
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 import { stageToContactEtapa } from '../utils/crmStage';
 import { contactOrigin } from '../utils/contactOrigin';
@@ -27,9 +28,56 @@ const initials = (name: string) => {
 
 const Contatos = () => {
 
-  const { contacts, companies, pipelines, activePipelineId, addContact, updateContact, deleteContact, getCompanyName } = useCrmData();
+  const { contacts, companies, pipelines, activePipelineId, addContact, updateContact, deleteContact, getCompanyName, refreshCrmData } = useCrmData();
 
   const [activeTab, setActiveTab] = useState<'Todos' | ContactType>('Todos');
+
+  const { user: authUser } = useAuth();
+  const isAdmin = authUser?.role === 'admin';
+  const [members, setMembers] = useState<Array<{ id: number; name: string; role: string; active: boolean }>>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assignTarget, setAssignTarget] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  const [onlyUnowned, setOnlyUnowned] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void api
+      .get<Array<{ id: number; name: string; role: string; active: boolean }>>('/users')
+      .then(setMembers)
+      .catch(() => setMembers([]));
+  }, [isAdmin]);
+
+  const ownerName = (ownerId?: number | null) =>
+    ownerId ? members.find((m) => m.id === Number(ownerId))?.name ?? `Usuário #${ownerId}` : null;
+
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const assignSelected = async () => {
+    if (!assignTarget || selectedIds.size === 0) return;
+    setAssigning(true);
+    setAssignError('');
+    try {
+      await api.put('/crm/contacts/assign-owner', {
+        ids: [...selectedIds].map(Number),
+        userId: assignTarget === 'none' ? null : Number(assignTarget),
+      });
+      setSelectedIds(new Set());
+      setAssignTarget('');
+      await refreshCrmData();
+    } catch (err: unknown) {
+      setAssignError(err instanceof Error ? err.message : 'Não foi possível atribuir os contatos');
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const [query, setQuery] = useState('');
 
@@ -93,11 +141,11 @@ const Contatos = () => {
 
         getCompanyName(c.empresaId).toLowerCase().includes(q);
 
-      return matchesTab && matchesQuery;
+      return matchesTab && matchesQuery && (!onlyUnowned || !c.ownerId);
 
     });
 
-  }, [activeTab, contacts, getCompanyName, query]);
+  }, [activeTab, contacts, getCompanyName, query, onlyUnowned]);
 
   useEffect(() => {
     if (!isCreateOpen || form.pipelineId) return;
@@ -416,12 +464,71 @@ const Contatos = () => {
 
 
 
+        {isAdmin ? (
+          <div className="contacts-assign-bar">
+            <span className="contacts-assign-count">
+              {contacts.filter((c) => !c.ownerId).length} sem responsável
+            </span>
+            <button
+              type="button"
+              className={`crm-action-btn${onlyUnowned ? ' active' : ''}`}
+              onClick={() => setOnlyUnowned((v) => !v)}
+            >
+              {onlyUnowned ? 'Mostrar todos' : 'Mostrar só sem responsável'}
+            </button>
+            {selectedIds.size > 0 ? (
+              <>
+                <span className="contacts-assign-count">{selectedIds.size} selecionado(s)</span>
+                <select
+                  value={assignTarget}
+                  onChange={(e) => setAssignTarget(e.target.value)}
+                  aria-label="Atribuir a"
+                >
+                  <option value="">Atribuir a…</option>
+                  {members
+                    .filter((m) => m.active)
+                    .map((m) => (
+                      <option key={m.id} value={String(m.id)}>
+                        {m.name}
+                      </option>
+                    ))}
+                  <option value="none">Remover responsável</option>
+                </select>
+                <button
+                  type="button"
+                  className="crm-btn-primary"
+                  disabled={!assignTarget || assigning}
+                  onClick={() => void assignSelected()}
+                >
+                  {assigning ? 'Atribuindo…' : 'Atribuir'}
+                </button>
+                <button type="button" className="crm-action-btn" onClick={() => setSelectedIds(new Set())}>
+                  Limpar seleção
+                </button>
+              </>
+            ) : null}
+            {assignError ? <span className="contacts-assign-error">{assignError}</span> : null}
+          </div>
+        ) : null}
+
         <table className="crm-table" aria-label="Lista de contatos cadastrados">
 
           <thead>
 
             <tr>
 
+              {isAdmin ? (
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todos os contatos listados"
+                    checked={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
+                    onChange={(e) =>
+                      setSelectedIds(e.target.checked ? new Set(filtered.map((c) => c.id)) : new Set())
+                    }
+                  />
+                </th>
+              ) : null}
               <th>Contato</th>
 
               <th>Telefone</th>
@@ -433,6 +540,7 @@ const Contatos = () => {
               <th>Etapa</th>
 
               <th>Origem</th>
+              {isAdmin ? <th>Responsável</th> : null}
 
               <th />
 
@@ -445,6 +553,16 @@ const Contatos = () => {
             {filtered.map((c) => (
 
               <tr key={c.id}>
+                {isAdmin ? (
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Selecionar ${c.nome}`}
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelected(c.id)}
+                    />
+                  </td>
+                ) : null}
 
                 <td>
 
@@ -497,6 +615,11 @@ const Contatos = () => {
                 </td>
 
                 <td style={{ color: 'var(--vesk-muted)' }}>{contactOrigin(c.ultimaInteracao)}</td>
+                {isAdmin ? (
+                  <td style={{ color: c.ownerId ? 'var(--vesk-text)' : 'var(--vesk-muted)' }}>
+                    {ownerName(c.ownerId) ?? 'Sem responsável'}
+                  </td>
+                ) : null}
 
                 <td>
 
@@ -532,7 +655,7 @@ const Contatos = () => {
 
               <tr>
 
-                <td colSpan={6} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
+                <td colSpan={isAdmin ? 8 : 6} style={{ color: 'var(--vesk-muted)', padding: 14 }}>
 
                   Nenhum contato encontrado.
 
