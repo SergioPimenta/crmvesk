@@ -328,11 +328,6 @@ const Scraping = () => {
             </div>
           ) : null}
 
-          <p className="scrape-api-hint">
-            Motor gratuito: <strong>Python + Playwright</strong> (sem API paga do Google). Em produção na Vercel,
-            hospede o serviço em <code>scraper/</code> (Railway, Render, VPS) e configure{' '}
-            <code>MAPS_SCRAPER_URL</code>.
-          </p>
         </form>
       </div>
 
