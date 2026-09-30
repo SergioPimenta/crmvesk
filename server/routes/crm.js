@@ -20,6 +20,12 @@ const templateUpload = multer({
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
+// Usuários comuns só enxergam/alteram o que eles mesmos criaram; administradores enxergam tudo do workspace.
+// Registros sem dono (created_by NULL — dados anteriores, leads de formulário/widget) ficam só para administradores.
+const isAdmin = (req) => req.userRole === 'admin';
+const ownSql = (req, alias = '') => (isAdmin(req) ? '' : ` AND ${alias}created_by = ?`);
+const ownParams = (req) => (isAdmin(req) ? [] : [req.authUserId]);
+
 const asId = (v) => {
   if (v === undefined || v === null || v === '') return null;
   const n = Number(v);
@@ -92,11 +98,11 @@ async function clearContactNovoOnDealMove(userId, dealBefore, newStageKey) {
   );
 }
 
-async function getDealForUser(userId, id) {
+async function getDealForUser(req, id) {
   const [rows] = await pool.query(
     `SELECT stage_key AS stageKey, contact_id AS contactId, titulo, pipeline_id AS pipelineId
-     FROM deals WHERE id = ? AND user_id = ? LIMIT 1`,
-    [id, userId]
+     FROM deals WHERE id = ? AND user_id = ?${ownSql(req)} LIMIT 1`,
+    [id, req.userId, ...ownParams(req)]
   );
   return rows[0] ? normalizeRow(rows[0]) : null;
 }
@@ -264,8 +270,8 @@ router.delete('/pipelines/:id/stages/:stageId', async (req, res) => {
 // Companies
 router.get('/companies', async (req, res) => {
   const [rows] = await pool.query(
-    'SELECT id, nome, segmento, etapa, proxima_acao AS proximaAcao, prioridade FROM companies WHERE user_id = ? ORDER BY id DESC',
-    [req.userId]
+    `SELECT id, nome, segmento, etapa, proxima_acao AS proximaAcao, prioridade FROM companies WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -275,8 +281,8 @@ router.post('/companies', async (req, res) => {
   if (!nome) return res.status(400).json({ message: 'Nome é obrigatório' });
 
   const [result] = await pool.query(
-    'INSERT INTO companies (user_id, nome, segmento, etapa, proxima_acao, prioridade) VALUES (?, ?, ?, ?, ?, ?)',
-    [req.userId, nome, segmento, etapa, proximaAcao, prioridade]
+    'INSERT INTO companies (user_id, created_by, nome, segmento, etapa, proxima_acao, prioridade) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [req.userId, req.authUserId, nome, segmento, etapa, proximaAcao, prioridade]
   );
   res.status(201).json({ id: result.insertId });
 });
@@ -288,8 +294,8 @@ router.put('/companies/:id', async (req, res) => {
   if (!nome) return res.status(400).json({ message: 'Nome é obrigatório' });
 
   await pool.query(
-    'UPDATE companies SET nome = ?, segmento = ?, etapa = ?, proxima_acao = ?, prioridade = ? WHERE id = ? AND user_id = ?',
-    [nome, segmento, etapa, proximaAcao, prioridade, id, req.userId]
+    `UPDATE companies SET nome = ?, segmento = ?, etapa = ?, proxima_acao = ?, prioridade = ? WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [nome, segmento, etapa, proximaAcao, prioridade, id, req.userId, ...ownParams(req)]
   );
   res.status(204).send();
 });
@@ -298,8 +304,8 @@ router.put('/companies/:id', async (req, res) => {
 router.get('/contacts', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, company_id AS empresaId, nome, email, telefone, site, tipo, etapa, ultima_interacao AS ultimaInteracao, precisa_followup AS precisaFollowUp
-     FROM contacts WHERE user_id = ? ORDER BY id DESC`,
-    [req.userId]
+     FROM contacts WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -328,9 +334,9 @@ router.post('/contacts', async (req, res) => {
   try {
     await pool.transaction(async (conn) => {
       const [result] = await conn.query(
-        `INSERT INTO contacts (user_id, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.userId, asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp]
+        `INSERT INTO contacts (user_id, created_by, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.userId, req.authUserId, asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp]
       );
       contactId = result.insertId;
 
@@ -348,8 +354,8 @@ router.post('/contacts', async (req, res) => {
         }
 
         const [dealResult] = await conn.query(
-          `INSERT INTO deals (user_id, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [req.userId, pipeId, asId(empresaId), contactId, nome, '', '20%', stageKey]
+          `INSERT INTO deals (user_id, created_by, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [req.userId, req.authUserId, pipeId, asId(empresaId), contactId, nome, '', '20%', stageKey]
         );
         dealId = dealResult.insertId;
       }
@@ -422,16 +428,16 @@ router.post('/contacts/bulk-import', async (req, res) => {
         const site = String(item.site || '').trim();
 
         const [contactResult] = await conn.query(
-          `INSERT INTO contacts (user_id, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
-           VALUES (?, NULL, ?, '', ?, ?, 'Lead', ?, ?, TRUE)`,
-          [req.userId, nome, telefone, site, contactEtapa, ultimaInteracao]
+          `INSERT INTO contacts (user_id, created_by, company_id, nome, email, telefone, site, tipo, etapa, ultima_interacao, precisa_followup)
+           VALUES (?, ?, NULL, ?, '', ?, ?, 'Lead', ?, ?, TRUE)`,
+          [req.userId, req.authUserId, nome, telefone, site, contactEtapa, ultimaInteracao]
         );
         const contactId = contactResult.insertId;
 
         const [dealResult] = await conn.query(
-          `INSERT INTO deals (user_id, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key)
-           VALUES (?, ?, NULL, ?, ?, '', '20%', ?)`,
-          [req.userId, pipeId, contactId, nome, stageKey]
+          `INSERT INTO deals (user_id, created_by, pipeline_id, company_id, contact_id, titulo, valor, prob, stage_key)
+           VALUES (?, ?, ?, NULL, ?, ?, '', '20%', ?)`,
+          [req.userId, req.authUserId, pipeId, contactId, nome, stageKey]
         );
 
         existing.add(key);
@@ -473,8 +479,8 @@ router.put('/contacts/:id', async (req, res) => {
   await pool.query(
     `UPDATE contacts
      SET company_id = ?, nome = ?, email = ?, telefone = ?, site = ?, tipo = ?, etapa = ?, ultima_interacao = ?, precisa_followup = ?
-     WHERE id = ? AND user_id = ?`,
-    [asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp, id, req.userId]
+     WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [asId(empresaId), nome, email, telefone, site, tipo, etapa, ultimaInteracao, !!precisaFollowUp, id, req.userId, ...ownParams(req)]
   );
   res.status(204).send();
 });
@@ -483,7 +489,11 @@ router.delete('/contacts/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
 
-  const [result] = await pool.query('DELETE FROM contacts WHERE id = ? AND user_id = ?', [id, req.userId]);
+  const [result] = await pool.query(`DELETE FROM contacts WHERE id = ? AND user_id = ?${ownSql(req)}`, [
+    id,
+    req.userId,
+    ...ownParams(req),
+  ]);
   if (result.affectedRows === 0) return res.status(404).json({ message: 'Contato não encontrado' });
 
   res.status(204).send();
@@ -498,8 +508,8 @@ router.get('/deals', async (req, res) => {
             c.nome AS contatoNome, c.email AS contatoEmail, c.telefone AS contatoTelefone
      FROM deals d
      LEFT JOIN contacts c ON c.id = d.contact_id AND c.user_id = d.user_id
-     WHERE d.user_id = ? ORDER BY d.id DESC`,
-    [req.userId]
+     WHERE d.user_id = ?${ownSql(req, 'd.')} ORDER BY d.id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -518,8 +528,8 @@ router.post('/deals', async (req, res) => {
   }
 
   const [result] = await pool.query(
-    `INSERT INTO deals (user_id, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, pipeId, asId(empresaId), titulo, valor, prob, stageKey]
+    `INSERT INTO deals (user_id, created_by, pipeline_id, company_id, titulo, valor, prob, stage_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, req.authUserId, pipeId, asId(empresaId), titulo, valor, prob, stageKey]
   );
   res.status(201).json({ id: result.insertId, pipelineId: pipeId, stageKey });
 });
@@ -530,11 +540,16 @@ router.put('/deals/:id/stage', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   if (!stageKey) return res.status(400).json({ message: 'StageKey é obrigatório' });
 
-  const dealBefore = await getDealForUser(req.userId, id);
+  const dealBefore = await getDealForUser(req, id);
   if (!dealBefore) return res.status(404).json({ message: 'Negócio não encontrado' });
   if (dealBefore.stageKey === stageKey) return res.status(204).send();
 
-  await pool.query('UPDATE deals SET stage_key = ? WHERE id = ? AND user_id = ?', [stageKey, id, req.userId]);
+  await pool.query(`UPDATE deals SET stage_key = ? WHERE id = ? AND user_id = ?${ownSql(req)}`, [
+    stageKey,
+    id,
+    req.userId,
+    ...ownParams(req),
+  ]);
   await clearContactNovoOnDealMove(req.userId, dealBefore, stageKey);
   res.status(204).send();
 });
@@ -545,13 +560,13 @@ router.put('/deals/:id', async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
 
-  const dealBefore = await getDealForUser(req.userId, id);
+  const dealBefore = await getDealForUser(req, id);
   if (!dealBefore) return res.status(404).json({ message: 'Negócio não encontrado' });
 
   const pipeId = asId(pipelineId) ?? (await ensureDefaultPipeline(req.userId)).id;
   const [result] = await pool.query(
-    `UPDATE deals SET pipeline_id = ?, company_id = ?, titulo = ?, valor = ?, prob = ?, stage_key = ? WHERE id = ? AND user_id = ?`,
-    [pipeId, asId(empresaId), titulo, valor, prob, stageKey, id, req.userId]
+    `UPDATE deals SET pipeline_id = ?, company_id = ?, titulo = ?, valor = ?, prob = ?, stage_key = ? WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [pipeId, asId(empresaId), titulo, valor, prob, stageKey, id, req.userId, ...ownParams(req)]
   );
   if (result.affectedRows === 0) return res.status(404).json({ message: 'Negócio não encontrado' });
 
@@ -563,7 +578,11 @@ router.delete('/deals/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
 
-  const [result] = await pool.query('DELETE FROM deals WHERE id = ? AND user_id = ?', [id, req.userId]);
+  const [result] = await pool.query(`DELETE FROM deals WHERE id = ? AND user_id = ?${ownSql(req)}`, [
+    id,
+    req.userId,
+    ...ownParams(req),
+  ]);
   if (result.affectedRows === 0) return res.status(404).json({ message: 'Negócio não encontrado' });
   res.status(204).send();
 });
@@ -572,8 +591,8 @@ router.delete('/deals/:id', async (req, res) => {
 router.get('/activities', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, contact_id AS contatoId, company_id AS empresaId, titulo, tipo, quando, status
-     FROM activities WHERE user_id = ? ORDER BY id DESC`,
-    [req.userId]
+     FROM activities WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -583,9 +602,9 @@ router.post('/activities', async (req, res) => {
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
   if (!tipo) return res.status(400).json({ message: 'Tipo é obrigatório' });
   const [result] = await pool.query(
-    `INSERT INTO activities (user_id, contact_id, company_id, titulo, tipo, quando, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, asId(contatoId), asId(empresaId), titulo, tipo, quando, status]
+    `INSERT INTO activities (user_id, created_by, contact_id, company_id, titulo, tipo, quando, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, req.authUserId, asId(contatoId), asId(empresaId), titulo, tipo, quando, status]
   );
   res.status(201).json({ id: result.insertId });
 });
@@ -599,8 +618,8 @@ router.put('/activities/:id', async (req, res) => {
 
   await pool.query(
     `UPDATE activities SET contact_id = ?, company_id = ?, titulo = ?, tipo = ?, quando = ?, status = ?
-     WHERE id = ? AND user_id = ?`,
-    [asId(contatoId), asId(empresaId), titulo, tipo, quando, status, id, req.userId]
+     WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [asId(contatoId), asId(empresaId), titulo, tipo, quando, status, id, req.userId, ...ownParams(req)]
   );
   res.status(204).send();
 });
@@ -609,8 +628,8 @@ router.put('/activities/:id', async (req, res) => {
 router.get('/emails', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, contact_id AS contatoId, company_id AS empresaId, de, assunto, preview, quando, status
-     FROM emails WHERE user_id = ? ORDER BY id DESC`,
-    [req.userId]
+     FROM emails WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -619,9 +638,9 @@ router.post('/emails', async (req, res) => {
   const { contatoId, empresaId, de, assunto = '', preview = '', quando = '', status = 'Não lido' } = req.body ?? {};
   if (!de) return res.status(400).json({ message: 'De é obrigatório' });
   const [result] = await pool.query(
-    `INSERT INTO emails (user_id, contact_id, company_id, de, assunto, preview, quando, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, asId(contatoId), asId(empresaId), de, assunto, preview, quando, status]
+    `INSERT INTO emails (user_id, created_by, contact_id, company_id, de, assunto, preview, quando, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, req.authUserId, asId(contatoId), asId(empresaId), de, assunto, preview, quando, status]
   );
   res.status(201).json({ id: result.insertId });
 });
@@ -632,8 +651,8 @@ router.put('/emails/:id', async (req, res) => {
   const { status } = req.body ?? {};
   if (!status) return res.status(400).json({ message: 'Status é obrigatório' });
   const [result] = await pool.query(
-    `UPDATE emails SET status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?`,
-    [status, id, req.userId]
+    `UPDATE emails SET status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [status, id, req.userId, ...ownParams(req)]
   );
   if (result.affectedRows === 0) return res.status(404).json({ message: 'E-mail não encontrado' });
   res.status(204).send();
@@ -642,7 +661,11 @@ router.put('/emails/:id', async (req, res) => {
 router.delete('/emails/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
-  const [result] = await pool.query('DELETE FROM emails WHERE id = ? AND user_id = ?', [id, req.userId]);
+  const [result] = await pool.query(`DELETE FROM emails WHERE id = ? AND user_id = ?${ownSql(req)}`, [
+    id,
+    req.userId,
+    ...ownParams(req),
+  ]);
   if (result.affectedRows === 0) return res.status(404).json({ message: 'E-mail não encontrado' });
   res.status(204).send();
 });
@@ -665,8 +688,8 @@ router.get('/proposals', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT id, contact_id AS contatoId, company_id AS empresaId, deal_id AS dealId, titulo, valor, status, enviada_em AS enviadaEm,
             template_id AS templateId, field_values AS fieldValues, email_sent_at AS emailSentAt
-     FROM proposals WHERE user_id = ? ORDER BY id DESC`,
-    [req.userId]
+     FROM proposals WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
+    [req.userId, ...ownParams(req)]
   );
   res.json(normalizeRows(rows));
 });
@@ -675,6 +698,12 @@ router.post('/proposals/:id/send-email', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
   try {
+    const [own] = await pool.query(`SELECT id FROM proposals WHERE id = ? AND user_id = ?${ownSql(req)}`, [
+      id,
+      req.userId,
+      ...ownParams(req),
+    ]);
+    if (!own.length) return res.status(404).json({ message: 'Proposta não encontrada' });
     const result = await sendProposalEmail(req.userId, id);
     res.json(result);
   } catch (err) {
@@ -696,10 +725,11 @@ router.post('/proposals', async (req, res) => {
   } = req.body ?? {};
   if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
   const [result] = await pool.query(
-    `INSERT INTO proposals (user_id, contact_id, company_id, deal_id, titulo, valor, status, enviada_em, template_id, field_values)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO proposals (user_id, created_by, contact_id, company_id, deal_id, titulo, valor, status, enviada_em, template_id, field_values)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.userId,
+      req.authUserId,
       asId(contatoId),
       asId(empresaId),
       asId(dealId),
@@ -733,7 +763,7 @@ router.put('/proposals/:id', async (req, res) => {
   await pool.query(
     `UPDATE proposals SET contact_id = ?, company_id = ?, deal_id = ?, titulo = ?, valor = ?, status = ?, enviada_em = ?,
             template_id = ?, field_values = ?
-     WHERE id = ? AND user_id = ?`,
+     WHERE id = ? AND user_id = ?${ownSql(req)}`,
     [
       asId(contatoId),
       asId(empresaId),
@@ -746,6 +776,7 @@ router.put('/proposals/:id', async (req, res) => {
       asFieldValues(fieldValues),
       id,
       req.userId,
+      ...ownParams(req),
     ]
   );
   res.status(204).send();

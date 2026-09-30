@@ -20,7 +20,7 @@ function buildInviteEmail({ inviterName, name, role, link }) {
       <h2 style="color: #ef6a27;">Você foi convidado para o VESK CRM</h2>
       <p>Olá, ${name}!</p>
       <p><strong>${inviterName}</strong> convidou você para acessar o painel do CRM como <strong>${roleLabel}</strong>.</p>
-      <p>Você vai poder ver os mesmos leads, o pipeline, os relatórios e as conversas de WhatsApp da equipe.</p>
+      <p>${role === 'admin' ? 'Você vai poder ver todos os leads, o pipeline, os relatórios e as conversas de WhatsApp da equipe.' : 'Você vai ter o seu próprio espaço de trabalho: seus contatos, negócios e atividades, dentro do CRM da equipe.'}</p>
       <p style="margin: 24px 0;">
         <a href="${link}" style="background: #ef6a27; color: #fff; padding: 12px 22px; border-radius: 8px; text-decoration: none; font-weight: bold;">
           Aceitar convite

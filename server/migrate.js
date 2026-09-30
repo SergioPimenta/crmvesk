@@ -128,11 +128,22 @@ export async function runMigrations() {
   await migrateEnsureAdminUser();
   await migrateWhatsappWabaId();
   await migrateAccounts();
+  await migrateRecordOwners();
   await migrateInvites();
   await migrateWhatsappChatAssignee();
   await migrateAutomationSettings();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
+}
+
+// Dono de cada registro: usuários comuns só enxergam o que criaram. Registros antigos ficam sem dono (só administradores).
+async function migrateRecordOwners() {
+  for (const table of ['companies', 'contacts', 'deals', 'activities', 'emails', 'proposals']) {
+    if (!(await tableExists(table))) continue;
+    await pool.query(
+      `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
+    );
+  }
 }
 
 async function migrateAccounts() {

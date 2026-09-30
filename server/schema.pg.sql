@@ -35,6 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_invites_account ON invites(account_id);
 CREATE TABLE IF NOT EXISTS companies (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   nome VARCHAR(160) NOT NULL,
   segmento VARCHAR(160) DEFAULT '',
   etapa VARCHAR(40) DEFAULT 'Prospecção',
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS companies (
 CREATE TABLE IF NOT EXISTS contacts (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(id) ON DELETE SET NULL,
   nome VARCHAR(160) NOT NULL,
   email VARCHAR(160) DEFAULT '',
@@ -85,6 +87,7 @@ CREATE TABLE IF NOT EXISTS pipeline_stages (
 CREATE TABLE IF NOT EXISTS deals (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   pipeline_id INT REFERENCES pipelines(id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(id) ON DELETE SET NULL,
   contact_id INT REFERENCES contacts(id) ON DELETE SET NULL,
@@ -99,6 +102,7 @@ CREATE TABLE IF NOT EXISTS deals (
 CREATE TABLE IF NOT EXISTS activities (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   contact_id INT REFERENCES contacts(id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(id) ON DELETE SET NULL,
   titulo VARCHAR(200) NOT NULL,
@@ -112,6 +116,7 @@ CREATE TABLE IF NOT EXISTS activities (
 CREATE TABLE IF NOT EXISTS emails (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   contact_id INT REFERENCES contacts(id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(id) ON DELETE SET NULL,
   de VARCHAR(160) NOT NULL,
@@ -126,6 +131,7 @@ CREATE TABLE IF NOT EXISTS emails (
 CREATE TABLE IF NOT EXISTS proposals (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by INT REFERENCES users(id) ON DELETE SET NULL,
   contact_id INT REFERENCES contacts(id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(id) ON DELETE SET NULL,
   deal_id INT REFERENCES deals(id) ON DELETE SET NULL,
