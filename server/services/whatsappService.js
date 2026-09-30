@@ -168,7 +168,7 @@ async function logWebhookEvent(userId, { eventType, payload, processed, error = 
 }
 
 // Dispara a mensagem de boas-vindas configurada em Fluxos, se estiver ativa, sempre que
-// um contato fala pela primeira vez com o workspace. Não atribui a conversa a ninguém —
+// um contato fala pela primeira vez com o workspace ou volta a escrever numa conversa finalizada. Não atribui a conversa a ninguém —
 // ela continua em "Aguardando" esperando um humano assumir.
 async function sendWelcomeMessageIfEnabled(userId, chatId, contactName) {
   const settings = await getAutomationSettings(userId);
@@ -497,15 +497,26 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
   const effectiveJid = canonicalJid || phoneToCanonicalJid(phone) || remoteJid;
 
   if (resolvedId) {
-    const [existing] = await pool.query('SELECT unread FROM whatsapp_chats WHERE id = ?', [resolvedId]);
+    const [existing] = await pool.query(
+      'SELECT unread, attendance_status AS attendanceStatus FROM whatsapp_chats WHERE id = ?',
+      [resolvedId]
+    );
+    // Cliente escreveu numa conversa finalizada: ela volta para "Aguardando" (aberta e sem responsável).
+    const reopened = incrementUnread && normalizeRow(existing[0])?.attendanceStatus === 'closed';
     const unread = incrementUnread ? Number(existing[0]?.unread || 0) + 1 : existing[0]?.unread || 0;
     await pool.query(
       `UPDATE whatsapp_chats SET name = COALESCE(NULLIF(?, ''), name), last_message = ?, last_message_at = ?, unread = ?
        WHERE id = ?`,
       [name || '', lastMessage || '', lastMessageAt, unread, resolvedId]
     );
+    if (reopened) {
+      await pool.query(
+        "UPDATE whatsapp_chats SET attendance_status = 'open', assigned_to = NULL WHERE id = ?",
+        [resolvedId]
+      );
+    }
     await mergeDuplicatesIntoChat(userId, resolvedId, phone);
-    return { chatId: resolvedId, isNew: false };
+    return { chatId: resolvedId, isNew: false, reopened };
   }
 
   let contactId = null;
@@ -535,7 +546,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
   if (newId) {
     await mergeDuplicatesIntoChat(userId, newId, phone);
   }
-  return { chatId: newId, isNew: true };
+  return { chatId: newId, isNew: true, reopened: false };
 }
 
 export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
@@ -679,7 +690,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
 
         const remoteJid = phoneToCanonicalJid(item.from);
         const senderName = item.contactName || item.from;
-        const { chatId, isNew } = await upsertChat(userId, {
+        const { chatId, isNew, reopened } = await upsertChat(userId, {
           remoteJid,
           name: senderName,
           lastMessage: preview,
@@ -697,7 +708,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
           messageAt: item.messageAt,
         });
 
-        if (isNew) {
+        if (isNew || reopened) {
           void sendWelcomeMessageIfEnabled(userId, chatId, senderName).catch((welcomeErr) =>
             console.warn('Mensagem de boas-vindas:', welcomeErr.message)
           );
@@ -758,7 +769,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       ? new Date(Number(item.messageTimestamp) * 1000)
       : new Date();
 
-    const { chatId, isNew } = await upsertChat(userId, {
+    const { chatId, isNew, reopened } = await upsertChat(userId, {
       remoteJid,
       name: item?.pushName || '',
       lastMessage: text,
@@ -773,7 +784,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       messageAt,
     });
 
-    if (isNew && !fromMe) {
+    if ((isNew || reopened) && !fromMe) {
       void sendWelcomeMessageIfEnabled(userId, chatId, item?.pushName || '').catch((welcomeErr) =>
         console.warn('Mensagem de boas-vindas:', welcomeErr.message)
       );

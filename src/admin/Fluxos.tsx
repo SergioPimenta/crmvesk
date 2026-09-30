@@ -116,7 +116,7 @@ const Fluxos = () => {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>Mensagem de boas-vindas</div>
                 <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-                  Assim que um contato novo manda a primeira mensagem no WhatsApp, ele cai em "Aguardando" e
+                  Assim que um contato novo manda a primeira mensagem no WhatsApp (ou escreve de novo numa conversa finalizada), ele cai em "Aguardando" e
                   recebe automaticamente esta resposta — sem atribuir a conversa a ninguém.
                 </div>
               </div>
