@@ -1,6 +1,6 @@
 import pool from '../db.js';
 
-const ARCHIVABLE = new Set(['contacts', 'deals', 'emails', 'companies', 'proposals']);
+const ARCHIVABLE = new Set(['contacts', 'deals', 'emails', 'companies', 'proposals', 'activities']);
 
 /**
  * Guarda uma cópia (JSON) das linhas que serão excluídas em `deleted_records`, para permitir recuperação

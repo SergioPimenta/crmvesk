@@ -1,4 +1,4 @@
-import type { Activity, Company, Contact, EmailItem, Proposal } from './types';
+import type { Activity, ActivityInput, Company, Contact, EmailItem, Proposal } from './types';
 
 export const activePipelineKey = (userId: number | string) => `crm_active_pipeline_id_${userId}`;
 export const LEGACY_ACTIVE_PIPELINE_KEY = 'crm_active_pipeline_id';
@@ -33,6 +33,28 @@ export const normalizeActivity = (a: Activity): Activity => ({
   id: String((a as any).id),
   contatoId: optionalId((a as any).contatoId),
   empresaId: optionalId((a as any).empresaId),
+  dealId: optionalId((a as any).dealId),
+  allDay: Boolean(a.allDay),
+  prioridade: a.prioridade ?? 'Média',
+});
+
+/** Corpo enviado à API para salvar uma atividade já existente (ex.: ao remarcar). */
+export const activityToInput = (a: Activity): ActivityInput => ({
+  titulo: a.titulo,
+  tipo: a.tipo,
+  status: a.status,
+  contatoId: a.contatoId,
+  empresaId: a.empresaId,
+  dealId: a.dealId,
+  startAt: a.startAt ?? null,
+  endAt: a.endAt ?? null,
+  allDay: a.allDay ?? false,
+  descricao: a.descricao ?? '',
+  local: a.local ?? '',
+  link: a.link ?? '',
+  prioridade: a.prioridade ?? 'Média',
+  assignedTo: a.assignedTo ?? null,
+  quando: a.quando,
 });
 
 export const normalizeEmail = (m: EmailItem): EmailItem => ({

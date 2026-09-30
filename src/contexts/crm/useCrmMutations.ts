@@ -1,8 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from '../../services/api';
-import { genId } from './mappers';
+import { activityToInput, genId, normalizeActivity } from './mappers';
 import type {
   Activity,
+  ActivityStatus,
   Company,
   Contact,
   CrmDataContextType,
@@ -14,6 +15,8 @@ import type {
 } from './types';
 
 type Options = {
+  /** Lista atual, para desfazer mudanças otimistas (status e remarcação) se o servidor recusar. */
+  activities: Activity[];
   activePipelineId: string | null;
   setActivePipelineId: (id: string | null | ((prev: string | null) => string | null)) => void;
   stages: PipelineStage[];
@@ -32,6 +35,7 @@ type Options = {
  * servidor confirma em seguida; em caso de erro o registro temporário é desfeito.
  */
 export function useCrmMutations({
+  activities,
   activePipelineId,
   setActivePipelineId,
   stages,
@@ -145,18 +149,12 @@ export function useCrmMutations({
     }
   };
 
-  const addActivity: CrmDataContextType['addActivity'] = (activity) => {
-    const tempId = activity.id ?? genId('a');
-    const optimistic: Activity = { ...activity, id: tempId };
-    setActivities((prev) => [optimistic, ...prev]);
-
-    void (async () => {
-      const result = await api.post<{ id: number }>('/crm/activities', activity);
-      const id = String(result.id);
-      setActivities((prev) => prev.map((a) => (a.id === tempId ? { ...a, id } : a)));
-    })();
-
-    return tempId;
+  const addActivity: CrmDataContextType['addActivity'] = async (input) => {
+    const result = await api.post<{ id: number; activity: Activity | null }>('/crm/activities', input);
+    if (!result.activity) throw new Error('Não foi possível criar a atividade.');
+    const created = normalizeActivity(result.activity);
+    setActivities((prev) => [created, ...prev]);
+    return created;
   };
 
   const addEmail: CrmDataContextType['addEmail'] = (email) => {
@@ -382,16 +380,57 @@ export function useCrmMutations({
     setProposals((prev) => prev.map((p) => (p.contatoId === id ? { ...p, contatoId: undefined } : p)));
   };
 
-  const updateActivity: CrmDataContextType['updateActivity'] = (id, patch) => {
-    setActivities((prev) => prev.map((a) => (a.id === id ? { ...patch, id } : a)));
-    const numericId = Number(id);
-    if (Number.isFinite(numericId)) {
-      void api.put(`/crm/activities/${numericId}`, {
-        ...patch,
-        contatoId: patch.contatoId ?? null,
-        empresaId: patch.empresaId ?? null,
-      });
+  const updateActivity: CrmDataContextType['updateActivity'] = async (id, input) => {
+    const result = await api.put<{ activity: Activity }>(`/crm/activities/${Number(id)}`, input);
+    const updated = normalizeActivity(result.activity);
+    setActivities((prev) => prev.map((a) => (a.id === id ? updated : a)));
+    return updated;
+  };
+
+  const deleteActivity: CrmDataContextType['deleteActivity'] = async (id) => {
+    await api.delete(`/crm/activities/${Number(id)}`);
+    setActivities((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // Mudança na tela na hora; se o servidor recusar, volta ao que era e avisa quem chamou.
+  const optimisticActivity = async (
+    id: string,
+    apply: (a: Activity) => Activity,
+    save: () => Promise<{ activity: Activity }>
+  ) => {
+    const before = activities.find((a) => a.id === id);
+    if (!before) return;
+    setActivities((prev) => prev.map((a) => (a.id === id ? apply(a) : a)));
+    try {
+      const result = await save();
+      const saved = normalizeActivity(result.activity);
+      setActivities((prev) => prev.map((a) => (a.id === id ? saved : a)));
+    } catch (err) {
+      setActivities((prev) => prev.map((a) => (a.id === id ? before : a)));
+      throw err;
     }
+  };
+
+  const setActivityStatus: CrmDataContextType['setActivityStatus'] = (id, status: ActivityStatus) =>
+    optimisticActivity(
+      id,
+      (a) => ({ ...a, status, completedAt: status === 'Concluída' ? new Date().toISOString() : null }),
+      () => api.patch<{ activity: Activity }>(`/crm/activities/${Number(id)}/status`, { status })
+    );
+
+  const rescheduleActivity: CrmDataContextType['rescheduleActivity'] = (id, startAt, endAt) => {
+    const current = activities.find((a) => a.id === id);
+    if (!current) return Promise.resolve();
+    return optimisticActivity(
+      id,
+      (a) => ({ ...a, startAt, endAt }),
+      () =>
+        api.put<{ activity: Activity }>(`/crm/activities/${Number(id)}`, {
+          ...activityToInput(current),
+          startAt,
+          endAt,
+        })
+    );
   };
 
   const updateProposal: CrmDataContextType['updateProposal'] = (id, patch) => {
@@ -412,6 +451,9 @@ export function useCrmMutations({
     addContact,
     addDeal,
     addActivity,
+    deleteActivity,
+    setActivityStatus,
+    rescheduleActivity,
     addEmail,
     updateEmail,
     deleteEmail,

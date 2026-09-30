@@ -4,6 +4,7 @@ import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
 import { archiveRows } from '../utils/archive.js';
 import { isWorkspaceMember } from '../services/leadOwnerService.js';
+import activitiesRouter from './activities.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
 import {
   listTemplates,
@@ -687,42 +688,8 @@ router.delete('/deals/:id', async (req, res) => {
   res.status(204).send();
 });
 
-// Activities
-router.get('/activities', async (req, res) => {
-  const [rows] = await pool.query(
-    `SELECT id, contact_id AS contatoId, company_id AS empresaId, titulo, tipo, quando, status
-     FROM activities WHERE user_id = ?${ownSql(req)} ORDER BY id DESC`,
-    [req.userId, ...ownParams(req)]
-  );
-  res.json(normalizeRows(rows));
-});
-
-router.post('/activities', async (req, res) => {
-  const { contatoId, empresaId, titulo, tipo, quando = '', status = 'Pendente' } = req.body ?? {};
-  if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
-  if (!tipo) return res.status(400).json({ message: 'Tipo é obrigatório' });
-  const [result] = await pool.query(
-    `INSERT INTO activities (user_id, created_by, contact_id, company_id, titulo, tipo, quando, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, req.authUserId, asId(contatoId), asId(empresaId), titulo, tipo, quando, status]
-  );
-  res.status(201).json({ id: result.insertId });
-});
-
-router.put('/activities/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  const { contatoId, empresaId, titulo, tipo, quando = '', status = 'Pendente' } = req.body ?? {};
-  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
-  if (!titulo) return res.status(400).json({ message: 'Título é obrigatório' });
-  if (!tipo) return res.status(400).json({ message: 'Tipo é obrigatório' });
-
-  await pool.query(
-    `UPDATE activities SET contact_id = ?, company_id = ?, titulo = ?, tipo = ?, quando = ?, status = ?
-     WHERE id = ? AND user_id = ?${ownSql(req)}`,
-    [asId(contatoId), asId(empresaId), titulo, tipo, quando, status, id, req.userId, ...ownParams(req)]
-  );
-  res.status(204).send();
-});
+// Activities (Agenda): rotas em ./activities.js
+router.use('/activities', activitiesRouter);
 
 // Emails
 router.get('/emails', async (req, res) => {

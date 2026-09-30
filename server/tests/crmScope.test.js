@@ -32,7 +32,6 @@ const listSql = (table) => new RegExp(`FROM ${table}\\b.* ORDER BY`);
 for (const [table, path] of [
   ['companies', '/companies'],
   ['contacts', '/contacts'],
-  ['activities', '/activities'],
   ['emails', '/emails'],
   ['proposals', '/proposals'],
 ]) {

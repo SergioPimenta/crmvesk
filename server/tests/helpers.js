@@ -1,6 +1,7 @@
 // Utilitários de teste: troca pool.query por um simulador (não precisa de banco) e sobe routers Express
 // reais em uma porta efêmera. Formato de retorno do pool: SELECT -> [linhas, meta]; INSERT/UPDATE/DELETE -> [meta, linhas].
 import './setupEnv.js';
+import 'express-async-errors'; // igual ao app real: erros lançados em rotas async viram resposta
 import http from 'node:http';
 import express from 'express';
 import jwt from 'jsonwebtoken';

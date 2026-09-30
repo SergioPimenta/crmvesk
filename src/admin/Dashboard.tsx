@@ -5,6 +5,7 @@ import CrmLayout from '../components/crm/CrmLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useCrmData } from '../contexts/CrmDataContext';
 import { countClosedDeals, countOpenDeals, groupDealsByStage } from '../utils/pipelineDeals';
+import { activitySpan, formatWhen, isOverdue, spanOnDay, startOfDay } from './agenda/dateUtils';
 
 const formatDate = () => {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -34,6 +35,25 @@ const Dashboard = () => {
     getCompanyName,
   } = useCrmData();
   const navigate = useNavigate();
+  const now = new Date();
+
+  // Agenda em números reais: atrasadas e de hoje (só pendentes); o feed mostra primeiro o que precisa de atenção.
+  const agenda = useMemo(() => {
+    const today = startOfDay(new Date());
+    const pending = activities.filter((a) => a.status === 'Pendente');
+    const overdue = pending.filter((a) => isOverdue(a));
+    const overdueIds = new Set(overdue.map((a) => a.id));
+    const dueToday = pending.filter((a) => {
+      const span = activitySpan(a);
+      return span && !overdueIds.has(a.id) && spanOnDay(span, today);
+    });
+    const feed = [...pending].sort((a, b) => {
+      const sa = activitySpan(a)?.start.getTime() ?? Infinity;
+      const sb = activitySpan(b)?.start.getTime() ?? Infinity;
+      return sa - sb;
+    });
+    return { overdue: overdue.length, today: dueToday.length, feed: feed.slice(0, 6), overdueIds };
+  }, [activities]);
   const [activeTab, setActiveTab] = useState('Todos');
   const tabs = ['Todos', 'Leads', 'Clientes', 'Inativos'];
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -81,7 +101,15 @@ const Dashboard = () => {
             Bom dia, <span>{firstName(user?.name)}</span> 👋
           </div>
           <div style={{ fontSize: 12, color: 'var(--vesk-muted)', marginTop: 2 }}>
-            {formatDate()} · 3 tarefas pendentes
+            {formatDate()} ·{' '}
+            {agenda.overdue + agenda.today === 0
+              ? 'nenhuma tarefa pendente para hoje'
+              : [
+                  agenda.overdue ? `${agenda.overdue} atrasada${agenda.overdue > 1 ? 's' : ''}` : null,
+                  agenda.today ? `${agenda.today} para hoje` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
           </div>
         </div>
         <div className="crm-page-actions">
@@ -290,7 +318,7 @@ const Dashboard = () => {
             </button>
           </div>
           <div className="activity-list" role="log" aria-label="Feed de atividades recentes">
-            {activities.slice(0, 6).map((a) => (
+            {agenda.feed.map((a) => (
               <div key={a.id} className="activity-item">
                 <div className={`activity-icon ${a.tipo === 'Ligação' ? 'call' : a.tipo === 'Reunião' ? 'deal' : a.tipo === 'Follow-up' ? 'email' : 'note'}`}>
                   <i className={a.tipo === 'Ligação' ? 'ti ti-phone' : a.tipo === 'Reunião' ? 'ti ti-users' : a.tipo === 'Follow-up' ? 'ti ti-refresh' : 'ti ti-checkbox'} aria-hidden="true" />
@@ -299,11 +327,18 @@ const Dashboard = () => {
                   <div className="activity-text">
                     <strong>{a.titulo}</strong>
                   </div>
-                  <div className="activity-time">{a.quando || '—'}</div>
+                  <div
+                    className="activity-time"
+                    style={agenda.overdueIds.has(a.id) ? { color: '#e05252', fontWeight: 600 } : undefined}
+                  >
+                    {activitySpan(a)
+                      ? `${agenda.overdueIds.has(a.id) ? 'Atrasada · ' : ''}${formatWhen(activitySpan(a)!.start, activitySpan(a)!.allDay, now)}`
+                      : a.quando || 'Sem data'}
+                  </div>
                 </div>
               </div>
             ))}
-            {activities.length === 0 ? <div className="kanban-empty">Nenhuma atividade cadastrada.</div> : null}
+            {agenda.feed.length === 0 ? <div className="kanban-empty">Nenhuma atividade pendente.</div> : null}
           </div>
         </div>
       </div>

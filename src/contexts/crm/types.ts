@@ -61,14 +61,37 @@ export type Deal = {
 
 export type AgendaType = 'Reunião' | 'Ligação' | 'Follow-up' | 'Tarefa';
 
+export type ActivityStatus = 'Pendente' | 'Concluída' | 'Cancelada';
+export type ActivityPriority = 'Alta' | 'Média' | 'Baixa';
+
 export type Activity = {
   id: string;
   titulo: string;
   tipo: AgendaType;
+  /** Texto legado (atividades antigas, sem data). Use startAt/endAt quando existirem. */
   quando: string;
   contatoId?: string;
   empresaId?: string;
-  status: 'Pendente' | 'Concluída';
+  dealId?: string;
+  status: ActivityStatus;
+  /** Datas em ISO (UTC). Atividades antigas não têm startAt. */
+  startAt?: string | null;
+  endAt?: string | null;
+  allDay?: boolean;
+  descricao?: string;
+  local?: string;
+  /** Link de videochamada (ex.: Google Meet). */
+  link?: string;
+  prioridade?: ActivityPriority;
+  assignedTo?: number | null;
+  assignedToName?: string | null;
+  completedAt?: string | null;
+  createdBy?: number | null;
+};
+
+/** O que o formulário envia ao criar/editar (campos calculados pelo servidor ficam de fora). */
+export type ActivityInput = Omit<Activity, 'id' | 'quando' | 'assignedToName' | 'completedAt' | 'createdBy'> & {
+  quando?: string;
 };
 
 export type EmailStatus = 'Não lido' | 'Aguardando resposta' | 'Respondido' | 'Lido';
@@ -143,7 +166,7 @@ export type CrmDataContextType = {
   addDeal: (deal: Omit<Deal, 'id'> & { id?: string }) => Promise<string>;
   updateDeal: (id: string, patch: Omit<Deal, 'id'>) => void;
   deleteDeal: (id: string) => Promise<void>;
-  addActivity: (activity: Omit<Activity, 'id'> & { id?: string }) => string;
+  addActivity: (activity: ActivityInput) => Promise<Activity>;
   addEmail: (email: Omit<EmailItem, 'id'> & { id?: string }) => string;
   updateEmail: (id: string, patch: Partial<Pick<EmailItem, 'status'>>) => void;
   deleteEmail: (id: string) => Promise<void>;
@@ -161,7 +184,12 @@ export type CrmDataContextType = {
   updateCompany: (id: string, patch: Omit<Company, 'id'>) => void;
   updateContact: (id: string, patch: Omit<Contact, 'id'>) => void;
   deleteContact: (id: string) => Promise<void>;
-  updateActivity: (id: string, patch: Omit<Activity, 'id'>) => void;
+  updateActivity: (id: string, activity: ActivityInput) => Promise<Activity>;
+  deleteActivity: (id: string) => Promise<void>;
+  /** Concluir, cancelar ou reabrir (atualiza a tela na hora e desfaz se o servidor recusar). */
+  setActivityStatus: (id: string, status: ActivityStatus) => Promise<void>;
+  /** Remarcar (arrastar no calendário): atualiza na hora e desfaz se o servidor recusar. */
+  rescheduleActivity: (id: string, startAt: string, endAt: string | null) => Promise<void>;
   updateProposal: (id: string, patch: Omit<Proposal, 'id'>) => void;
 
   updateDealStage: (dealId: string, stageKey: StageKey) => void;

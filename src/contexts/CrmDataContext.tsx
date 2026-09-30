@@ -201,6 +201,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const mutations = useCrmMutations({
+    activities,
     activePipelineId,
     setActivePipelineId,
     stages,

@@ -60,6 +60,19 @@ Todas estão documentadas, agrupadas, em [`.env.example`](.env.example). As obri
   liga e desliga).
 - **Acesso:** usuário comum só abre conversas sem responsável ou atribuídas a ele; administradores abrem todas.
 
+## Agenda
+
+- **Calendário real:** visões Dia, Semana e Mês ligadas às atividades, com a linha do "agora", navegação por data e
+  filtros por tipo, responsável, concluídas e busca.
+- **Criar e remarcar:** clique num horário vazio para criar; arraste um compromisso para outro horário ou dia (passo
+  de 15 min) e puxe a borda de baixo para mudar a duração. No mês, arraste o compromisso para outro dia.
+- **Atividade completa:** data e hora reais (guardadas em UTC, exibidas no fuso do navegador), duração ou dia inteiro,
+  contato, negócio, responsável, prioridade, local, link de videochamada e descrição.
+- **Painel lateral:** atrasadas, hoje, próximos 7 dias e atividades antigas sem data; concluir com um clique.
+- **Visibilidade:** administradores veem tudo; usuários veem as atividades que criaram **ou** que foram designadas a
+  eles. Exclusões ficam copiadas em `deleted_records`.
+- O Dashboard mostra as atrasadas e as de hoje reais.
+
 ## Segurança e operação
 
 - Sessão JWT de 4 h, renovada automaticamente enquanto há uso; perfil e status do usuário são lidos do banco

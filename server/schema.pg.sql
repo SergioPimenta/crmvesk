@@ -109,6 +109,16 @@ CREATE TABLE IF NOT EXISTS activities (
   tipo VARCHAR(40) NOT NULL,
   quando VARCHAR(80) DEFAULT '',
   status VARCHAR(20) DEFAULT 'Pendente',
+  start_at TIMESTAMPTZ,
+  end_at TIMESTAMPTZ,
+  all_day BOOLEAN DEFAULT FALSE,
+  descricao TEXT DEFAULT '',
+  local VARCHAR(255) DEFAULT '',
+  link VARCHAR(512) DEFAULT '',
+  prioridade VARCHAR(10) DEFAULT 'Média',
+  deal_id INT REFERENCES deals(id) ON DELETE SET NULL,
+  assigned_to INT REFERENCES users(id) ON DELETE SET NULL,
+  completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

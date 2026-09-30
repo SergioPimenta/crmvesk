@@ -166,6 +166,7 @@ async function runAllMigrations() {
   await migrateDeletedRecords();
   await migrateIndexes();
   await migrateChatNotesAndQuickReplies();
+  await migrateActivityCalendar();
   await migrateDispatchGroupOwners();
   await migrateWidgetLeadOwners();
   await migrateRecordOwners();
@@ -184,6 +185,29 @@ async function migrateRecordOwners() {
       `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
     );
   }
+}
+
+// Agenda: data e hora reais (UTC), duração, local, link de vídeo, responsável e vínculo com negócio.
+// A coluna antiga `quando` (texto livre) continua existindo para as atividades já cadastradas.
+async function migrateActivityCalendar() {
+  if (!(await tableExists('activities'))) return;
+  const columns = [
+    'start_at TIMESTAMPTZ',
+    'end_at TIMESTAMPTZ',
+    'all_day BOOLEAN DEFAULT FALSE',
+    "descricao TEXT DEFAULT ''",
+    "local VARCHAR(255) DEFAULT ''",
+    "link VARCHAR(512) DEFAULT ''",
+    "prioridade VARCHAR(10) DEFAULT 'Média'",
+    'deal_id INT REFERENCES deals(id) ON DELETE SET NULL',
+    'assigned_to INT REFERENCES users(id) ON DELETE SET NULL',
+    'completed_at TIMESTAMPTZ',
+  ];
+  for (const column of columns) {
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS ${column}`);
+  }
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_start ON activities(user_id, start_at)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_assigned ON activities(assigned_to)');
 }
 
 // Notas internas e eventos da conversa (kind = 'note' | 'event') e respostas rápidas da equipe.
