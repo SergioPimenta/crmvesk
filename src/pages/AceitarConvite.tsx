@@ -52,8 +52,8 @@ const AceitarConvite = () => {
     e.preventDefault();
     if (!token) return;
 
-    if (password.length < 6) {
-      setSubmitError('A senha deve ter pelo menos 6 caracteres');
+    if (password.length < 8) {
+      setSubmitError('A senha deve ter pelo menos 8 caracteres');
       return;
     }
     if (password !== confirmPassword) {
@@ -141,7 +141,7 @@ const AceitarConvite = () => {
                     id="ac_senha"
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     autoComplete="new-password"
                     placeholder="••••••••"
                     value={password}
@@ -155,7 +155,7 @@ const AceitarConvite = () => {
                     id="ac_senha2"
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     autoComplete="new-password"
                     placeholder="••••••••"
                     value={confirmPassword}

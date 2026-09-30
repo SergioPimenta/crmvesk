@@ -256,13 +256,15 @@ function buildWaLeadMessage(widget, { name, email, phone, siteLabel }) {
   return parts.join(' ');
 }
 
-export async function submitWidgetLead(monitorCode, { nome, email = '', telefone, pageUrl = '' }) {
+export async function submitWidgetLead(monitorCode, { nome, email = '', telefone, pageUrl = '', website = '' }) {
   const widget = await getWidgetByMonitorCode(monitorCode);
   if (!widget) throw new Error('Widget não encontrado ou inativo');
+  // Campo-isca (honeypot): pessoas não o veem; robôs costumam preenchê-lo. Responde como sucesso, sem criar nada.
+  if (String(website || '').trim()) return { ok: true, waUrl: null, contact: null };
   if (widget.useForm === false) throw new Error('Formulário desativado para este botão');
 
-  const name = String(nome || '').trim();
-  const emailStr = String(email || '').trim();
+  const name = String(nome || '').trim().slice(0, 160);
+  const emailStr = String(email || '').trim().slice(0, 160);
   const phoneDigits = digitsOnly(telefone);
   if (!name) throw new Error('Nome é obrigatório');
   if (phoneDigits.length < 10) throw new Error('Telefone inválido');
@@ -271,7 +273,7 @@ export async function submitWidgetLead(monitorCode, { nome, email = '', telefone
   if (!Number.isFinite(userId)) throw new Error('Widget sem proprietário válido');
 
   const siteLabel = widget.siteName || hostFromUrl(widget.siteUrl) || 'site';
-  const ultimaInteracao = `Lead via botão WhatsApp · ${siteLabel}${pageUrl ? ` · ${pageUrl}` : ''} · ${new Date().toLocaleDateString('pt-BR')}`;
+  const ultimaInteracao = `Lead via botão WhatsApp · ${siteLabel}${pageUrl ? ` · ${String(pageUrl).slice(0, 120)}` : ''} · ${new Date().toLocaleDateString('pt-BR')}`;
 
   const pipeline = await resolveWidgetPipeline(userId, widget.pipelineId, widget.stageKey);
 
@@ -402,6 +404,7 @@ export function buildWidgetScript(widget) {
         '<div class="' + PFX + '-field"><label for="' + PFX + '-nome">Nome*:</label><input id="' + PFX + '-nome" type="text" placeholder="Digite seu nome aqui" autocomplete="name"></div>' +
         '<div class="' + PFX + '-field"><label for="' + PFX + '-tel">Telefone*:</label><input id="' + PFX + '-tel" type="tel" placeholder="(00) 00000-0000" autocomplete="tel"></div>' +
         '<div class="' + PFX + '-field"><label for="' + PFX + '-email">E-mail:</label><input id="' + PFX + '-email" type="email" placeholder="seu@email.com.br" autocomplete="email"></div>' +
+        '<div style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><input id="' + PFX + '-website" type="text" name="website" tabindex="-1" autocomplete="off"></div>' +
         '<div class="' + PFX + '-error" id="' + PFX + '-error"></div>' +
         '<div class="' + PFX + '-actions">' +
           '<button type="button" class="' + PFX + '-btn-primary" id="' + PFX + '-submit">Iniciar conversa</button>' +
@@ -466,7 +469,7 @@ export function buildWidgetScript(widget) {
     fetch(API + '/api/widget/' + CODE + '/lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: nome, telefone: telefone, email: email, pageUrl: location.href })
+      body: JSON.stringify({ nome: nome, telefone: telefone, email: email, pageUrl: location.href, website: (overlay.querySelector('#' + PFX + '-website') || {}).value || '' })
     })
       .then(function(res) {
         return res.json().then(function(data) {

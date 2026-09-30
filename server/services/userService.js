@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { passwordPolicyError } from '../utils/passwordPolicy.js';
 import pool from '../db.js';
 
 const stageMap = {
@@ -69,6 +70,9 @@ export async function createUser({ name, email, password, role = 'user', account
     if (!['admin', 'user'].includes(role)) {
       throw new Error('Perfil inválido');
     }
+
+    const policyError = passwordPolicyError(password);
+    if (policyError) throw new Error(policyError);
 
     const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [trimmedEmail]);
     if (existingUsers.length > 0) {
@@ -150,6 +154,8 @@ export async function updateUser(id, { name, email, role, active, password }, ac
     }
 
     if (password) {
+      const policyError = passwordPolicyError(password);
+      if (policyError) throw new Error(policyError);
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       fields.push('password = ?');

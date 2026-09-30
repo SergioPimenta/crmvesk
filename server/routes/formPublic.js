@@ -5,6 +5,7 @@ import {
   recordFormPing,
   submitFormLead,
 } from '../services/contactFormService.js';
+import { clientIp, rateLimit } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -13,6 +14,27 @@ function setPublicCors(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
+
+const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
+const submitLimit = rateLimit({
+  name: 'form-submit',
+  limit: 8,
+  windowSec: 600,
+  key: (req) => `${clientIp(req)}:${req.params.code}`,
+});
+const pingLimit = rateLimit({
+  name: 'form-ping',
+  limit: 120,
+  windowSec: 600,
+  key: (req) => `${clientIp(req)}:${req.params.code}`,
+  onLimited: (req, res) => {
+    setPublicCors(res);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'image/gif');
+    res.send(PIXEL);
+  },
+});
 
 router.options('/:code/submit', (req, res) => {
   setPublicCors(res);
@@ -36,7 +58,7 @@ router.get('/:code.js', async (req, res) => {
   res.send(buildFormTrackingScript(widget));
 });
 
-router.get('/:code/ping', async (req, res) => {
+router.get('/:code/ping', pingLimit, async (req, res) => {
   const code = String(req.params.code || '');
   const event = req.query.event === 'submit' ? 'submit' : 'view';
   await recordFormPing(code, event);
@@ -47,7 +69,7 @@ router.get('/:code/ping', async (req, res) => {
   res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
 });
 
-router.post('/:code/submit', async (req, res) => {
+router.post('/:code/submit', submitLimit, async (req, res) => {
   setPublicCors(res);
   const code = String(req.params.code || '');
   if (!/^[a-f0-9]{32}$/i.test(code)) {

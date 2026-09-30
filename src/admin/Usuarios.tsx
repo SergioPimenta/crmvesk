@@ -498,7 +498,7 @@ const Usuarios = () => {
               value={form.password}
               onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
               placeholder="Opcional"
-              minLength={6}
+              minLength={8}
               autoComplete="new-password"
             />
           </div>

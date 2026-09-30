@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { sendMail } from '../utils/mailer.js';
 import { ensureDefaultPipelineForUser } from './userService.js';
+import { passwordPolicyError } from '../utils/passwordPolicy.js';
 
 const INVITE_TTL_DAYS = 7;
 
@@ -136,8 +137,9 @@ export async function getInviteByToken(token) {
 
 export async function acceptInvite(token, password) {
   try {
-    if (!password || String(password).length < 6) {
-      throw new Error('A senha deve ter pelo menos 6 caracteres');
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      throw new Error(policyError);
     }
 
     const [rows] = await pool.query(

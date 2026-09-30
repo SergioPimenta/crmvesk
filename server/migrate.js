@@ -128,6 +128,7 @@ export async function runMigrations() {
   await migrateEnsureAdminUser();
   await migrateWhatsappWabaId();
   await migrateAccounts();
+  await migrateRateLimits();
   await migrateRecordOwners();
   await migrateInvites();
   await migrateWhatsappChatAssignee();
@@ -144,6 +145,17 @@ async function migrateRecordOwners() {
       `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
     );
   }
+}
+
+async function migrateRateLimits() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key VARCHAR(200) NOT NULL,
+      window_start BIGINT NOT NULL,
+      hits INT NOT NULL DEFAULT 0,
+      PRIMARY KEY (key, window_start)
+    )
+  `);
 }
 
 async function migrateAccounts() {

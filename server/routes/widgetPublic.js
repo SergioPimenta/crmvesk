@@ -5,6 +5,7 @@ import {
   recordPing,
   submitWidgetLead,
 } from '../services/whatsappButtonService.js';
+import { clientIp, rateLimit } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -13,6 +14,28 @@ function setPublicCors(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
+
+const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
+const leadLimit = rateLimit({
+  name: 'widget-lead',
+  limit: 8,
+  windowSec: 600,
+  key: (req) => `${clientIp(req)}:${req.params.code}`,
+});
+const pingLimit = rateLimit({
+  name: 'widget-ping',
+  limit: 120,
+  windowSec: 600,
+  key: (req) => `${clientIp(req)}:${req.params.code}`,
+  // Acima do limite devolve o pixel sem contar — a página do site não quebra.
+  onLimited: (req, res) => {
+    setPublicCors(res);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'image/gif');
+    res.send(PIXEL);
+  },
+});
 
 router.options('/:code/lead', (req, res) => {
   setPublicCors(res);
@@ -36,7 +59,7 @@ router.get('/:code.js', async (req, res) => {
   res.send(buildWidgetScript(widget));
 });
 
-router.get('/:code/ping', async (req, res) => {
+router.get('/:code/ping', pingLimit, async (req, res) => {
   const code = String(req.params.code || '');
   const event = req.query.event === 'click' ? 'click' : 'view';
   await recordPing(code, event);
@@ -47,7 +70,7 @@ router.get('/:code/ping', async (req, res) => {
   res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
 });
 
-router.post('/:code/lead', async (req, res) => {
+router.post('/:code/lead', leadLimit, async (req, res) => {
   setPublicCors(res);
   const code = String(req.params.code || '');
   if (!/^[a-f0-9]{32}$/i.test(code)) {

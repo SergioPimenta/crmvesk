@@ -629,10 +629,20 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
   const useMeta = settings.provider === 'meta' || isMetaPayload;
 
   if (useMeta) {
-    if (settings.appSecret && rawBody && signature) {
-      const valid = verifySignature(settings.appSecret, rawBody, signature);
-      if (!valid) {
-        console.warn('WhatsApp webhook: assinatura inválida — mensagem será processada mesmo assim');
+    // A Meta assina todo webhook (X-Hub-Signature-256) com o App Secret. Com o segredo cadastrado, assinatura
+    // ausente ou inválida é rejeitada. WHATSAPP_SIGNATURE_MODE=warn mantém o comportamento antigo (só avisa),
+    // útil se o App Secret cadastrado estiver errado e for preciso destravar as mensagens.
+    if (settings.appSecret) {
+      const signatureOk = rawBodyTrusted ? verifySignature(settings.appSecret, rawBody, signature) : true;
+      if (!rawBodyTrusted) {
+        console.warn('WhatsApp webhook: corpo bruto indisponível — assinatura não pôde ser verificada');
+      }
+      if (!signatureOk) {
+        if (process.env.WHATSAPP_SIGNATURE_MODE === 'warn') {
+          console.warn('WhatsApp webhook: assinatura inválida — processando (modo warn)');
+        } else {
+          throw new Error('Assinatura do webhook inválida');
+        }
       }
     }
 

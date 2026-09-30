@@ -3,11 +3,28 @@ import pool from '../db.js';
 import { registerUser, loginUser } from '../services/authService.js';
 import { verifyToken } from '../middleware/auth.js';
 import { normalizeRow } from '../utils/rows.js';
+import { clientIp, rateLimit } from '../middleware/rateLimit.js';
+import { passwordPolicyError } from '../utils/passwordPolicy.js';
 
 const router = express.Router();
 
-router.post('/register', async (req, res) => {
+const loginPerIp = rateLimit({ name: 'login-ip', limit: 30, windowSec: 900 });
+const loginPerAccount = rateLimit({
+  name: 'login',
+  limit: 8,
+  windowSec: 900,
+  key: (req) => `${clientIp(req)}:${String(req.body?.email || '').trim().toLowerCase()}`,
+});
+
+// Novos usuários entram por convite (/api/invites) ou são criados por um administrador (/api/users).
+// O cadastro público só existe se ALLOW_PUBLIC_REGISTER=true (ex.: instalação nova/ambiente de testes).
+router.post('/register', rateLimit({ name: 'register', limit: 5, windowSec: 3600 }), async (req, res) => {
+  if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
+    return res.status(403).json({ message: 'Cadastro desativado. Peça um convite ao administrador.' });
+  }
   const { name, email, password } = req.body;
+  const policyError = passwordPolicyError(password);
+  if (policyError) return res.status(400).json({ message: policyError });
   
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Missing required fields' });
@@ -22,7 +39,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginPerIp, loginPerAccount, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {

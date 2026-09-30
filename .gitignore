@@ -37,3 +37,6 @@ server/.env.vercel
 server/uploads/*
 !server/uploads/.gitkeep
 .env*
+
+# arquivos temporários de teste
+tmp-*.json

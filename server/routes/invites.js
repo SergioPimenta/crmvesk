@@ -3,6 +3,7 @@ import { verifyToken, requireAdmin } from '../middleware/auth.js';
 import { acceptInvite, createInvite, getInviteByToken, listInvites, revokeInvite } from '../services/inviteService.js';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/:token', async (req, res) => {
   }
 });
 
-router.post('/:token/accept', async (req, res) => {
+router.post('/:token/accept', rateLimit({ name: 'invite-accept', limit: 10, windowSec: 3600 }), async (req, res) => {
   const { password } = req.body || {};
   const result = await acceptInvite(req.params.token, password);
 

@@ -1,3 +1,4 @@
+import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -27,6 +28,8 @@ export async function createApp() {
   await initPromise;
 
   const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
 
   // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
   app.use((req, res, next) => {
@@ -85,9 +88,15 @@ export async function createApp() {
     res.json({ message: 'API is running on Vercel Postgres' });
   });
 
+  // Erros inesperados (inclusive de rotas async) não vazam detalhes internos (SQL, stack) para o cliente.
+  // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    console.error(err);
-    res.status(500).json({ message: err.message || 'Erro interno' });
+    console.error(`[${req.method} ${req.originalUrl}]`, err);
+    if (res.headersSent) return;
+    const status = Number(err.statusCode || err.status) || 500;
+    res.status(status).json({
+      message: status < 500 && err.message ? err.message : 'Erro interno do servidor',
+    });
   });
 
   return app;
