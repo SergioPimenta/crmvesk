@@ -165,6 +165,7 @@ async function runAllMigrations() {
   await migrateRateLimits();
   await migrateDeletedRecords();
   await migrateIndexes();
+  await migrateChatNotesAndQuickReplies();
   await migrateDispatchGroupOwners();
   await migrateWidgetLeadOwners();
   await migrateRecordOwners();
@@ -183,6 +184,28 @@ async function migrateRecordOwners() {
       `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL`
     );
   }
+}
+
+// Notas internas e eventos da conversa (kind = 'note' | 'event') e respostas rápidas da equipe.
+async function migrateChatNotesAndQuickReplies() {
+  if (await tableExists('whatsapp_messages')) {
+    await pool.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS kind VARCHAR(12) DEFAULT 'message'`);
+    await pool.query(
+      'ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS author_id INT REFERENCES users(id) ON DELETE SET NULL'
+    );
+  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quick_replies (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_by INT REFERENCES users(id) ON DELETE SET NULL,
+      shortcut VARCHAR(40) NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, shortcut)
+    )
+  `);
 }
 
 // Índices das consultas por workspace/dono (listas do CRM e busca paginada de contatos).

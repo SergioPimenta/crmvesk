@@ -16,22 +16,27 @@ import ContactPickerModal from './whatsapp/ContactPickerModal';
 import ConversationList from './whatsapp/ConversationList';
 import MessageList from './whatsapp/MessageList';
 import NewAttendanceModal, { type NewAttendancePrefill } from './whatsapp/NewAttendanceModal';
+import QuickRepliesModal from './whatsapp/QuickRepliesModal';
 import TransferModal from './whatsapp/TransferModal';
 import {
   MEDIA_BYTES_LIMITS,
   mediaKindFromMime,
   type ListTab,
+  type QuickReply,
   type TeamMember,
   type WaConversation,
   type WaMessage,
 } from './whatsapp/types';
 import { useAudioRecorder } from './whatsapp/useAudioRecorder';
 import { usePendingAttachments } from './whatsapp/usePendingAttachments';
+import { useWaitingAlert } from './whatsapp/useWaitingAlert';
 
 const WhatsApp = () => {
   const { contacts, getCompanyName, setWhatsappUnread } = useCrmData();
   const { user: authUser } = useAuth();
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [conversations, setConversations] = useState<WaConversation[]>([]);
@@ -94,6 +99,19 @@ const WhatsApp = () => {
       if (showLoading && activeChatIdRef.current === chatId) setMessagesLoading(false);
     }
   }, []);
+
+  const loadQuickReplies = useCallback(async () => {
+    try {
+      const data = await api.get<{ replies: QuickReply[] }>('/whatsapp/quick-replies');
+      setQuickReplies(data.replies || []);
+    } catch {
+      setQuickReplies([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadQuickReplies();
+  }, [loadQuickReplies]);
 
   const loadTeamMembers = useCallback(async () => {
     try {
@@ -180,6 +198,7 @@ const WhatsApp = () => {
   const waitingChats = useMemo(() => openConversations.filter((c) => !c.assignedTo), [openConversations]);
   const ongoingChats = useMemo(() => openConversations.filter((c) => Boolean(c.assignedTo)), [openConversations]);
   const tabChats = listTab === 'aguardando' ? waitingChats : listTab === 'andamento' ? ongoingChats : closedChats;
+  const waitingAlert = useWaitingAlert({ waitingCount: waitingChats.length, ready: !loading });
 
   const active = useMemo(
     () => filtered.find((c) => c.id === activeId) ?? tabChats[0] ?? null,
@@ -312,6 +331,20 @@ const WhatsApp = () => {
       setSendError(err instanceof Error ? err.message : 'Não foi possível enviar a mensagem.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendNote = async (text: string): Promise<boolean> => {
+    if (!active || isClosed) return false;
+    setSendError('');
+    try {
+      const data = await api.post<{ messages: WaMessage[] }>(`/whatsapp/chats/${active.id}/notes`, { text });
+      scrollOnNextMessagesRef.current = true;
+      setMessages(data.messages || []);
+      return true;
+    } catch (err: unknown) {
+      setSendError(err instanceof Error ? err.message : 'Não foi possível salvar a nota.');
+      return false;
     }
   };
 
@@ -483,6 +516,9 @@ const WhatsApp = () => {
             onOpenContactPicker={() => setContactPickerOpen(true)}
             onOpenBulk={() => setBulkMessagingOpen(true)}
             onOpenNewAttendance={openNewAttendance}
+            soundOn={waitingAlert.soundOn}
+            onToggleSound={waitingAlert.toggleSound}
+            onOpenQuickReplies={() => setQuickRepliesOpen(true)}
           />
 
           <div
@@ -548,6 +584,9 @@ const WhatsApp = () => {
                   draft={draft}
                   setDraft={setDraft}
                   sendMessage={sendMessage}
+                  sendNote={sendNote}
+                  quickReplies={quickReplies}
+                  onManageQuickReplies={() => setQuickRepliesOpen(true)}
                   onFileSelected={attachments.onFileSelected}
                   onComposerPaste={attachments.onComposerPaste}
                   recorder={recorder}
@@ -588,6 +627,15 @@ const WhatsApp = () => {
         authUserId={authUser?.id}
         onClose={() => setTransferOpen(false)}
         onTransfer={(target) => void transferChat(target)}
+      />
+
+      <QuickRepliesModal
+        open={quickRepliesOpen}
+        onClose={() => setQuickRepliesOpen(false)}
+        replies={quickReplies}
+        currentUserId={authUser?.id}
+        isAdmin={authUser?.role === 'admin'}
+        onChanged={loadQuickReplies}
       />
 
       <BulkMessagingModal

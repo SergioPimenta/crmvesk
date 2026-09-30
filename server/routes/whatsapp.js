@@ -28,10 +28,18 @@ import {
   sendBulkTemplates,
   getUnreadCount,
   getWindowForPhone,
+  assertChatAccess,
 } from '../services/whatsappService.js';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
 import { listTeamMembers } from '../services/userService.js';
+import { addChatNote } from '../services/chatEventService.js';
+import {
+  createQuickReply,
+  deleteQuickReply,
+  listQuickReplies,
+  updateQuickReply,
+} from '../services/quickReplyService.js';
 import {
   listDispatchGroups,
   createDispatchGroup,
@@ -193,6 +201,44 @@ router.post('/bulk-send', async (req, res) => {
 // Administradores enxergam todos os grupos do workspace; os demais só os que criaram.
 const dispatchOwner = (req) => (req.userRole === 'admin' ? null : req.authUserId);
 
+// Respostas rápidas da equipe (atalho "/" no campo de mensagem).
+router.get('/quick-replies', async (req, res) => {
+  res.json({ replies: await listQuickReplies(req.userId) });
+});
+
+const quickReplyActor = (req) => ({ id: req.authUserId, isAdmin: req.userRole === 'admin' });
+
+router.post('/quick-replies', async (req, res) => {
+  try {
+    const reply = await createQuickReply(req.userId, req.authUserId, req.body ?? {});
+    res.status(201).json({ reply });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.put('/quick-replies/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    const reply = await updateQuickReply(req.userId, quickReplyActor(req), id, req.body ?? {});
+    res.json({ reply });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ message: err.message });
+  }
+});
+
+router.delete('/quick-replies/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    await deleteQuickReply(req.userId, quickReplyActor(req), id);
+    res.status(204).send();
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ message: err.message });
+  }
+});
+
 router.get('/dispatch-groups', async (req, res) => {
   try {
     const groups = await listDispatchGroups(req.userId, dispatchOwner(req));
@@ -330,6 +376,18 @@ router.post('/chats', async (req, res) => {
   }
 });
 
+// Toda rota por id de conversa confere o acesso (404 se não existe, 403 se é de outro usuário).
+router.use('/chats/:id', async (req, res, next) => {
+  const chatId = Number(req.params.id);
+  if (!Number.isFinite(chatId)) return next(); // a própria rota responde "ID inválido"
+  try {
+    await assertChatAccess(req.userId, chatId, { viewerId: req.authUserId, viewerRole: req.userRole });
+    return next();
+  } catch (err) {
+    return res.status(err.statusCode || 400).json({ message: err.message });
+  }
+});
+
 router.put('/chats/:id/assign', async (req, res) => {
   const chatId = Number(req.params.id);
   if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
@@ -343,6 +401,7 @@ router.put('/chats/:id/assign', async (req, res) => {
   try {
     const result = await assignChat(req.userId, chatId, targetUserId, {
       claim: req.body?.claim === true && targetUserId !== null,
+      actorId: req.authUserId,
     });
     res.json(result);
   } catch (err) {
@@ -357,7 +416,7 @@ router.get('/chats/:id/messages', async (req, res) => {
   await pool.query('UPDATE whatsapp_chats SET unread = 0 WHERE id = ? AND user_id = ?', [chatId, req.userId]);
 
   let messages = await listMessages(req.userId, chatId);
-  if (messages.length === 0) {
+  if (!messages.some((m) => m.kind === 'message')) {
     try {
       messages = await loadMessagesFromProvider(req.userId, chatId);
     } catch {
@@ -369,6 +428,18 @@ router.get('/chats/:id/messages', async (req, res) => {
   res.json({ messages, messagingWindow });
 });
 
+// Nota interna: aparece só para a equipe, nunca é enviada ao cliente.
+router.post('/chats/:id/notes', async (req, res) => {
+  const chatId = Number(req.params.id);
+  if (!Number.isFinite(chatId)) return res.status(400).json({ message: 'ID inválido' });
+  try {
+    await addChatNote(req.userId, chatId, req.authUserId, req.body?.text);
+    res.status(201).json({ messages: await listMessages(req.userId, chatId) });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 router.post('/chats/:id/attendance', async (req, res) => {
   const chatId = Number(req.params.id);
   const { status } = req.body ?? {};
@@ -378,7 +449,7 @@ router.post('/chats/:id/attendance', async (req, res) => {
   }
 
   try {
-    const result = await setChatAttendance(req.userId, chatId, status);
+    const result = await setChatAttendance(req.userId, chatId, status, req.authUserId);
     res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });

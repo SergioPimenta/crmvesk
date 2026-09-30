@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
+import { addChatEvent, getUserName } from './chatEventService.js';
 import {
   connectInstance,
   createInstance,
@@ -513,6 +514,7 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
         "UPDATE whatsapp_chats SET attendance_status = 'open', assigned_to = NULL WHERE id = ?",
         [resolvedId]
       );
+      await addChatEvent(userId, resolvedId, 'Conversa reaberta: o cliente enviou uma nova mensagem');
     }
     await mergeDuplicatesIntoChat(userId, resolvedId, phone);
     return { chatId: resolvedId, isNew: false, reopened };
@@ -591,13 +593,27 @@ export async function updateMessageStatus(userId, waMessageId, status, errorMess
   ]);
 }
 
-export async function setChatAttendance(userId, chatId, status) {
+export async function setChatAttendance(userId, chatId, status, actorId = null) {
   const next = status === 'closed' ? 'closed' : 'open';
+  const [before] = await pool.query(
+    "SELECT COALESCE(attendance_status, 'open') AS attendanceStatus FROM whatsapp_chats WHERE id = ? AND user_id = ?",
+    [chatId, userId]
+  );
+  const previous = before[0] ? normalizeRow(before[0]).attendanceStatus : null;
   const [result] = await pool.query(
     'UPDATE whatsapp_chats SET attendance_status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
     [next, chatId, userId]
   );
   if (!result.affectedRows) throw new Error('Conversa não encontrada');
+  if (previous !== next) {
+    const who = (await getUserName(actorId)) || 'Alguém da equipe';
+    await addChatEvent(
+      userId,
+      chatId,
+      next === 'closed' ? `${who} finalizou o atendimento` : `${who} reabriu o atendimento`,
+      actorId
+    );
+  }
   return { attendanceStatus: next };
 }
 
@@ -1081,7 +1097,29 @@ export async function getUnreadCount(userId, viewer = {}) {
 
 // claim: só atribui se a conversa ainda não tiver responsável ("Assumir conversa"); transferências
 // normais (sem claim) continuam podendo reatribuir ou devolver para a equipe.
-export async function assignChat(accountId, chatId, targetUserId, { claim = false } = {}) {
+/**
+ * Usuário comum só acessa conversas sem responsável ou atribuídas a ele (a lista já filtra assim; as rotas
+ * por id também precisam conferir). Administradores acessam todas. Lança erro com statusCode 404/403.
+ */
+export async function assertChatAccess(accountId, chatId, { viewerId, viewerRole } = {}) {
+  const [rows] = await pool.query('SELECT assigned_to AS assignedTo FROM whatsapp_chats WHERE id = ? AND user_id = ?', [
+    chatId,
+    accountId,
+  ]);
+  if (!rows.length) {
+    const err = new Error('Conversa não encontrada');
+    err.statusCode = 404;
+    throw err;
+  }
+  const assignedTo = normalizeRow(rows[0]).assignedTo;
+  if (viewerRole !== 'admin' && assignedTo != null && String(assignedTo) !== String(viewerId)) {
+    const err = new Error('Você não tem acesso a esta conversa');
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
+export async function assignChat(accountId, chatId, targetUserId, { claim = false, actorId = null } = {}) {
   if (targetUserId !== null) {
     const [memberRows] = await pool.query(
       'SELECT id FROM users WHERE id = ? AND (id = ? OR account_id = ?)',
@@ -1105,6 +1143,16 @@ export async function assignChat(accountId, chatId, targetUserId, { claim = fals
       if (exists.length) throw new Error('Esta conversa já foi assumida por outro usuário');
     }
     throw new Error('Conversa não encontrada');
+  }
+
+  const who = (await getUserName(actorId)) || 'Alguém da equipe';
+  if (targetUserId === null) {
+    await addChatEvent(accountId, chatId, `${who} devolveu a conversa para a equipe`, actorId);
+  } else if (String(targetUserId) === String(actorId)) {
+    await addChatEvent(accountId, chatId, `${who} assumiu a conversa`, actorId);
+  } else {
+    const target = (await getUserName(targetUserId)) || 'outro usuário';
+    await addChatEvent(accountId, chatId, `${who} transferiu a conversa para ${target}`, actorId);
   }
   return { assignedTo: targetUserId };
 }
@@ -1155,13 +1203,28 @@ export async function listChats(userId, viewer = {}) {
 
 export async function listMessages(userId, chatId) {
   const [rows] = await pool.query(
-    `SELECT id, body AS text, from_me AS fromMe, message_at AS messageAt, status, error_message AS errorMessage
-     FROM whatsapp_messages WHERE user_id = ? AND chat_id = ? ORDER BY message_at ASC, id ASC`,
+    `SELECT m.id, m.body AS text, m.from_me AS fromMe, m.message_at AS messageAt, m.status,
+            m.error_message AS errorMessage, COALESCE(m.kind, 'message') AS kind, u.name AS authorName
+     FROM whatsapp_messages m LEFT JOIN users u ON u.id = m.author_id
+     WHERE m.user_id = ? AND m.chat_id = ? ORDER BY m.message_at ASC, m.id ASC`,
     [userId, chatId]
   );
 
   return rows.map((r) => {
     const row = normalizeRow(r);
+    const kind = row.kind === 'note' || row.kind === 'event' ? row.kind : 'message';
+    if (kind !== 'message') {
+      // Notas e eventos não têm mídia nem status de entrega: texto puro, só para a equipe.
+      return {
+        id: String(row.id),
+        text: row.text,
+        media: null,
+        fromMe: true,
+        messageAt: toIso(row.messageAt),
+        kind,
+        authorName: row.authorName || undefined,
+      };
+    }
     const fromMe = Boolean(row.fromMe);
     let status = row.status ? String(row.status).toLowerCase() : '';
     if (fromMe && !status) status = 'sent';
@@ -1172,6 +1235,7 @@ export async function listMessages(userId, chatId) {
       media: parsed.media,
       fromMe,
       messageAt: toIso(row.messageAt),
+      kind: 'message',
       status: fromMe ? status : undefined,
       errorMessage: fromMe && status === 'failed' ? row.errorMessage || '' : undefined,
     };

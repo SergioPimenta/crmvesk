@@ -36,6 +36,9 @@ type WaTimelineMessage = {
   messageAt: string;
   status?: WaMsgStatus;
   errorMessage?: string;
+  /** 'message' (padrão), 'note' (nota interna) ou 'event' (assumida, transferida, finalizada...). */
+  kind?: 'message' | 'note' | 'event';
+  authorName?: string;
 };
 
 export type WaChatItem =

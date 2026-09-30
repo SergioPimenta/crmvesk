@@ -46,6 +46,20 @@ Todas estão documentadas, agrupadas, em [`.env.example`](.env.example). As obri
 - **Leads de sites:** cada botão de WhatsApp e formulário de contato tem um "Responsável pelos leads" (ninguém,
   usuário fixo ou rodízio).
 
+## Atendimento por WhatsApp
+
+- **Filas:** Aguardando (sem responsável), Em andamento e Finalizados. "Assumir conversa" atribui a você; quando o
+  cliente escreve numa conversa finalizada, ela volta para Aguardando.
+- **Respostas rápidas:** textos prontos da equipe. No campo de mensagem, digite `/` e escolha pelo atalho (setas +
+  Enter). Cada um edita as que criou; administradores editam todas.
+- **Notas internas:** botão de notas no campo de mensagem. A nota aparece só para a equipe e nunca é enviada ao
+  cliente.
+- **Histórico da conversa:** assumida, transferida, devolvida, finalizada e reaberta aparecem na própria conversa.
+- **Falhas de envio:** o motivo informado pela Meta aparece no balão "Não entregue".
+- **Aviso sonoro:** toque e contagem no título da aba quando chega uma conversa nova em Aguardando (sino na lista
+  liga e desliga).
+- **Acesso:** usuário comum só abre conversas sem responsável ou atribuídas a ele; administradores abrem todas.
+
 ## Segurança e operação
 
 - Sessão JWT de 4 h, renovada automaticamente enquanto há uso; perfil e status do usuário são lidos do banco

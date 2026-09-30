@@ -41,6 +41,16 @@ export type WaMessage = {
   status?: WaMsgStatus;
   errorMessage?: string;
   media?: WaMediaPayload | null;
+  /** 'message' (padrão), 'note' (nota interna) ou 'event' (assumida, transferida, finalizada...). */
+  kind?: 'message' | 'note' | 'event';
+  authorName?: string;
+};
+
+export type QuickReply = {
+  id: string;
+  shortcut: string;
+  text: string;
+  createdBy: number | null;
 };
 
 export type WaConversation = {

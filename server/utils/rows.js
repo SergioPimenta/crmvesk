@@ -36,6 +36,8 @@ const KEY_ALIASES = {
   attendancestatus: 'attendanceStatus',
   userid: 'userId',
   useform: 'useForm',
+  authorname: 'authorName',
+  authorid: 'authorId',
   owneruserid: 'ownerUserId',
   ownerroundrobin: 'ownerRoundRobin',
   ownerid: 'ownerId',

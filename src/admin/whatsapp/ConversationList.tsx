@@ -18,6 +18,10 @@ type Props = {
   onOpenContactPicker: () => void;
   onOpenBulk: () => void;
   onOpenNewAttendance: () => void;
+  /** Aviso sonoro de nova conversa em Aguardando. */
+  soundOn: boolean;
+  onToggleSound: () => void;
+  onOpenQuickReplies: () => void;
 };
 
 /** Coluna da esquerda: abas de fila (Aguardando / Em andamento / Finalizados) e lista de conversas. */
@@ -38,6 +42,9 @@ const ConversationList = ({
   onOpenContactPicker,
   onOpenBulk,
   onOpenNewAttendance,
+  soundOn,
+  onToggleSound,
+  onOpenQuickReplies,
 }: Props) => (
     <div className="wa-list crm-card inbox-list" aria-label="Lista de conversas">
       <div className="crm-card-header wa-list-header" style={{ marginBottom: 10 }}>
@@ -45,6 +52,25 @@ const ConversationList = ({
         <div className="crm-card-title">Conversas</div>
         <span className="pipeline-badge">{chatCount} chats</span>
         <div className="wa-list-header-actions">
+          <button
+            type="button"
+            className={`crm-icon-btn wa-list-icon-btn${soundOn ? ' active' : ''}`}
+            title={soundOn ? 'Aviso sonoro ligado (clique para desligar)' : 'Aviso sonoro desligado (clique para ligar)'}
+            aria-label={soundOn ? 'Desligar aviso sonoro de novas conversas' : 'Ligar aviso sonoro de novas conversas'}
+            aria-pressed={soundOn}
+            onClick={onToggleSound}
+          >
+            <i className={`ti ${soundOn ? 'ti-bell-ringing' : 'ti-bell-off'}`} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="crm-icon-btn wa-list-icon-btn"
+            title="Respostas rápidas"
+            aria-label="Gerenciar respostas rápidas"
+            onClick={onOpenQuickReplies}
+          >
+            <i className="ti ti-bolt" aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="crm-icon-btn wa-list-icon-btn"

@@ -12,35 +12,71 @@ type Props = {
   contactName: string;
 };
 
-/** Mensagens da conversa agrupadas por dia, com balões, mídia e status de entrega. */
+/**
+ * Mensagens da conversa agrupadas por dia: balões com mídia e status de entrega, notas internas (só a equipe
+ * vê) e eventos da conversa (assumida, transferida, finalizada...).
+ */
 const MessageList = ({ containerRef, endRef, timeline, authUserName, contactName }: Props) => (
   <div className="wa-messages" ref={containerRef} role="log" aria-live="polite">
-    {timeline.map((item) =>
-      item.type === 'day' ? (
-        <div key={item.key} className="wa-day-separator" role="separator">
-          <span>{item.label}</span>
-        </div>
-      ) : (
-        <div key={item.key} className={`wa-bubble-wrap${item.message.fromMe ? ' out' : ' in'}`}>
-          <div
-            className={`wa-bubble${item.message.fromMe ? ' out' : ' in'}${
-              item.message.status === 'failed' ? ' wa-bubble--failed' : ''
-            }`}
-          >
-            <MessageContent
-              message={item.message as WaMessage}
-              avatarLabel={initials(item.message.fromMe ? authUserName || 'Eu' : contactName)}
-            />
-            <div className="wa-bubble-meta">
-              <time dateTime={item.message.messageAt}>{formatMessageTime(item.message.messageAt)}</time>
-              {item.message.fromMe ? (
-                <MessageChecks status={item.message.status} errorMessage={item.message.errorMessage} />
-              ) : null}
+    {timeline.map((item) => {
+      if (item.type === 'day') {
+        return (
+          <div key={item.key} className="wa-day-separator" role="separator">
+            <span>{item.label}</span>
+          </div>
+        );
+      }
+
+      const { message } = item;
+
+      if (message.kind === 'event') {
+        return (
+          <div key={item.key} className="wa-event" role="note">
+            <i className="ti ti-arrows-exchange" aria-hidden="true" />
+            <span>{message.text}</span>
+            <time dateTime={message.messageAt}>{formatMessageTime(message.messageAt)}</time>
+          </div>
+        );
+      }
+
+      if (message.kind === 'note') {
+        return (
+          <div key={item.key} className="wa-bubble-wrap out">
+            <div className="wa-bubble wa-bubble--note">
+              <div className="wa-note-label">
+                <i className="ti ti-lock" aria-hidden="true" />
+                Nota interna{message.authorName ? ` · ${message.authorName}` : ''} · só a equipe vê
+              </div>
+              <p>{message.text}</p>
+              <div className="wa-bubble-meta">
+                <time dateTime={message.messageAt}>{formatMessageTime(message.messageAt)}</time>
+              </div>
             </div>
           </div>
+        );
+      }
+
+      const failed = message.status === 'failed';
+      return (
+        <div key={item.key} className={`wa-bubble-wrap${message.fromMe ? ' out' : ' in'}`}>
+          <div className={`wa-bubble${message.fromMe ? ' out' : ' in'}${failed ? ' wa-bubble--failed' : ''}`}>
+            <MessageContent
+              message={message as WaMessage}
+              avatarLabel={initials(message.fromMe ? authUserName || 'Eu' : contactName)}
+            />
+            <div className="wa-bubble-meta">
+              <time dateTime={message.messageAt}>{formatMessageTime(message.messageAt)}</time>
+              {message.fromMe ? <MessageChecks status={message.status} errorMessage={message.errorMessage} /> : null}
+            </div>
+            {failed ? (
+              <div className="wa-bubble-error" role="note">
+                {message.errorMessage?.trim() || 'A Meta não informou o motivo da falha.'}
+              </div>
+            ) : null}
+          </div>
         </div>
-      )
-    )}
+      );
+    })}
     <div ref={endRef} />
   </div>
 );
