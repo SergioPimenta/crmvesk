@@ -573,15 +573,14 @@ const WhatsApp = () => {
       } catch {
         analyserRef.current = null;
       }
-      // A Meta só aceita ogg/opus, mp4 (AAC) ou mp3. Chrome/Edge gravam WebM, que é convertido para MP3.
+      // Só ogg/opus (Firefox) é enviado como gravado. Qualquer outro formato (WebM do Chrome/Edge, MP4
+      // fragmentado) é convertido para MP3, que a Meta entrega de forma confiável.
       const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
         ? 'audio/ogg;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus'
-            : 'audio/webm';
-      const recorder = new MediaRecorder(stream, { mimeType });
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       audioChunksRef.current = [];
       recorder.ondataavailable = (ev) => {
         if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
@@ -596,17 +595,16 @@ const WhatsApp = () => {
           audioChunksRef.current = [];
           return;
         }
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const recordedType = recorder.mimeType || mimeType;
+        const blob = new Blob(audioChunksRef.current, { type: recordedType });
         void (async () => {
           try {
-            if (mimeType.includes('webm')) {
-              const mp3 = await convertAudioBlobToMp3(blob);
-              await sendMediaFile(new File([mp3], `audio-${Date.now()}.mp3`, { type: 'audio/mpeg' }));
+            if (recordedType.includes('ogg')) {
+              await sendMediaFile(new File([blob], `audio-${Date.now()}.ogg`, { type: 'audio/ogg' }));
               return;
             }
-            const ext = mimeType.includes('ogg') ? 'ogg' : 'm4a';
-            const base = mimeType.split(';')[0];
-            await sendMediaFile(new File([blob], `audio-${Date.now()}.${ext}`, { type: base }));
+            const mp3 = await convertAudioBlobToMp3(blob);
+            await sendMediaFile(new File([mp3], `audio-${Date.now()}.mp3`, { type: 'audio/mpeg' }));
           } catch {
             setSendError('Não foi possível processar o áudio gravado.');
           }
