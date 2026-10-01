@@ -121,8 +121,28 @@ CREATE TABLE IF NOT EXISTS activities (
   completed_at TIMESTAMPTZ,
   remind_minutes INT,
   reminded_at TIMESTAMPTZ,
+  google_event_id VARCHAR(255),
+  google_etag VARCHAR(255),
+  google_owner_id INT,
+  google_html_link VARCHAR(512),
+  attendees TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Conta Google conectada por usuário (tokens criptografados) para sincronizar a Agenda com o Google Agenda.
+CREATE TABLE IF NOT EXISTS google_accounts (
+  user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL DEFAULT '',
+  refresh_token_enc TEXT NOT NULL,
+  access_token_enc TEXT,
+  access_expires_at TIMESTAMPTZ,
+  scope TEXT DEFAULT '',
+  calendar_id VARCHAR(255) DEFAULT 'primary',
+  sync_token TEXT,
+  last_synced_at TIMESTAMPTZ,
+  import_events BOOLEAN DEFAULT FALSE,
+  connected_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS emails (

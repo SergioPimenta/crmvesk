@@ -9,6 +9,7 @@ import type {
   CrmDataContextType,
   Deal,
   EmailItem,
+  GoogleOutcome,
   Pipeline,
   PipelineStage,
   Proposal,
@@ -150,11 +151,11 @@ export function useCrmMutations({
   };
 
   const addActivity: CrmDataContextType['addActivity'] = async (input) => {
-    const result = await api.post<{ id: number; activity: Activity | null }>('/crm/activities', input);
+    const result = await api.post<{ id: number; activity: Activity | null; google?: GoogleOutcome }>('/crm/activities', input);
     if (!result.activity) throw new Error('Não foi possível criar a atividade.');
     const created = normalizeActivity(result.activity);
     setActivities((prev) => [created, ...prev]);
-    return created;
+    return { ...created, google: result.google };
   };
 
   const addEmail: CrmDataContextType['addEmail'] = (email) => {
@@ -381,10 +382,10 @@ export function useCrmMutations({
   };
 
   const updateActivity: CrmDataContextType['updateActivity'] = async (id, input) => {
-    const result = await api.put<{ activity: Activity }>(`/crm/activities/${Number(id)}`, input);
+    const result = await api.put<{ activity: Activity; google?: GoogleOutcome }>(`/crm/activities/${Number(id)}`, input);
     const updated = normalizeActivity(result.activity);
     setActivities((prev) => prev.map((a) => (a.id === id ? updated : a)));
-    return updated;
+    return { ...updated, google: result.google };
   };
 
   const deleteActivity: CrmDataContextType['deleteActivity'] = async (id) => {

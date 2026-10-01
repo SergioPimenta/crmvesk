@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Modal from '../../components/crm/Modal';
 import { useCrmData, type Activity, type ActivityInput, type ActivityPriority, type ActivityStatus, type AgendaType } from '../../contexts/CrmDataContext';
 import { AGENDA_TYPES, TYPE_META } from './activityStyle';
+import { useGoogleCalendar } from './useGoogleCalendar';
 import { activitySpan, addMinutes, DEFAULT_DURATION_MIN, fromInputs, toInputs } from './dateUtils';
 
 type Member = { id: number; name: string };
@@ -48,7 +49,15 @@ type FormState = {
   descricao: string;
   /** Antecedência do lembrete em minutos (texto do select); '' = sem lembrete. */
   remind: string;
+  /** Google Agenda: enviar ao salvar, gerar Meet, avisar convidados por e-mail e a lista de convidados (texto). */
+  googleSync: boolean;
+  meet: boolean;
+  invite: boolean;
+  guests: string;
 };
+
+const isMeetLink = (link: string) => /^https?:\/\/meet\.google\.com\//i.test(link.trim());
+const parseGuests = (text: string) => text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
 
 const REMIND_CHOICES: Array<{ value: string; label: string }> = [
   { value: '', label: 'Sem lembrete' },
@@ -93,6 +102,10 @@ function buildForm(activity: Activity | null, defaults: Props['defaults'], curre
       link: activity.link ?? '',
       descricao: activity.descricao ?? '',
       remind: activity.remindMinutes === null || activity.remindMinutes === undefined ? '' : String(activity.remindMinutes),
+      googleSync: false,
+      meet: false,
+      invite: false,
+      guests: (activity.attendees ?? []).join(', '),
     };
   }
   const start = defaults?.start ?? new Date();
@@ -113,6 +126,10 @@ function buildForm(activity: Activity | null, defaults: Props['defaults'], curre
     link: '',
     descricao: defaults?.descricao ?? '',
     remind: '15',
+    googleSync: false,
+    meet: false,
+    invite: false,
+    guests: '',
   };
 }
 
@@ -124,6 +141,17 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
   const [contactListOpen, setContactListOpen] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const google = useGoogleCalendar(open);
+  const googleReady = google.status.configured && google.status.connected;
+  const linked = Boolean(activity?.googleEventId);
+
+  // Com o Google conectado, uma nova reunião já vem marcada para criar o evento com Meet (dá para desmarcar).
+  useEffect(() => {
+    if (!open || activity || !googleReady) return;
+    setForm((f) => (f.tipo === 'Reunião' ? { ...f, googleSync: true, meet: true } : f));
+    // só ao abrir (ou quando a conexão for confirmada)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activity?.id, googleReady]);
 
   useEffect(() => {
     if (!open) return;
@@ -201,12 +229,21 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
       remindMinutes: form.allDay || !startAt || form.remind === '' ? null : Number(form.remind),
       quando: activity?.quando,
     };
+    if (googleReady) {
+      input.attendees = parseGuests(form.guests);
+      input.googleSync = (form.googleSync || linked) && Boolean(startAt);
+      input.meet = input.googleSync && form.meet && !isMeetLink(form.link);
+      input.invite = input.googleSync && form.invite;
+    }
 
     setSaving(true);
     try {
-      if (activity) await updateActivity(activity.id, input);
-      else await addActivity(input);
+      const saved = activity ? await updateActivity(activity.id, input) : await addActivity(input);
       onClose();
+      // A atividade já foi salva; só o envio ao Google falhou (conta expirada, convite recusado…).
+      if (saved.google?.status === 'error') {
+        window.alert(`Atividade salva, mas não foi sincronizada com o Google Agenda:\n${saved.google.message}`);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar a atividade.');
     } finally {
@@ -363,7 +400,13 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
                       className="ag-contact-option"
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        setForm((f) => ({ ...f, contatoId: c.id, dealId: '' }));
+                        setForm((f) => {
+                          // o e-mail do contato entra como convidado (se ainda não estiver na lista)
+                          const guests = parseGuests(f.guests);
+                          const email = c.email.trim().toLowerCase();
+                          if (email && !guests.map((g) => g.toLowerCase()).includes(email)) guests.push(email);
+                          return { ...f, contatoId: c.id, dealId: '', guests: guests.join(', ') };
+                        });
                         setContactQuery('');
                         setContactListOpen(false);
                       }}
@@ -452,6 +495,75 @@ const ActivityModal = ({ open, activity, defaults, members, currentUserId, onClo
           <label htmlFor="ag_link">Link da videochamada</label>
           <input id="ag_link" type="url" value={form.link} onChange={(e) => set('link', e.target.value)} placeholder="https://meet.google.com/…" maxLength={512} />
         </div>
+
+        {google.status.configured ? (
+          <div className="ag-form-wide ag-google-box">
+            <div className="ag-label">
+              <i className="ti ti-brand-google" aria-hidden="true" /> Google Agenda
+            </div>
+            {!google.status.connected ? (
+              <div className="ag-google-help">
+                Conecte sua conta no botão <strong>Google Agenda</strong> da Agenda para criar eventos com Meet e convidar
+                participantes.
+              </div>
+            ) : (
+              <>
+                {linked ? (
+                  <div className="ag-google-linked">
+                    <i className="ti ti-circle-check" aria-hidden="true" />
+                    <span>Sincronizado com o Google Agenda</span>
+                    {activity?.googleHtmlLink ? (
+                      <a href={activity.googleHtmlLink} target="_blank" rel="noreferrer">
+                        Abrir no Google
+                      </a>
+                    ) : null}
+                  </div>
+                ) : (
+                  <label className="ag-check-inline">
+                    <input
+                      type="checkbox"
+                      checked={form.googleSync}
+                      disabled={!form.date}
+                      onChange={(e) => set('googleSync', e.target.checked)}
+                    />
+                    Adicionar ao Google Agenda{!form.date ? ' (defina a data)' : ''}
+                  </label>
+                )}
+                {linked || form.googleSync ? (
+                  <>
+                    {isMeetLink(form.link) ? (
+                      <div className="ag-google-linked">
+                        <i className="ti ti-video" aria-hidden="true" />
+                        <span>Link do Google Meet na atividade</span>
+                        <a href={form.link} target="_blank" rel="noreferrer">
+                          Entrar
+                        </a>
+                      </div>
+                    ) : (
+                      <label className="ag-check-inline">
+                        <input type="checkbox" checked={form.meet} onChange={(e) => set('meet', e.target.checked)} />
+                        Gerar link do Google Meet
+                      </label>
+                    )}
+                    <div className="crm-field">
+                      <label htmlFor="ag_guests">Convidados (e-mails separados por vírgula)</label>
+                      <input
+                        id="ag_guests"
+                        value={form.guests}
+                        onChange={(e) => set('guests', e.target.value)}
+                        placeholder="cliente@empresa.com, colega@empresa.com"
+                      />
+                    </div>
+                    <label className="ag-check-inline">
+                      <input type="checkbox" checked={form.invite} onChange={(e) => set('invite', e.target.checked)} />
+                      Enviar convite (ou atualização) por e-mail aos convidados
+                    </label>
+                  </>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
 
         <div className="crm-field ag-form-wide">
           <label htmlFor="ag_desc">Descrição</label>

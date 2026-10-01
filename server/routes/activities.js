@@ -4,6 +4,13 @@ import { archiveRows } from '../utils/archive.js';
 import { normalizeRows } from '../utils/rows.js';
 import { isWorkspaceMember } from '../services/leadOwnerService.js';
 import { REMIND_OPTIONS } from '../services/reminderService.js';
+import { whenLabel } from '../utils/agendaTime.js';
+import {
+  cleanAttendees,
+  parseAttendees,
+  pushActivityToGoogle,
+  removeActivityFromGoogle,
+} from '../services/googleActivityService.js';
 
 // Agenda: atividades com data e hora reais (UTC no banco), duração, participantes e responsável.
 // Visibilidade: administradores veem todas do workspace; os demais veem as que criaram OU que foram
@@ -40,29 +47,6 @@ const toDate = (value, label) => {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) throw new HttpError(`${label} inválido`);
   return d;
-};
-
-const partsFormat = new Intl.DateTimeFormat('pt-BR', {
-  timeZone: 'America/Sao_Paulo',
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-// Montado à mão (dd/mm/aaaa hh:mm) para não depender do separador que cada versão do ICU usa.
-function brasiliaParts(date) {
-  const p = Object.fromEntries(partsFormat.formatToParts(date).map((x) => [x.type, x.value]));
-  return { day: `${p.day}/${p.month}/${p.year}`, time: `${p.hour}:${p.minute}` };
-}
-
-/** Texto legado da coluna `quando`, para telas antigas e relatórios que ainda o exibem. */
-const whenLabel = (start, allDay, fallback) => {
-  if (!start) return String(fallback || '').slice(0, 80);
-  const { day, time } = brasiliaParts(start);
-  return allDay ? `${day} · dia inteiro` : `${day} ${time}`;
 };
 
 async function assertInWorkspace(req, table, id, label) {
@@ -109,6 +93,16 @@ async function parseInput(req) {
   }
   if (allDay || !start) remindMinutes = null;
 
+  // Google Agenda: convidados (e-mails), geração de Meet e envio de convite pelo Google.
+  let attendees;
+  if (b.attendees !== undefined) {
+    try {
+      attendees = cleanAttendees(b.attendees);
+    } catch (err) {
+      throw new HttpError(err.message);
+    }
+  }
+
   const contatoId = asId(b.contatoId);
   const empresaId = asId(b.empresaId);
   const dealId = asId(b.dealId);
@@ -136,6 +130,10 @@ async function parseInput(req) {
     dealId,
     assignedTo,
     remindMinutes,
+    attendees,
+    googleSync: b.googleSync === true,
+    meet: b.meet === true,
+    invite: b.invite === true,
     quando: whenLabel(start, allDay, b.quando),
   };
 }
@@ -144,7 +142,9 @@ const SELECT_ACTIVITY = `
   SELECT a.id, a.contact_id AS contatoId, a.company_id AS empresaId, a.deal_id AS dealId, a.titulo, a.tipo,
          a.quando, a.status, a.start_at AS startAt, a.end_at AS endAt, a.all_day AS allDay, a.descricao,
          a.local, a.link, a.prioridade, a.assigned_to AS assignedTo, u.name AS assignedToName,
-         a.completed_at AS completedAt, a.created_by AS createdBy, a.remind_minutes AS remindMinutes
+         a.completed_at AS completedAt, a.created_by AS createdBy, a.remind_minutes AS remindMinutes,
+         a.google_event_id AS googleEventId, a.google_html_link AS googleHtmlLink, a.google_owner_id AS googleOwnerId,
+         a.attendees
   FROM activities a LEFT JOIN users u ON u.id = a.assigned_to`;
 
 function toDto(row) {
@@ -153,6 +153,10 @@ function toDto(row) {
     ...r,
     id: String(r.id),
     allDay: Boolean(r.allDay),
+    attendees: parseAttendees(r.attendees),
+    googleEventId: r.googleEventId || null,
+    googleHtmlLink: r.googleHtmlLink || '',
+    googleOwnerId: r.googleOwnerId ? Number(r.googleOwnerId) : null,
   };
 }
 
@@ -192,8 +196,8 @@ router.post('/', async (req, res) => {
   const a = await parseInput(req);
   const [, rows] = await pool.query(
     `INSERT INTO activities (user_id, created_by, contact_id, company_id, deal_id, titulo, tipo, quando, status,
-                             start_at, end_at, all_day, descricao, local, link, prioridade, assigned_to, completed_at, remind_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                             start_at, end_at, all_day, descricao, local, link, prioridade, assigned_to, completed_at, remind_minutes, attendees)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     [
       req.userId,
       req.authUserId,
@@ -214,10 +218,23 @@ router.post('/', async (req, res) => {
       a.assignedTo,
       a.status === 'Concluída' ? new Date().toISOString() : null,
       a.remindMinutes,
+      JSON.stringify(a.attendees ?? []),
     ]
   );
   const id = rows?.[0]?.id;
-  res.status(201).json({ id, activity: id ? await getActivity(req, id) : null });
+  // O Google nunca bloqueia a criação: se falhar, a atividade existe e a resposta traz o aviso.
+  const google =
+    id && a.googleSync
+      ? await pushActivityToGoogle({
+          actorId: req.authUserId,
+          workspaceId: req.userId,
+          activityId: id,
+          meet: a.meet,
+          invite: a.invite,
+          attendees: a.attendees,
+        })
+      : undefined;
+  res.status(201).json({ id, activity: id ? await getActivity(req, id) : null, google });
 });
 
 router.put('/:id', async (req, res) => {
@@ -239,7 +256,7 @@ router.put('/:id', async (req, res) => {
   await pool.query(
     `UPDATE activities SET contact_id = ?, company_id = ?, deal_id = ?, titulo = ?, tipo = ?, quando = ?, status = ?,
             start_at = ?, end_at = ?, all_day = ?, descricao = ?, local = ?, link = ?, prioridade = ?,
-            assigned_to = ?, completed_at = ?, remind_minutes = ?,
+            assigned_to = ?, completed_at = ?, remind_minutes = ?, attendees = ?,
             reminded_at = CASE WHEN ? THEN NULL ELSE reminded_at END, updated_at = NOW()
      WHERE id = ? AND user_id = ?${v.sql}`,
     [
@@ -260,13 +277,26 @@ router.put('/:id', async (req, res) => {
       a.assignedTo,
       completedAt ? new Date(completedAt).toISOString() : null,
       a.remindMinutes,
+      JSON.stringify(a.attendees ?? current.attendees ?? []),
       resetReminder,
       id,
       req.userId,
       ...v.params,
     ]
   );
-  res.json({ activity: await getActivity(req, id) });
+  // Atividade já vinculada ao Google acompanha as edições; as demais só vão se o usuário pediu.
+  const google =
+    a.googleSync || current.googleEventId
+      ? await pushActivityToGoogle({
+          actorId: req.authUserId,
+          workspaceId: req.userId,
+          activityId: id,
+          meet: a.meet,
+          invite: a.invite,
+          attendees: a.attendees,
+        })
+      : undefined;
+  res.json({ activity: await getActivity(req, id), google });
 });
 
 // Concluir / cancelar / reabrir sem reenviar o restante da atividade.
@@ -276,6 +306,7 @@ router.patch('/:id/status', async (req, res) => {
   const status = req.body?.status;
   if (!ACTIVITY_STATUSES.includes(status)) return res.status(400).json({ message: 'Status inválido' });
 
+  const before = await getActivity(req, id);
   const v = visible(req);
   const [result] = await pool.query(
     `UPDATE activities SET status = ?, completed_at = ?, updated_at = NOW()
@@ -283,13 +314,22 @@ router.patch('/:id/status', async (req, res) => {
     [status, status === 'Concluída' ? new Date().toISOString() : null, id, req.userId, ...v.params]
   );
   if (!result.affectedRows) return res.status(404).json({ message: 'Atividade não encontrada' });
-  res.json({ activity: await getActivity(req, id) });
+  // Cancelar (ou reabrir uma cancelada) também se reflete no evento do Google.
+  const cancelChanged = before?.googleEventId && (status === 'Cancelada') !== (before.status === 'Cancelada');
+  const google = cancelChanged
+    ? await pushActivityToGoogle({ actorId: req.authUserId, workspaceId: req.userId, activityId: id })
+    : undefined;
+  res.json({ activity: await getActivity(req, id), google });
 });
 
 router.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ message: 'ID inválido' });
   const v = visible(req);
+  const [linked] = await pool.query(
+    `SELECT google_event_id, google_owner_id, attendees FROM activities WHERE id = ? AND user_id = ?${v.sql}`,
+    [id, req.userId, ...v.params]
+  );
   await archiveRows(req, 'activities', `id = ? AND user_id = ?${v.sql}`, [id, req.userId, ...v.params]);
   const [result] = await pool.query(`DELETE FROM activities WHERE id = ? AND user_id = ?${v.sql}`, [
     id,
@@ -297,6 +337,8 @@ router.delete('/:id', async (req, res) => {
     ...v.params,
   ]);
   if (!result.affectedRows) return res.status(404).json({ message: 'Atividade não encontrada' });
+  // Remove também do Google (avisa os convidados); falha ali não desfaz a exclusão.
+  if (linked[0]) await removeActivityFromGoogle(linked[0]);
   res.status(204).send();
 });
 

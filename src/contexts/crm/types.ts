@@ -89,11 +89,31 @@ export type Activity = {
   createdBy?: number | null;
   /** Minutos antes do início para avisar (0 = na hora); null/ausente = sem lembrete. */
   remindMinutes?: number | null;
+  /** E-mails dos convidados (Google Agenda). */
+  attendees?: string[];
+  /** Evento vinculado no Google Agenda (null/ausente = não sincronizada). */
+  googleEventId?: string | null;
+  googleHtmlLink?: string;
 };
 
+/** Resultado do envio ao Google Agenda ao salvar; "error" não impede a atividade de ser salva. */
+export type GoogleOutcome = { status: 'ok'; htmlLink: string; meetUrl: string } | { status: 'error'; message: string };
+
+/** Atividade salva + o que aconteceu no Google (só vem na resposta de criar/editar). */
+export type SavedActivity = Activity & { google?: GoogleOutcome };
+
 /** O que o formulário envia ao criar/editar (campos calculados pelo servidor ficam de fora). */
-export type ActivityInput = Omit<Activity, 'id' | 'quando' | 'assignedToName' | 'completedAt' | 'createdBy'> & {
+export type ActivityInput = Omit<
+  Activity,
+  'id' | 'quando' | 'assignedToName' | 'completedAt' | 'createdBy' | 'googleEventId' | 'googleHtmlLink'
+> & {
   quando?: string;
+  /** Enviar ao Google Agenda ao salvar. */
+  googleSync?: boolean;
+  /** Gerar link do Google Meet. */
+  meet?: boolean;
+  /** Pedir ao Google para enviar o convite por e-mail aos convidados. */
+  invite?: boolean;
 };
 
 export type EmailStatus = 'Não lido' | 'Aguardando resposta' | 'Respondido' | 'Lido';
@@ -168,7 +188,7 @@ export type CrmDataContextType = {
   addDeal: (deal: Omit<Deal, 'id'> & { id?: string }) => Promise<string>;
   updateDeal: (id: string, patch: Omit<Deal, 'id'>) => void;
   deleteDeal: (id: string) => Promise<void>;
-  addActivity: (activity: ActivityInput) => Promise<Activity>;
+  addActivity: (activity: ActivityInput) => Promise<SavedActivity>;
   addEmail: (email: Omit<EmailItem, 'id'> & { id?: string }) => string;
   updateEmail: (id: string, patch: Partial<Pick<EmailItem, 'status'>>) => void;
   deleteEmail: (id: string) => Promise<void>;
@@ -186,7 +206,7 @@ export type CrmDataContextType = {
   updateCompany: (id: string, patch: Omit<Company, 'id'>) => void;
   updateContact: (id: string, patch: Omit<Contact, 'id'>) => void;
   deleteContact: (id: string) => Promise<void>;
-  updateActivity: (id: string, activity: ActivityInput) => Promise<Activity>;
+  updateActivity: (id: string, activity: ActivityInput) => Promise<SavedActivity>;
   deleteActivity: (id: string) => Promise<void>;
   /** Concluir, cancelar ou reabrir (atualiza a tela na hora e desfaz se o servidor recusar). */
   setActivityStatus: (id: string, status: ActivityStatus) => Promise<void>;

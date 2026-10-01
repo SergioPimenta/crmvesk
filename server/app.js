@@ -18,6 +18,7 @@ import notificationsRoutes from './routes/notifications.js';
 import automationRoutes from './routes/automation.js';
 import healthRoutes from './routes/health.js';
 import cronRoutes from './routes/cron.js';
+import googleRoutes from './routes/google.js';
 import { logger, newRequestId } from './utils/logger.js';
 
 dotenv.config();
@@ -38,6 +39,12 @@ export async function createApp() {
     next();
   });
   app.set('trust proxy', 1);
+
+  // Respostas da API são por usuário e carregam X-Refresh-Token: nunca podem ser cacheadas (browser/CDN).
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
   app.use((req, res, next) => {
@@ -80,6 +87,7 @@ export async function createApp() {
 
   app.use('/api', healthRoutes);
   app.use('/api/cron', cronRoutes);
+  app.use('/api/google', googleRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/upload', uploadRoutes);
   app.use('/api/crm', crmRoutes);

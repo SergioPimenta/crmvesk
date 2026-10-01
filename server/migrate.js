@@ -168,6 +168,7 @@ async function runAllMigrations() {
   await migrateChatNotesAndQuickReplies();
   await migrateActivityCalendar();
   await migrateReminders();
+  await migrateGoogleCalendar();
   await migrateDispatchGroupOwners();
   await migrateWidgetLeadOwners();
   await migrateRecordOwners();
@@ -209,6 +210,40 @@ async function migrateActivityCalendar() {
   }
   await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_start ON activities(user_id, start_at)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_activities_assigned ON activities(assigned_to)');
+}
+
+// Google Agenda: vínculo de cada atividade com o evento remoto, convidados e a conta Google de cada usuário.
+async function migrateGoogleCalendar() {
+  if (await tableExists('activities')) {
+    const columns = [
+      'google_event_id VARCHAR(255)',
+      'google_etag VARCHAR(255)',
+      'google_owner_id INT',
+      'google_html_link VARCHAR(512)',
+      "attendees TEXT DEFAULT ''",
+    ];
+    for (const column of columns) {
+      await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+    await pool.query(
+      'CREATE INDEX IF NOT EXISTS idx_activities_google_event ON activities(google_owner_id, google_event_id)'
+    );
+  }
+  if (await tableExists('users')) {
+    await pool.query(`CREATE TABLE IF NOT EXISTS google_accounts (
+      user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      email VARCHAR(255) NOT NULL DEFAULT '',
+      refresh_token_enc TEXT NOT NULL,
+      access_token_enc TEXT,
+      access_expires_at TIMESTAMPTZ,
+      scope TEXT DEFAULT '',
+      calendar_id VARCHAR(255) DEFAULT 'primary',
+      sync_token TEXT,
+      last_synced_at TIMESTAMPTZ,
+      import_events BOOLEAN DEFAULT FALSE,
+      connected_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  }
 }
 
 // Lembretes da Agenda: antecedência por atividade, marca de "já avisado", feed de notificações e preferência

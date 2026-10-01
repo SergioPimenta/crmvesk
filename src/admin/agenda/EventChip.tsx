@@ -30,6 +30,7 @@ const EventChip = ({ activity, span, now, draggable, onOpen, onDragStart }: Prop
     title={`${activity.titulo}${span.allDay ? ' · dia inteiro' : ` · ${formatTime(span.start)}`}`}
   >
     {span.allDay ? null : <span className="ag-chip-time">{formatTime(span.start)}</span>}
+    {activity.googleEventId ? <i className="ti ti-brand-google ag-chip-google" aria-hidden="true" /> : null}
     <span className="ag-chip-title">{activity.titulo}</span>
   </button>
 );

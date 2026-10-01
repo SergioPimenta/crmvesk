@@ -6855,3 +6855,112 @@ body.vesk-app {
   color: #e05252;
   font-weight: 600;
 }
+
+/* ─── Agenda: Google Agenda / Meet ─── */
+.ag-google-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ag-google-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.ag-google-panel {
+  width: 320px;
+  right: 0;
+  padding-bottom: 12px;
+}
+.ag-google-help {
+  margin: 0 14px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--vesk-muted);
+}
+.ag-google-panel .crm-notif-hint code {
+  font-size: 11px;
+}
+.ag-google-account {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 14px 10px;
+}
+.ag-google-account > i {
+  font-size: 20px;
+  color: #22c55e;
+}
+.ag-google-account div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--vesk-muted);
+}
+.ag-google-account strong {
+  font-size: 13px;
+  color: var(--vesk-text, inherit);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-google-import {
+  margin: 0 14px 12px;
+  font-size: 12.5px;
+}
+.ag-google-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px;
+  flex-wrap: wrap;
+}
+.ag-google-notice {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  max-width: 300px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: #fdecec;
+  color: #b42318;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.ag-google-notice.ok {
+  background: #e8f7ee;
+  color: #146c3a;
+}
+.ag-google-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--vesk-border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--vesk-surface-2, rgba(66, 133, 244, 0.05));
+}
+.ag-google-box .ag-google-help {
+  margin: 0;
+}
+.ag-google-linked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.ag-google-linked > i {
+  color: #22c55e;
+}
+.ag-google-linked a {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--vesk-primary, #2563eb);
+}
+.ag-chip-google {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-right: 2px;
+}

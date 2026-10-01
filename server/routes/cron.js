@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { processDueReminders } from '../services/reminderService.js';
+import { pullAllGoogleAccounts } from '../services/googleActivityService.js';
 
 // Rotas chamadas por um agendador (Vercel Cron ou um serviço externo como cron-job.org), não por pessoas.
 // Protegidas por CRON_SECRET: o agendador envia "Authorization: Bearer <CRON_SECRET>" (a Vercel faz isso sozinha).
@@ -23,6 +24,13 @@ router.get('/reminders', async (req, res) => {
   const auth = authorized(req);
   if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
   res.json(await processDueReminders());
+});
+
+// Traz as mudanças do Google Agenda de todas as contas conectadas. Rode a cada 5–15 minutos.
+router.get('/google-sync', async (req, res) => {
+  const auth = authorized(req);
+  if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
+  res.json(await pullAllGoogleAccounts());
 });
 
 export default router;

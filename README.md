@@ -90,6 +90,40 @@ Todas estão documentadas, agrupadas, em [`.env.example`](.env.example). As obri
 - **Ligações com o restante do CRM:** botão "Agendar" na conversa do WhatsApp (já com contato e telefone) e lista de
   atividades + "Agendar" na ficha do contato.
 
+### Google Agenda e Meet
+
+Cada usuário conecta a própria conta Google (botão **Google Agenda** na Agenda). Depois, ao criar ou editar uma
+atividade com data e hora:
+
+- **Adicionar ao Google Agenda** cria o evento no calendário do usuário e o mantém atualizado (remarcar, editar,
+  cancelar e excluir no CRM refletem no Google).
+- **Gerar link do Google Meet** cria a sala e grava o link na atividade.
+- **Convidados:** o e-mail do contato entra sozinho; dá para acrescentar outros (até 20). Com **Enviar convite**
+  marcado, o próprio Google manda o e-mail de convite/atualização/cancelamento.
+- **Do Google para o CRM:** mudanças de horário, título, local e cancelamentos feitos no Google voltam ao sincronizar
+  ("Sincronizar agora" ou o agendador abaixo; o Google vence quando os dois lados mudaram). Opcionalmente, eventos
+  criados direto no Google viram atividades (opção na própria tela de conexão, desligada por padrão).
+- Se o Google falhar (conta desconectada, sem internet…), a atividade é salva do mesmo jeito e o sistema avisa.
+
+**Configuração (uma vez, pelo administrador):**
+
+1. Em [console.cloud.google.com](https://console.cloud.google.com), crie um projeto e ative a **Google Calendar API**.
+2. Em *Google Auth Platform* configure a tela de consentimento e adicione o escopo
+   `https://www.googleapis.com/auth/calendar.events`.
+   - **Google Workspace da empresa:** escolha o tipo **Interno**. Só quem é da empresa conecta e não precisa de
+     verificação do Google.
+   - **Gmail pessoal:** o tipo é **Externo**. Em modo *Teste* funciona só para os e-mails cadastrados como testadores e
+     a conexão expira em 7 dias; para uso real é preciso publicar o app e passar pela verificação do Google (escopo
+     sensível).
+3. Em *Clientes*, crie um **ID do cliente OAuth** do tipo *Aplicativo da Web* com a URI de redirecionamento
+   `<URL pública do CRM>/api/google/callback`.
+4. Defina `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no servidor (Vercel → Environment Variables) e faça um novo
+   deploy. Opcional: `GOOGLE_TOKEN_KEY` (chave que criptografa os tokens no banco).
+5. Para trazer mudanças do Google sem ninguém clicar, agende `GET /api/cron/google-sync` a cada 5–15 minutos com
+   `Authorization: Bearer <CRON_SECRET>` (mesmo agendador dos lembretes).
+
+Os tokens ficam criptografados (AES-256-GCM) e só o escopo de eventos do calendário é solicitado.
+
 ## Segurança e operação
 
 - Sessão JWT de 4 h, renovada automaticamente enquanto há uso; perfil e status do usuário são lidos do banco

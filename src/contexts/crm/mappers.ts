@@ -36,6 +36,7 @@ export const normalizeActivity = (a: Activity): Activity => ({
   dealId: optionalId((a as any).dealId),
   allDay: Boolean(a.allDay),
   prioridade: a.prioridade ?? 'Média',
+  attendees: a.attendees ?? [],
 });
 
 /** Corpo enviado à API para salvar uma atividade já existente (ex.: ao remarcar). */

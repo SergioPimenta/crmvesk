@@ -7,6 +7,7 @@ import CompletionModal from './agenda/CompletionModal';
 import { useTeamMembers } from './agenda/useTeamMembers';
 import AgendaSidePanel from './agenda/AgendaSidePanel';
 import AgendaToolbar from './agenda/AgendaToolbar';
+import GoogleCalendarMenu from './agenda/GoogleCalendarMenu';
 import MonthView from './agenda/MonthView';
 import TimeGridView from './agenda/TimeGridView';
 import { DEFAULT_FILTERS, type AgendaFilters, type CalendarEvent } from './agenda/activityStyle';
@@ -181,6 +182,7 @@ const Agenda = () => {
               aria-label="Buscar atividades"
             />
           </div>
+          <GoogleCalendarMenu />
           <button type="button" className="crm-btn-primary" onClick={() => openCreate()}>
             <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" />
             Nova atividade

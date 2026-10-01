@@ -279,19 +279,19 @@ test('atividade: antecedência inválida é recusada; válida é gravada; dia in
   assert.equal(findCalls(/^INSERT INTO activities/).length, 0);
 
   await activity('POST', '/activities', { ...BASE, remindMinutes: 15 });
-  assert.equal(findCall(/^INSERT INTO activities/).params.at(-1), 15);
+  assert.equal(findCall(/^INSERT INTO activities/).params.at(-2), 15);
 
   await activity('POST', '/activities', { ...BASE, remindMinutes: 0 });
-  assert.equal(findCall(/^INSERT INTO activities/).params.at(-1), 0); // "na hora" é diferente de "sem lembrete"
+  assert.equal(findCall(/^INSERT INTO activities/).params.at(-2), 0); // "na hora" é diferente de "sem lembrete"
 
   await activity('POST', '/activities', { ...BASE, remindMinutes: null });
-  assert.equal(findCall(/^INSERT INTO activities/).params.at(-1), null);
+  assert.equal(findCall(/^INSERT INTO activities/).params.at(-2), null);
 
   await activity('POST', '/activities', { titulo: 'Feriado', tipo: 'Tarefa', startAt: '2026-10-05T03:00:00.000Z', allDay: true, remindMinutes: 15 });
-  assert.equal(findCall(/^INSERT INTO activities/).params.at(-1), null);
+  assert.equal(findCall(/^INSERT INTO activities/).params.at(-2), null);
 
   await activity('POST', '/activities', { titulo: 'Sem data', tipo: 'Tarefa', remindMinutes: 15 });
-  assert.equal(findCall(/^INSERT INTO activities/).params.at(-1), null);
+  assert.equal(findCall(/^INSERT INTO activities/).params.at(-2), null);
 });
 
 test('atividade: remarcar ou mudar a antecedência reabilita o lembrete; salvar sem mudar mantém', async () => {
@@ -301,18 +301,18 @@ test('atividade: remarcar ou mudar a antecedência reabilita o lembrete; salvar 
   await activity('PUT', '/activities/5', { ...BASE, remindMinutes: 15 }, existing);
   let p = findCall(/^UPDATE activities SET contact_id/).params;
   assert.equal(p[16], 15); // remind_minutes
-  assert.equal(p[17], false); // resetReminder
+  assert.equal(p[18], false); // resetReminder
 
   // remarcou -> reabilita
   await activity('PUT', '/activities/5', { ...BASE, startAt: '2026-10-06T13:00:00.000Z', endAt: '2026-10-06T14:00:00.000Z', remindMinutes: 15 }, existing);
   p = findCall(/^UPDATE activities SET contact_id/).params;
-  assert.equal(p[17], true);
+  assert.equal(p[18], true);
 
   // mudou só a antecedência -> reabilita
   await activity('PUT', '/activities/5', { ...BASE, remindMinutes: 60 }, existing);
   p = findCall(/^UPDATE activities SET contact_id/).params;
   assert.equal(p[16], 60);
-  assert.equal(p[17], true);
+  assert.equal(p[18], true);
   assert.match(findCall(/^UPDATE activities SET contact_id/).sql, /reminded_at = CASE WHEN \? THEN NULL ELSE reminded_at END/);
   assert.ok(calls.length > 0);
 });

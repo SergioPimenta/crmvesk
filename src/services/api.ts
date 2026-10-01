@@ -11,8 +11,12 @@ interface FetchOptions extends RequestInit {
 // não sessão expirada — não deve disparar o logout automático.
 const AUTH_ENDPOINTS = ['/auth/login', '/auth/register'];
 
-function handleSessionExpired() {
-  const hadToken = !!localStorage.getItem('token');
+function handleSessionExpired(sentToken: string | null) {
+  const currentToken = localStorage.getItem('token');
+  // Um 401 de uma requisição enviada com um token antigo (ex.: em andamento antes do novo login)
+  // não pode derrubar a sessão nova.
+  if (currentToken && sentToken && currentToken !== sentToken) return;
+  const hadToken = !!currentToken;
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   if (hadToken) {
@@ -49,16 +53,20 @@ class ApiService {
     }
 
     try {
-      const response = await fetch(url, config);
+      // no-store: respostas da API nunca vêm do cache/revalidação (um 304 reaproveita cabeçalhos antigos,
+      // inclusive um X-Refresh-Token vencido que sobrescrevia o token válido).
+      const response = await fetch(url, { ...config, cache: 'no-store' });
       // Sessão deslizante: o servidor devolve um token novo de tempos em tempos enquanto o usuário está ativo.
       const refreshedToken = response.headers.get('x-refresh-token');
-      if (refreshedToken) localStorage.setItem('token', refreshedToken);
+      if (refreshedToken && response.status !== 304 && localStorage.getItem('token') === token) {
+        localStorage.setItem('token', refreshedToken);
+      }
       if (!response.ok) {
         const isJson = response.headers.get('content-type')?.includes('application/json');
         const errBody = isJson ? await response.json() : await response.text();
 
         if (response.status === 401 && !AUTH_ENDPOINTS.includes(endpoint)) {
-          handleSessionExpired();
+          handleSessionExpired(token);
         }
 
         throw new Error((errBody && errBody.message) || response.statusText);
