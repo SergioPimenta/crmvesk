@@ -91,6 +91,8 @@ export type Activity = {
   remindMinutes?: number | null;
   /** E-mails dos convidados (Google Agenda). */
   attendees?: string[];
+  /** Resposta de cada convidado ao convite do Google, por e-mail (minúsculo). */
+  attendeeResponses?: Record<string, 'accepted' | 'declined' | 'tentative' | 'needsAction'>;
   /** Evento vinculado no Google Agenda (null/ausente = não sincronizada). */
   googleEventId?: string | null;
   googleHtmlLink?: string;
@@ -105,7 +107,14 @@ export type SavedActivity = Activity & { google?: GoogleOutcome };
 /** O que o formulário envia ao criar/editar (campos calculados pelo servidor ficam de fora). */
 export type ActivityInput = Omit<
   Activity,
-  'id' | 'quando' | 'assignedToName' | 'completedAt' | 'createdBy' | 'googleEventId' | 'googleHtmlLink'
+  | 'id'
+  | 'quando'
+  | 'assignedToName'
+  | 'completedAt'
+  | 'createdBy'
+  | 'googleEventId'
+  | 'googleHtmlLink'
+  | 'attendeeResponses'
 > & {
   quando?: string;
   /** Enviar ao Google Agenda ao salvar. */

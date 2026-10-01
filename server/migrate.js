@@ -221,6 +221,7 @@ async function migrateGoogleCalendar() {
       'google_owner_id INT',
       'google_html_link VARCHAR(512)',
       "attendees TEXT DEFAULT ''",
+      "attendee_responses TEXT DEFAULT ''",
     ];
     for (const column of columns) {
       await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS ${column}`);

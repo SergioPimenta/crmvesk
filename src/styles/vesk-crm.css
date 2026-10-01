@@ -7020,3 +7020,91 @@ input[type='checkbox']:disabled {
 .ag-check-inline {
   gap: 8px;
 }
+
+/* ─── Detalhes de um compromisso nas listas (cliente, convidados e Meet) ─── */
+.ag-side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.ag-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--vesk-muted);
+}
+.ag-details-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ag-details-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-details i {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.ag-details-guests {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ag-guest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ag-guest-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ag-guest-status {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  opacity: 0.85;
+}
+.ag-guest.yes {
+  color: #22c55e;
+}
+.ag-guest.no {
+  color: #e05252;
+}
+.ag-guest.maybe {
+  color: #e0a43a;
+}
+.ag-guest.wait {
+  color: var(--vesk-muted);
+}
+.ag-guest.yes .ag-guest-email,
+.ag-guest.no .ag-guest-email,
+.ag-guest.maybe .ag-guest-email {
+  color: var(--vesk-text);
+}
+.ag-details-meet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-weight: 600;
+  color: var(--vesk-orange);
+  text-decoration: none;
+}
+.ag-details-meet:hover {
+  text-decoration: underline;
+}

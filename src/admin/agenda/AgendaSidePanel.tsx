@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import CrmCheckbox from '../../components/crm/CrmCheckbox';
 import type { Activity } from '../../contexts/CrmDataContext';
+import ActivityDetails from './ActivityDetails';
 import { TYPE_META } from './activityStyle';
 import { activitySpan, addDays, formatWhen, isOverdue, spanOnDay, startOfDay } from './dateUtils';
 
@@ -75,20 +76,22 @@ const AgendaSidePanel = ({ activities, now, getContactName, onOpen, onToggleDone
                       checked={false}
                       onChange={() => onToggleDone(a)}
                     />
-                    <button type="button" className="ag-side-body" onClick={() => onOpen(a)}>
-                      <span className="ag-side-name">
-                        <i
-                          className={`ti ${TYPE_META[a.tipo].icon}`}
-                          style={{ color: TYPE_META[a.tipo].color }}
-                          aria-hidden="true"
-                        />
-                        {a.titulo}
-                      </span>
-                      <span className="ag-side-meta">
-                        {span ? formatWhen(span.start, span.allDay, now) : a.quando || 'Sem data'}
-                        {a.contatoId ? ` · ${getContactName(a.contatoId)}` : ''}
-                      </span>
-                    </button>
+                    <div className="ag-side-col">
+                      <button type="button" className="ag-side-body" onClick={() => onOpen(a)}>
+                        <span className="ag-side-name">
+                          <i
+                            className={`ti ${TYPE_META[a.tipo].icon}`}
+                            style={{ color: TYPE_META[a.tipo].color }}
+                            aria-hidden="true"
+                          />
+                          {a.titulo}
+                        </span>
+                        <span className="ag-side-meta">
+                          {span ? formatWhen(span.start, span.allDay, now) : a.quando || 'Sem data'}
+                        </span>
+                      </button>
+                      <ActivityDetails activity={a} contactName={a.contatoId ? getContactName(a.contatoId) : ''} />
+                    </div>
                   </div>
                 );
               })}

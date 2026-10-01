@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS activities (
   google_owner_id INT,
   google_html_link VARCHAR(512),
   attendees TEXT DEFAULT '',
+  attendee_responses TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

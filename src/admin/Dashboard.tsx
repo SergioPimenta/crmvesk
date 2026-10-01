@@ -5,6 +5,7 @@ import CrmLayout from '../components/crm/CrmLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { useCrmData } from '../contexts/CrmDataContext';
 import { countClosedDeals, countOpenDeals, groupDealsByStage } from '../utils/pipelineDeals';
+import ActivityDetails from './agenda/ActivityDetails';
 import { activitySpan, formatWhen, isOverdue, spanOnDay, startOfDay } from './agenda/dateUtils';
 
 const formatDate = () => {
@@ -335,6 +336,7 @@ const Dashboard = () => {
                       ? `${agenda.overdueIds.has(a.id) ? 'Atrasada · ' : ''}${formatWhen(activitySpan(a)!.start, activitySpan(a)!.allDay, now)}`
                       : a.quando || 'Sem data'}
                   </div>
+                  <ActivityDetails activity={a} contactName={contacts.find((c) => c.id === a.contatoId)?.nome} />
                 </div>
               </div>
             ))}

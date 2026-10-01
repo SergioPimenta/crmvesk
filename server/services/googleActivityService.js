@@ -41,6 +41,28 @@ export function cleanAttendees(list) {
   return out;
 }
 
+const RESPONSES = ['accepted', 'declined', 'tentative', 'needsAction'];
+
+/** Resposta de cada convidado ao convite ({ email: accepted | declined | tentative | needsAction }), em JSON. */
+export function responsesOf(event) {
+  const map = {};
+  for (const a of event?.attendees || []) {
+    const email = String(a?.email || '').toLowerCase();
+    if (email) map[email] = RESPONSES.includes(a.responseStatus) ? a.responseStatus : 'needsAction';
+  }
+  return JSON.stringify(map);
+}
+
+/** Lê as respostas guardadas na atividade; ignora lixo. */
+export function parseResponses(text) {
+  try {
+    const obj = JSON.parse(text || '{}');
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  } catch {
+    return {};
+  }
+}
+
 const messageOf = (err) =>
   err instanceof GoogleAuthError ? err.message : err?.message ? `Google Agenda: ${err.message}` : 'Falha ao falar com o Google Agenda.';
 
@@ -91,13 +113,14 @@ export async function pushActivityToGoogle({ actorId, workspaceId, activityId, m
     const meetUrl = meetUrlOf(event);
     await pool.query(
       `UPDATE activities SET google_event_id = ?, google_etag = ?, google_owner_id = ?, google_html_link = ?,
-              attendees = ?, link = ?, updated_at = NOW() WHERE id = ? AND user_id = ?`,
+              attendees = ?, attendee_responses = ?, link = ?, updated_at = NOW() WHERE id = ? AND user_id = ?`,
       [
         event.id,
         event.etag || null,
         ownerId,
         String(event.htmlLink || '').slice(0, 512),
         JSON.stringify(guests),
+        responsesOf(event),
         meetUrl && wantsMeet ? meetUrl.slice(0, 512) : row.link,
         activityId,
         workspaceId,
@@ -157,8 +180,9 @@ async function applyEvent({ ev, userId, workspaceId, importEvents }) {
     const guests = (ev.attendees || []).map((a) => String(a.email || '').toLowerCase()).filter(Boolean);
     await pool.query(
       `INSERT INTO activities (user_id, created_by, assigned_to, titulo, tipo, quando, status, start_at, end_at, all_day,
-                               descricao, local, link, google_event_id, google_etag, google_owner_id, google_html_link, attendees)
-       VALUES (?, ?, ?, ?, 'Reunião', ?, 'Pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               descricao, local, link, google_event_id, google_etag, google_owner_id, google_html_link, attendees,
+                               attendee_responses)
+       VALUES (?, ?, ?, ?, 'Reunião', ?, 'Pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workspaceId,
         userId,
@@ -176,6 +200,7 @@ async function applyEvent({ ev, userId, workspaceId, importEvents }) {
         userId,
         clip(ev.htmlLink, 512),
         JSON.stringify(guests.slice(0, 20)),
+        responsesOf(ev),
       ]
     );
     return 'created';
@@ -202,7 +227,7 @@ async function applyEvent({ ev, userId, workspaceId, importEvents }) {
   // exceto reabrir uma atividade que estava cancelada e voltou a existir no Google.
   await pool.query(
     `UPDATE activities SET titulo = ?, descricao = ?, local = ?, start_at = ?, end_at = ?, all_day = ?, quando = ?,
-            link = ?, attendees = ?, google_etag = ?, google_html_link = ?,
+            link = ?, attendees = ?, attendee_responses = ?, google_etag = ?, google_html_link = ?,
             status = CASE WHEN status = 'Cancelada' THEN 'Pendente' ELSE status END,
             reminded_at = CASE WHEN ? THEN reminded_at ELSE NULL END, updated_at = NOW()
      WHERE id = ? AND user_id = ?`,
@@ -216,6 +241,7 @@ async function applyEvent({ ev, userId, workspaceId, importEvents }) {
       whenLabel(t.start, t.allDay),
       meetUrl ? clip(meetUrl, 512) : row.link,
       JSON.stringify(guests.slice(0, 20)),
+      responsesOf(ev),
       ev.etag || null,
       clip(ev.htmlLink, 512),
       Boolean(sameStart),

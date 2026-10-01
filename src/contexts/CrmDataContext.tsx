@@ -187,9 +187,10 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const [contactsData, dealsData] = await Promise.all([
+    const [contactsData, dealsData, activitiesData] = await Promise.all([
       api.get<Contact[]>('/crm/contacts'),
       api.get<Record<string, unknown>[]>('/crm/deals'),
+      api.get<Activity[]>('/crm/activities'),
     ]);
 
     const normalizedContacts = contactsData.map(normalizeContact);
@@ -198,6 +199,7 @@ export const CrmDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDeals(
       dealsData.map(mapDealRow).map((deal) => enrichDealWithContact(deal, normalizedContacts))
     );
+    setActivities(activitiesData.map(normalizeActivity));
   }, []);
 
   const mutations = useCrmMutations({

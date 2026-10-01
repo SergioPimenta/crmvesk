@@ -8,6 +8,7 @@ import { whenLabel } from '../utils/agendaTime.js';
 import {
   cleanAttendees,
   parseAttendees,
+  parseResponses,
   pushActivityToGoogle,
   removeActivityFromGoogle,
 } from '../services/googleActivityService.js';
@@ -144,7 +145,7 @@ const SELECT_ACTIVITY = `
          a.local, a.link, a.prioridade, a.assigned_to AS assignedTo, u.name AS assignedToName,
          a.completed_at AS completedAt, a.created_by AS createdBy, a.remind_minutes AS remindMinutes,
          a.google_event_id AS googleEventId, a.google_html_link AS googleHtmlLink, a.google_owner_id AS googleOwnerId,
-         a.attendees
+         a.attendees, a.attendee_responses AS attendeeResponses
   FROM activities a LEFT JOIN users u ON u.id = a.assigned_to`;
 
 function toDto(row) {
@@ -154,6 +155,7 @@ function toDto(row) {
     id: String(r.id),
     allDay: Boolean(r.allDay),
     attendees: parseAttendees(r.attendees),
+    attendeeResponses: parseResponses(r.attendeeResponses),
     googleEventId: r.googleEventId || null,
     googleHtmlLink: r.googleHtmlLink || '',
     googleOwnerId: r.googleOwnerId ? Number(r.googleOwnerId) : null,

@@ -38,6 +38,7 @@ const KEY_ALIASES = {
   useform: 'useForm',
   startat: 'startAt',
   remindminutes: 'remindMinutes',
+  attendeeresponses: 'attendeeResponses',
   googleeventid: 'googleEventId',
   googlehtmllink: 'googleHtmlLink',
   googleownerid: 'googleOwnerId',

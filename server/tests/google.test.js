@@ -211,7 +211,7 @@ test('criar atividade com Google: Meet, convidados, convite e vínculo gravado',
   assert.ok(body.conferenceData);
   const up = findCall(/^UPDATE activities SET google_event_id/);
   assert.equal(up.params[0], 'ev1');
-  assert.equal(up.params[5], EVENT_OK.hangoutLink); // Meet vira o link da atividade
+  assert.equal(up.params[6], EVENT_OK.hangoutLink); // Meet vira o link da atividade
 });
 
 test('sem convite: o Google não envia e-mail (sendUpdates=none)', async () => {
@@ -388,4 +388,40 @@ test('pull: syncToken vencido (410) refaz a leitura completa', async () => {
   }
   assert.equal(log.length, 2);
   assert.doesNotMatch(log[1].url, /syncToken=/);
+});
+
+test('respostas dos convidados (confirmou, recusou…) são guardadas ao enviar e ao sincronizar', async () => {
+  const withGuests = {
+    ...EVENT_OK,
+    attendees: [
+      { email: 'Maria@Acme.com', responseStatus: 'accepted' },
+      { email: 'joao@acme.com', responseStatus: 'declined' },
+      { email: 'ana@acme.com' },
+    ],
+  };
+  db();
+  mockGoogle(() => ({ body: withGuests }));
+  try {
+    await api('POST', '/crm/activities', { titulo: 'X', tipo: 'Reunião', startAt: START, googleSync: true, attendees: ['maria@acme.com'] });
+  } finally {
+    restoreFetch();
+  }
+  const expected = { 'maria@acme.com': 'accepted', 'joao@acme.com': 'declined', 'ana@acme.com': 'needsAction' };
+  assert.deepEqual(JSON.parse(findCall(/^UPDATE activities SET google_event_id/).params[5]), expected);
+
+  // no pull: o convidado respondeu no Google (etag mudou) -> a resposta nova é gravada
+  pullDb({ a: activityRow({ id: 1, google_event_id: 'a', google_etag: '"old"' }) });
+  mockGoogle(() => ({
+    body: {
+      nextSyncToken: 'T3',
+      items: [{ id: 'a', etag: '"new"', status: 'confirmed', summary: 'R', start: { dateTime: START }, attendees: [{ email: 'maria@acme.com', responseStatus: 'tentative' }] }],
+    },
+  }));
+  try {
+    await pullGoogleChanges(7);
+  } finally {
+    restoreFetch();
+  }
+  const upd = findCall(/^UPDATE activities SET titulo/);
+  assert.deepEqual(JSON.parse(upd.params[9]), { 'maria@acme.com': 'tentative' });
 });

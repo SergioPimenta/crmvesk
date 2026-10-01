@@ -41,6 +41,29 @@ const GoogleCalendarMenu = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Com a conta conectada, traz as mudanças do Google (respostas dos convidados, remarcações) ao abrir a Agenda
+  // e a cada 3 minutos enquanto ela fica aberta. O servidor ignora pedidos com menos de 1 minuto de intervalo.
+  useEffect(() => {
+    if (!status.connected) return;
+    let cancelled = false;
+    const quietSync = async () => {
+      try {
+        const r = await google.sync();
+        if (!cancelled && !r.throttled && r.created + r.updated + r.cancelled > 0) await refreshCrmData();
+      } catch {
+        /* silencioso: o botão "Sincronizar agora" mostra o erro */
+      }
+    };
+    void quietSync();
+    const timer = window.setInterval(() => void quietSync(), 3 * 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // reinicia só quando a conexão muda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.connected]);
+
   useEffect(() => {
     if (!notice) return;
     const t = window.setTimeout(() => setNotice(null), 6000);
