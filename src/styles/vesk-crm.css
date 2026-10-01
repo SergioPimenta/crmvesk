@@ -6964,3 +6964,59 @@ body.vesk-app {
   opacity: 0.7;
   margin-right: 2px;
 }
+
+/* ── Checkbox nativo no padrão VESK (vale para todo <input type="checkbox"> do CRM) ─────────────────
+   O CrmCheckbox (.crm-check) continua com a própria caixa; aqui ficam os demais: formulários, filtros e menus. */
+:where(input[type='checkbox']) {
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 5px;
+  border: 1.5px solid var(--vesk-sub);
+  background-color: var(--vesk-surface2);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--vesk-orange);
+}
+
+input[type='checkbox']:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  border-color: var(--vesk-orange);
+  box-shadow: 0 0 0 3px var(--vesk-orange-glow);
+}
+
+input[type='checkbox']:checked {
+  background-color: var(--vesk-orange);
+  border-color: var(--vesk-orange);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+input[type='checkbox']:indeterminate {
+  background-color: var(--vesk-orange);
+  border-color: var(--vesk-orange);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Rótulos com checkbox: espaço e alinhamento iguais em todo o CRM. */
+.ag-check-inline {
+  gap: 8px;
+}
