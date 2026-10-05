@@ -314,10 +314,13 @@ function friendlyStatusErrorMessage(err) {
   if (code === 131031) {
     return 'Conta do WhatsApp Business restrita ou desabilitada pela Meta.';
   }
+  if (code === 131049) {
+    return 'A Meta não entregou (131049): ela limita mensagens de marketing para este destinatário. Não adianta reenviar; tente outro número ou outro tipo de modelo.';
+  }
   if (code === 133010) {
     return 'Número de telefone da empresa não está registrado na Meta.';
   }
-  return raw || 'A Meta recusou o envio desta mensagem.';
+  return `${raw || 'A Meta recusou o envio desta mensagem.'}${code ? ` (código ${code})` : ''}`;
 }
 
 export function parseWebhookStatuses(payload) {

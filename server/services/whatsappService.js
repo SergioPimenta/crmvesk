@@ -551,7 +551,9 @@ export async function upsertChat(userId, { remoteJid, name, lastMessage, lastMes
   return { chatId: newId, isNew: true, reopened: false };
 }
 
-export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status }) {
+// advance: a mensagem já está confirmada como entregue (ex.: enviada pelo celular / Evolution); com a API da Meta
+// o avanço do contato acontece quando chega o status delivered/read (ver updateMessageStatus).
+export async function insertMessage(userId, chatId, { waMessageId, body, fromMe, messageAt, status, advance = false }) {
   if (waMessageId) {
     const [dup] = await pool.query(
       'SELECT id FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
@@ -567,7 +569,7 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [userId, chatId, waMessageId || null, body, fromMe ? true : false, messageAt, msgStatus]
   );
-  if (fromMe) await advanceContactOnFirstMessage(userId, chatId);
+  if (fromMe && advance) await advanceContactOnFirstMessage(userId, chatId);
   return ins.insertId;
 }
 
@@ -577,7 +579,7 @@ export async function updateMessageStatus(userId, waMessageId, status, errorMess
   if (!['sent', 'delivered', 'read', 'failed'].includes(next)) return;
 
   const [rows] = await pool.query(
-    'SELECT id, status FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
+    'SELECT id, status, chat_id AS chatId, from_me AS fromMe FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
     [userId, waMessageId]
   );
   if (!rows.length) return;
@@ -593,6 +595,12 @@ export async function updateMessageStatus(userId, waMessageId, status, errorMess
     rows[0].id,
     userId,
   ]);
+
+  // Só uma entrega confirmada tira o contato de "Novo": mensagem recusada pela Meta não conta como contato feito.
+  const msg = normalizeRow(rows[0]);
+  if ((next === 'delivered' || next === 'read') && msg.fromMe) {
+    await advanceContactOnFirstMessage(userId, msg.chatId);
+  }
 }
 
 export async function setChatAttendance(userId, chatId, status, actorId = null) {
@@ -809,6 +817,7 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
       body: text,
       fromMe,
       messageAt,
+      advance: fromMe,
     });
 
     if ((isNew || reopened) && !fromMe) {
@@ -1434,6 +1443,7 @@ export async function sendChatMessage(userId, chatId, text, actorId) {
     fromMe: true,
     messageAt,
     status: 'sent',
+    advance: settings.provider !== 'meta',
   });
 
   await mergeDuplicatesIntoChat(userId, Number(chatId), number);
