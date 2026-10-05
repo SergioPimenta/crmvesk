@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
 import { addChatEvent, getUserName } from './chatEventService.js';
+import { advanceContactOnFirstMessage } from './contactProgressService.js';
 import {
   connectInstance,
   createInstance,
@@ -566,6 +567,7 @@ export async function insertMessage(userId, chatId, { waMessageId, body, fromMe,
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [userId, chatId, waMessageId || null, body, fromMe ? true : false, messageAt, msgStatus]
   );
+  if (fromMe) await advanceContactOnFirstMessage(userId, chatId);
   return ins.insertId;
 }
 
