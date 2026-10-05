@@ -20,6 +20,9 @@ export function useContactForm({ isCreateOpen, pipelines, activePipelineId }: Op
   const defaultPipelineId = pipelines.find((p) => p.isDefault)?.id ?? pipelines[0]?.id ?? '';
   const [form, setForm] = useState<ContactFormState>(() => emptyContactForm(''));
   const [formStages, setFormStages] = useState<PipelineStage[]>([]);
+  const [stagesStatus, setStagesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadTick, setReloadTick] = useState(0);
+  const reloadStages = () => setReloadTick((n) => n + 1);
 
   useEffect(() => {
     if (!isCreateOpen || form.pipelineId) return;
@@ -30,27 +33,40 @@ export function useContactForm({ isCreateOpen, pipelines, activePipelineId }: Op
   useEffect(() => {
     if (!form.pipelineId) {
       setFormStages([]);
+      setStagesStatus('loading');
       return;
     }
+    // "cancelled" evita que a resposta de um funil antigo sobrescreva a do funil atual.
+    let cancelled = false;
+    setStagesStatus('loading');
     void (async () => {
-      const stagesData = await api.get<StageRow[]>(`/crm/pipelines/${form.pipelineId}/stages`);
-      setFormStages(
-        stagesData.map((s) => ({
-          id: String(s.id),
-          pipelineId: String(
-            (s as { pipelineId?: number; pipelineid?: number }).pipelineId ??
-              (s as { pipelineid?: number }).pipelineid
-          ),
-          stageKey: String(
-            (s as { stageKey?: string; stagekey?: string }).stageKey ?? (s as { stagekey?: string }).stagekey
-          ),
-          titulo: s.titulo,
-          cor: s.cor,
-          pos: Number(s.pos ?? 0),
-        }))
-      );
+      try {
+        const stagesData = await api.get<StageRow[]>(`/crm/pipelines/${form.pipelineId}/stages`);
+        if (cancelled) return;
+        setFormStages(
+          stagesData.map((s) => ({
+            id: String(s.id),
+            pipelineId: String(
+              (s as { pipelineId?: number; pipelineid?: number }).pipelineId ??
+                (s as { pipelineid?: number }).pipelineid
+            ),
+            stageKey: String(
+              (s as { stageKey?: string; stagekey?: string }).stageKey ?? (s as { stagekey?: string }).stagekey
+            ),
+            titulo: s.titulo,
+            cor: s.cor,
+            pos: Number(s.pos ?? 0),
+          }))
+        );
+        setStagesStatus('ready');
+      } catch {
+        if (!cancelled) setStagesStatus('error');
+      }
     })();
-  }, [form.pipelineId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [form.pipelineId, reloadTick]);
 
   // Se a etapa escolhida não existe no funil, seleciona a primeira.
   useEffect(() => {
@@ -88,5 +104,5 @@ export function useContactForm({ isCreateOpen, pipelines, activePipelineId }: Op
       stageKey: '',
     });
 
-  return { form, setForm, formStages, sortedFormStages, resetForm, loadForEdit };
+  return { form, setForm, formStages, sortedFormStages, stagesStatus, reloadStages, resetForm, loadForEdit };
 }

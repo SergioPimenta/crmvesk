@@ -572,7 +572,11 @@ async function migrateDispatchGroups() {
 }
 
 async function migrateScrapingSeen() {
-  if (await tableExists('scraping_seen')) return;
+  if (await tableExists('scraping_seen')) {
+    // A deduplicação passou a ser global por usuário (qualquer termo): consulta por result_key.
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scraping_seen_user_key ON scraping_seen(user_id, result_key)');
+    return;
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS scraping_seen (
@@ -585,6 +589,7 @@ async function migrateScrapingSeen() {
     )
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_scraping_seen_user_term ON scraping_seen(user_id, term)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_scraping_seen_user_key ON scraping_seen(user_id, result_key)');
 }
 
 async function migrateWhatsappButtonWidgets() {

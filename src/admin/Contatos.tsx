@@ -43,7 +43,7 @@ const Contatos = () => {
   const list = useContactsPage({ query, tab: activeTab, onlyUnowned, refreshKey: contacts });
   const owners = useOwnerAssignment(isAdmin, refreshCrmData);
   const { clearSelection } = owners;
-  const { form, setForm, formStages, sortedFormStages, resetForm, loadForEdit } = useContactForm({
+  const { form, setForm, formStages, sortedFormStages, stagesStatus, reloadStages, resetForm, loadForEdit } = useContactForm({
     isCreateOpen,
     pipelines,
     activePipelineId,
@@ -230,6 +230,8 @@ const Contatos = () => {
         companies={companies}
         pipelines={pipelines}
         sortedFormStages={sortedFormStages}
+        stagesStatus={stagesStatus}
+        onReloadStages={reloadStages}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={createContact}
       />

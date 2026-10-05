@@ -1,4 +1,4 @@
-import { neon } from '@neondatabase/serverless';
+import { neon, Pool } from '@neondatabase/serverless';
 import dotenv from 'dotenv';
 
 import path from 'path';
@@ -82,11 +82,24 @@ function createConn(client) {
 const pool = {
   query: (text, params) => runQuery(sql, text, params),
 
+  // O driver HTTP do Neon só aceita transações como lista de queries (não interativas) e lança
+  // "transaction() expects an array of queries" com um corpo async; aqui usamos uma conexão WebSocket real.
   async transaction(fn) {
-    return sql.transaction(async (tx) => {
-      const conn = createConn(tx);
-      return fn(conn);
-    });
+    const wsPool = new Pool({ connectionString });
+    const client = await wsPool.connect();
+    try {
+      await client.query('BEGIN');
+      const conn = createConn(async (text, params) => (await client.query(text, params)).rows);
+      const result = await fn(conn);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+      await wsPool.end().catch(() => {});
+    }
   },
 
   async getConnection() {

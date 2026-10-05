@@ -3,6 +3,7 @@ import multer from 'multer';
 import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
 import { archiveRows } from '../utils/archive.js';
+import { canonicalWhatsAppPhone } from '../utils/whatsappPhone.js';
 import { isWorkspaceMember } from '../services/leadOwnerService.js';
 import activitiesRouter from './activities.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
@@ -476,6 +477,10 @@ router.post('/contacts/bulk-import', async (req, res) => {
 
       const [existingRows] = await conn.query('SELECT nome, telefone FROM contacts WHERE user_id = ?', [req.userId]);
       const existing = new Set(existingRows.map((row) => contactKey(row.nome, row.telefone)));
+      // Mesmo telefone (mesmo com nome diferente) é a mesma empresa: nunca duplicar para não reenviar WhatsApp.
+      const existingPhones = new Set(
+        existingRows.map((row) => canonicalWhatsAppPhone(row.telefone)).filter((p) => p.length >= 10)
+      );
 
       for (const item of items) {
         const nome = String(item.nome || '').trim();
@@ -486,7 +491,8 @@ router.post('/contacts/bulk-import', async (req, res) => {
 
         const telefone = String(item.telefone || '').trim();
         const key = contactKey(nome, telefone);
-        if (existing.has(key)) {
+        const phoneKey = canonicalWhatsAppPhone(telefone);
+        if (existing.has(key) || (phoneKey.length >= 10 && existingPhones.has(phoneKey))) {
           skipped += 1;
           continue;
         }
@@ -509,6 +515,7 @@ router.post('/contacts/bulk-import', async (req, res) => {
         );
 
         existing.add(key);
+        if (phoneKey.length >= 10) existingPhones.add(phoneKey);
         saved.push({ contactId, dealId: dealResult.insertId, nome });
       }
     });

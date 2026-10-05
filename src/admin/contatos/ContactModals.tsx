@@ -23,6 +23,8 @@ type BaseProps = {
 type CreateProps = BaseProps & {
   pipelines: Pipeline[];
   sortedFormStages: PipelineStage[];
+  stagesStatus: 'loading' | 'ready' | 'error';
+  onReloadStages: () => void;
 };
 
 /** "Novo contato": além dos dados, escolhe o funil e a etapa em que ele entra automaticamente. */
@@ -33,6 +35,8 @@ export const CreateContactModal = ({
   companies,
   pipelines,
   sortedFormStages,
+  stagesStatus,
+  onReloadStages,
   onClose,
   onSubmit,
 }: CreateProps) => (
@@ -80,7 +84,13 @@ export const CreateContactModal = ({
           disabled={sortedFormStages.length === 0}
         >
           {sortedFormStages.length === 0 ? (
-            <option value="">Carregando etapas…</option>
+            <option value="">
+              {stagesStatus === 'error'
+                ? 'Não foi possível carregar as etapas'
+                : stagesStatus === 'ready'
+                  ? 'Este funil não tem etapas'
+                  : 'Carregando etapas…'}
+            </option>
           ) : (
             sortedFormStages.map((s) => (
               <option key={s.stageKey} value={s.stageKey}>
@@ -89,6 +99,11 @@ export const CreateContactModal = ({
             ))
           )}
         </select>
+        {stagesStatus === 'error' ? (
+          <button type="button" className="crm-btn-secondary" onClick={onReloadStages} style={{ marginTop: 8 }}>
+            Tentar novamente
+          </button>
+        ) : null}
       </div>
 
       <div className="crm-form-actions" style={{ gridColumn: '1 / -1' }}>

@@ -141,25 +141,40 @@ const Scraping = () => {
     const desired = Number(limit) || 10;
     const via = source === 'python-playwright' ? ' (scraper Python)' : '';
     try {
-      const data = await api.post<{ results: ScrapeResult[]; newAvailable: number; totalFetched: number }>(
-        '/scraping/maps/dedupe',
-        { query: query.trim(), results: rawResults, limit: desired }
-      );
+      const data = await api.post<{
+        results: ScrapeResult[];
+        newAvailable: number;
+        totalFetched: number;
+        skipped?: { seen: number; contact: number; whatsapp: number; batch: number };
+      }>('/scraping/maps/dedupe', { query: query.trim(), results: rawResults, limit: desired });
       const novos = data.results || [];
       setResults(novos);
+
+      const sk = data.skipped;
+      const removed = sk
+        ? [
+            sk.seen ? `${sk.seen} já trazido(s) em buscas anteriores` : '',
+            sk.contact ? `${sk.contact} já salvo(s) em Contatos` : '',
+            sk.whatsapp ? `${sk.whatsapp} já com conversa no WhatsApp` : '',
+          ].filter(Boolean)
+        : [];
+      const detail = removed.length ? ` Descartados: ${removed.join(', ')}.` : '';
+
       if (novos.length === 0) {
         setStatus(
           rawResults.length === 0
             ? `Nenhuma empresa encontrada para "${query.trim()}".`
-            : `Nenhum resultado novo para "${query.trim()}" — os ${rawResults.length} encontrados já foram trazidos antes. Refine o termo (ex.: um bairro ou cidade específica) para achar novas empresas.`
+            : `Nenhum resultado novo para "${query.trim()}".${detail} Refine o termo (ex.: um bairro ou cidade específica) para achar novas empresas.`
         );
+      } else if (novos.length < desired) {
+        setStatus(`Concluído: só ${novos.length} resultado(s) novo(s) de ${desired} pedidos${via}.${detail}`);
       } else {
-        setStatus(`Concluído: ${novos.length} resultado(s) novo(s)${via}.`);
+        setStatus(`Concluído: ${novos.length} resultado(s) novo(s)${via}.${detail}`);
       }
     } catch {
-      // fallback: se o dedupe falhar, mostra os resultados como vieram
-      setResults(rawResults);
-      setStatus(`Concluído: ${rawResults.length} empresa(s)${via}.`);
+      // Sem a verificação não dá para garantir que são inéditos: não mostra nada para evitar reenvio.
+      setResults([]);
+      setError('Não foi possível verificar duplicados (contatos, WhatsApp e buscas anteriores). Rode a busca novamente.');
     }
   };
 
@@ -170,10 +185,8 @@ const Scraping = () => {
     setLoading(true);
     setResults([]);
 
-    // Busca um lote maior que o desejado para ter margem de paginação entre
-    // buscas repetidas (o scraper limita a 30 resultados).
-    const desired = Number(limit) || 10;
-    const poolLimit = Math.min(30, desired + 10);
+    // Como o filtro descarta o que já temos, busca sempre o máximo do scraper (30) para sobrar resultados novos.
+    const poolLimit = 30;
 
     try {
       const started = await api.post<StartResponse>('/scraping/maps/start', {
