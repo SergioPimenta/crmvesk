@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import ChatStageSelect from './ChatStageSelect';
 import { initials, type WaConversation } from './types';
 
 type Props = {
@@ -60,6 +61,7 @@ const ChatHeader = ({
       </div>
     </div>
     <div className="wa-chat-head-actions">
+      {active.contatoId ? <ChatStageSelect contactId={String(active.contatoId)} /> : null}
       <button type="button" className="crm-btn-secondary" onClick={onSchedule}>
         <i className="ti ti-calendar-plus" aria-hidden="true" />
         Agendar

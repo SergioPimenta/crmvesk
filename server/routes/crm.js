@@ -445,6 +445,58 @@ router.post('/contacts', async (req, res) => {
   });
 });
 
+// Negócio do contato + etapas do funil dele: alimenta o seletor de status no cabeçalho da conversa do WhatsApp.
+async function getContactDealStages(req, contactId) {
+  const [dealRows] = await pool.query(
+    `SELECT id, pipeline_id AS pipelineId, stage_key AS stageKey, titulo
+     FROM deals WHERE user_id = ? AND contact_id = ?${ownSql(req)} ORDER BY id DESC LIMIT 1`,
+    [req.userId, contactId, ...ownParams(req)]
+  );
+  const deal = dealRows[0] ? normalizeRow(dealRows[0]) : null;
+  if (!deal) return null;
+  const [stageRows] = await pool.query(
+    'SELECT stage_key AS stageKey, titulo FROM pipeline_stages WHERE user_id = ? AND pipeline_id = ? ORDER BY pos ASC, id ASC',
+    [req.userId, deal.pipelineId]
+  );
+  return { dealId: deal.id, pipelineId: deal.pipelineId, stageKey: deal.stageKey, stages: normalizeRows(stageRows) };
+}
+
+router.get('/contacts/:id/stage', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  const data = await getContactDealStages(req, id);
+  if (!data) return res.status(404).json({ message: 'Este contato não tem negócio no funil' });
+  res.json(data);
+});
+
+// Muda a etapa do contato no funil: move o negócio (o card muda de coluna no kanban),
+// atualiza a etapa exibida no contato e tira a tag "Novo".
+router.put('/contacts/:id/stage', async (req, res) => {
+  const id = Number(req.params.id);
+  const { stageKey } = req.body ?? {};
+  if (!Number.isFinite(id)) return res.status(400).json({ message: 'ID inválido' });
+  if (!stageKey) return res.status(400).json({ message: 'Etapa é obrigatória' });
+
+  const data = await getContactDealStages(req, id);
+  if (!data) return res.status(404).json({ message: 'Este contato não tem negócio no funil' });
+  const stage = data.stages.find((s) => s.stageKey === stageKey);
+  if (!stage) return res.status(400).json({ message: 'Etapa inválida para o funil deste contato' });
+
+  if (data.stageKey !== stageKey) {
+    await pool.query('UPDATE deals SET stage_key = ?, updated_at = NOW() WHERE id = ? AND user_id = ?', [
+      stageKey,
+      data.dealId,
+      req.userId,
+    ]);
+  }
+  await pool.query(
+    `UPDATE contacts SET etapa = ?, precisa_followup = FALSE, updated_at = NOW()
+     WHERE id = ? AND user_id = ?${ownSql(req)}`,
+    [stage.titulo, id, req.userId, ...ownParams(req)]
+  );
+  res.json({ ...data, stageKey });
+});
+
 // Importação pela planilha padrão (o navegador lê o .xlsx e envia as linhas já como JSON).
 router.post('/contacts/import-sheet', async (req, res) => {
   const rows = req.body?.rows;
