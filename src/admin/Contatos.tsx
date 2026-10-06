@@ -14,7 +14,7 @@ import { useContactForm } from './contatos/useContactForm';
 import { useContactsPage } from './contatos/useContactsPage';
 import { useOwnerAssignment } from './contatos/useOwnerAssignment';
 
-const TABS: ContactTab[] = ['Todos', 'Contatados', 'Lead', 'Cliente', 'Prospect'];
+const TABS: ContactTab[] = ['Todos', 'Lead', 'Cliente', 'Prospect', 'Contatados'];
 const TAB_LABEL: Record<ContactTab, string> = {
   Todos: 'Todos',
   Contatados: 'Contatados',
