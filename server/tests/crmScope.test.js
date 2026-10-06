@@ -222,3 +222,13 @@ test('GET /contacts: pageSize é limitado a 200 e page mínimo é 1', async () =
   const list = findCall(/LIMIT \? OFFSET \?/);
   assert.deepEqual(list.params.slice(-2), [200, 0]);
 });
+
+test('GET /contacts?contatados=nao|sim: "Todos" exclui os contatados e "Contatados" lista só eles', async () => {
+  const pagedHandler = (sql) => (/COUNT\(\*\)/.test(sql) ? [{ total: 0 }] : []);
+  await request(ADMIN, 'GET', '/contacts?page=1&contatados=nao', null, pagedHandler);
+  assert.match(findCall(listSql('contacts')).sql, /NOT \(\s*EXISTS \(SELECT 1 FROM whatsapp_chats/);
+  await request(ADMIN, 'GET', '/contacts?page=1&contatados=sim', null, pagedHandler);
+  const sql = findCall(listSql('contacts')).sql;
+  assert.match(sql, /EXISTS \(SELECT 1 FROM whatsapp_chats/);
+  assert.doesNotMatch(sql, /NOT \(\s*EXISTS/);
+});

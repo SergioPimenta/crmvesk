@@ -38,7 +38,10 @@ export function useContactsPage({ query, tab, onlyUnowned, refreshKey }: Options
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (debouncedQuery) params.set('q', debouncedQuery);
-    if (tab !== 'Todos') params.set('tipo', tab);
+    // "Todos" não mostra quem já foi contatado: eles ficam na aba "Contatados".
+    if (tab === 'Todos') params.set('contatados', 'nao');
+    else if (tab === 'Contatados') params.set('contatados', 'sim');
+    else params.set('tipo', tab);
     if (onlyUnowned) params.set('unowned', '1');
     api
       .get<{ items: Contact[]; total: number; unownedTotal?: number }>(`/crm/contacts?${params.toString()}`)

@@ -2,7 +2,7 @@ import type { ContactStage, ContactType } from '../../contexts/CrmDataContext';
 
 export const PAGE_SIZE = 50;
 
-export type ContactTab = 'Todos' | ContactType;
+export type ContactTab = 'Todos' | 'Contatados' | ContactType;
 
 /** Estado do formulário de contato (usado pelos modais de criar e editar). */
 export type ContactFormState = {

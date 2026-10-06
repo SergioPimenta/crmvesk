@@ -14,7 +14,14 @@ import { useContactForm } from './contatos/useContactForm';
 import { useContactsPage } from './contatos/useContactsPage';
 import { useOwnerAssignment } from './contatos/useOwnerAssignment';
 
-const TABS: ContactTab[] = ['Todos', 'Lead', 'Cliente', 'Prospect'];
+const TABS: ContactTab[] = ['Todos', 'Contatados', 'Lead', 'Cliente', 'Prospect'];
+const TAB_LABEL: Record<ContactTab, string> = {
+  Todos: 'Todos',
+  Contatados: 'Contatados',
+  Lead: 'Leads',
+  Cliente: 'Clientes',
+  Prospect: 'Prospects',
+};
 
 const Contatos = () => {
   const {
@@ -190,7 +197,7 @@ const Contatos = () => {
               className={`crm-tab${activeTab === tab ? ' active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'Todos' ? 'Todos' : `${tab}s`}
+              {TAB_LABEL[tab]}
             </button>
           ))}
         </div>

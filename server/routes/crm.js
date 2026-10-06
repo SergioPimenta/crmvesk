@@ -307,6 +307,14 @@ router.put('/companies/:id', async (req, res) => {
 
 // Contacts
 const CONTACT_TYPES = new Set(['Lead', 'Cliente', 'Prospect']);
+// "Contatado": já recebeu mensagem nossa pelo WhatsApp (não falhada) ou já saiu da primeira etapa do funil.
+const CONTACTED_SQL = `(
+  EXISTS (SELECT 1 FROM whatsapp_chats ch JOIN whatsapp_messages m ON m.chat_id = ch.id
+          WHERE ch.contact_id = c.id AND m.from_me = TRUE AND COALESCE(m.status, '') <> 'failed')
+  OR EXISTS (SELECT 1 FROM deals d JOIN pipeline_stages ps ON ps.pipeline_id = d.pipeline_id AND ps.stage_key = d.stage_key
+             WHERE d.contact_id = c.id
+               AND ps.id <> (SELECT f.id FROM pipeline_stages f WHERE f.pipeline_id = d.pipeline_id ORDER BY f.pos ASC, f.id ASC LIMIT 1))
+)`;
 const likeEscape = (v) => String(v).replace(/[\\%_]/g, (m) => `\\${m}`);
 
 // Listagem paginada com busca no servidor (?page=1&pageSize=50&q=texto&tipo=Lead&unowned=1).
@@ -327,6 +335,10 @@ async function listContactsPage(req, res) {
     where.push('c.tipo = ?');
     params.push(req.query.tipo);
   }
+
+  // ?contatados=sim lista só os já contatados; ?contatados=nao os exclui (aba "Todos").
+  if (req.query.contatados === 'sim') where.push(CONTACTED_SQL);
+  else if (req.query.contatados === 'nao') where.push(`NOT ${CONTACTED_SQL}`);
 
   const q = String(req.query.q ?? '').trim().slice(0, 100);
   if (q) {
