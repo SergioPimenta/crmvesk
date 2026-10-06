@@ -51,7 +51,7 @@ import { updateMessageStatus } from '../services/whatsappService.js';
 
 function installStatusDb(currentStatus) {
   installDb((sql) => {
-    if (/FROM whatsapp_messages WHERE user_id/.test(sql)) return [{ id: 1, status: currentStatus, chatId: 10, fromMe: true }];
+    if (/FROM whatsapp_messages WHERE user_id/.test(sql)) return [{ id: 1, status: currentStatus, chat_id: 10, fromme: true }];
     if (/FROM whatsapp_chats/.test(sql)) return [{ contactId: 7, remoteJid: '5541999991111@s.whatsapp.net' }];
     if (/FROM contacts/.test(sql)) return [{ id: 7 }];
     if (/FROM deals/.test(sql)) return [{ id: 3, pipelineId: 1, stageKey: 'prospeccao' }];

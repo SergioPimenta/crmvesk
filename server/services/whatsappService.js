@@ -579,7 +579,7 @@ export async function updateMessageStatus(userId, waMessageId, status, errorMess
   if (!['sent', 'delivered', 'read', 'failed'].includes(next)) return;
 
   const [rows] = await pool.query(
-    'SELECT id, status, chat_id AS chatId, from_me AS fromMe FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
+    'SELECT id, status, chat_id, from_me AS fromMe FROM whatsapp_messages WHERE user_id = ? AND wa_message_id = ? LIMIT 1',
     [userId, waMessageId]
   );
   if (!rows.length) return;
@@ -599,7 +599,7 @@ export async function updateMessageStatus(userId, waMessageId, status, errorMess
   // Só uma entrega confirmada tira o contato de "Novo": mensagem recusada pela Meta não conta como contato feito.
   const msg = normalizeRow(rows[0]);
   if ((next === 'delivered' || next === 'read') && msg.fromMe) {
-    await advanceContactOnFirstMessage(userId, msg.chatId);
+    await advanceContactOnFirstMessage(userId, msg.chat_id);
   }
 }
 
