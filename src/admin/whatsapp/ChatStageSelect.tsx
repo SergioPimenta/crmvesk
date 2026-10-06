@@ -15,8 +15,8 @@ type Props = {
 
 /**
  * Seletor de status do contato na conversa: escolher a etapa move o negócio no funil
- * (Em contato, Negociação, Proposta…). A primeira etapa (entrada) e a última (fechado)
- * não são oferecidas; se o negócio estiver em uma delas, ela aparece só como etapa atual.
+ * (Em contato, Negociação, Proposta, Fechado…). A primeira etapa (entrada) não é oferecida; se o negócio
+ * estiver nela, ela aparece só como etapa atual.
  */
 const ChatStageSelect = ({ contactId }: Props) => {
   const { refreshCrmData } = useCrmData();
@@ -43,9 +43,8 @@ const ChatStageSelect = ({ contactId }: Props) => {
 
   if (!info || info.stages.length === 0) return null;
 
-  const last = info.stages.length - 1;
   const current = info.stages.find((s) => s.stageKey === info.stageKey);
-  const options = info.stages.filter((_, i) => i > 0 && i < last);
+  const options = info.stages.filter((_, i) => i > 0);
 
   const change = async (stageKey: string) => {
     if (!stageKey || stageKey === info.stageKey || saving) return;
