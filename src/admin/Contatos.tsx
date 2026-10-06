@@ -7,6 +7,7 @@ import ActivityModal, { type ActivityDefaults } from './agenda/ActivityModal';
 import { useTeamMembers } from './agenda/useTeamMembers';
 import { CreateContactModal, EditContactModal } from './contatos/ContactModals';
 import ContactsTable from './contatos/ContactsTable';
+import ImportContactsModal from './contatos/ImportContactsModal';
 import OwnerAssignBar from './contatos/OwnerAssignBar';
 import type { ContactTab } from './contatos/types';
 import { useContactForm } from './contatos/useContactForm';
@@ -35,6 +36,7 @@ const Contatos = () => {
   const [onlyUnowned, setOnlyUnowned] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ActivityDefaults | null>(null);
   const members = useTeamMembers();
@@ -168,6 +170,10 @@ const Contatos = () => {
               aria-label="Buscar contatos"
             />
           </div>
+          <button type="button" className="crm-btn-secondary" onClick={() => setIsImportOpen(true)}>
+            <i className="ti ti-file-spreadsheet" style={{ fontSize: 13 }} aria-hidden="true" />
+            Importar planilha
+          </button>
           <button type="button" className="crm-btn-primary" onClick={openCreate}>
             <i className="ti ti-user-plus" style={{ fontSize: 13 }} aria-hidden="true" />
             Novo contato
@@ -222,6 +228,12 @@ const Contatos = () => {
           onPageChange={list.setPage}
         />
       </div>
+
+      <ImportContactsModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={refreshCrmData}
+      />
 
       <CreateContactModal
         open={isCreateOpen}

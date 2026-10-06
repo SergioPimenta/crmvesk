@@ -4,6 +4,7 @@ import pool from '../db.js';
 import { verifyToken } from '../middleware/auth.js';
 import { archiveRows } from '../utils/archive.js';
 import { canonicalWhatsAppPhone } from '../utils/whatsappPhone.js';
+import { importContactsFromRows, MAX_IMPORT_ROWS } from '../services/contactImportService.js';
 import { isWorkspaceMember } from '../services/leadOwnerService.js';
 import activitiesRouter from './activities.js';
 import { normalizeRow, normalizeRows } from '../utils/rows.js';
@@ -442,6 +443,24 @@ router.post('/contacts', async (req, res) => {
     pipelineId: resolvedPipelineId,
     stageKey: dealId ? stageKey : null,
   });
+});
+
+// Importação pela planilha padrão (o navegador lê o .xlsx e envia as linhas já como JSON).
+router.post('/contacts/import-sheet', async (req, res) => {
+  const rows = req.body?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ message: 'A planilha não tem contatos para importar' });
+  }
+  if (rows.length > MAX_IMPORT_ROWS) {
+    return res.status(400).json({ message: `Máximo de ${MAX_IMPORT_ROWS} contatos por planilha (a sua tem ${rows.length}).` });
+  }
+  const data = await importContactsFromRows({
+    userId: req.userId,
+    authUserId: req.authUserId,
+    rows,
+    ensureDefaultPipeline,
+  });
+  res.status(201).json(data);
 });
 
 router.post('/contacts/bulk-import', async (req, res) => {
