@@ -73,6 +73,11 @@ const MessageList = ({ containerRef, endRef, timeline, authUserName, contactName
                 {message.errorMessage?.trim() || 'A Meta não informou o motivo da falha.'}
               </div>
             ) : null}
+            {message.reaction ? (
+              <span className="wa-reaction" title="Reação do contato" aria-label={`Reação: ${message.reaction}`}>
+                {message.reaction}
+              </span>
+            ) : null}
           </div>
         </div>
       );

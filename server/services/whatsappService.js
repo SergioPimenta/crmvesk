@@ -699,6 +699,17 @@ export async function processWebhook(userId, webhookSecret, payload, { rawBody, 
     }
 
     for (const item of items) {
+      if (item.reaction) {
+        try {
+          await pool.query(
+            'UPDATE whatsapp_messages SET reaction = ? WHERE user_id = ? AND wa_message_id = ?',
+            [item.reaction.emoji, userId, item.reaction.targetWaMessageId]
+          );
+        } catch (reactionErr) {
+          console.error('WhatsApp webhook reaction:', reactionErr.message);
+        }
+        continue;
+      }
       if (!item.text && !item.media) continue;
       try {
         let body = item.text;
@@ -1215,7 +1226,7 @@ export async function listChats(userId, viewer = {}) {
 export async function listMessages(userId, chatId) {
   const [rows] = await pool.query(
     `SELECT m.id, m.body AS text, m.from_me AS fromMe, m.message_at AS messageAt, m.status,
-            m.error_message AS errorMessage, COALESCE(m.kind, 'message') AS kind, u.name AS authorName
+            m.error_message AS errorMessage, COALESCE(m.reaction, '') AS reaction, COALESCE(m.kind, 'message') AS kind, u.name AS authorName
      FROM whatsapp_messages m LEFT JOIN users u ON u.id = m.author_id
      WHERE m.user_id = ? AND m.chat_id = ? ORDER BY m.message_at ASC, m.id ASC`,
     [userId, chatId]
@@ -1247,6 +1258,7 @@ export async function listMessages(userId, chatId) {
       fromMe,
       messageAt: toIso(row.messageAt),
       kind: 'message',
+      reaction: row.reaction || undefined,
       status: fromMe ? status : undefined,
       errorMessage: fromMe && status === 'failed' ? row.errorMessage || '' : undefined,
     };

@@ -153,6 +153,7 @@ async function runAllMigrations() {
   await migrateProposalEmailTracking();
   await migrateWhatsappChatUi();
   await migrateWhatsappMessageError();
+  await migrateWhatsappMessageReaction();
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
@@ -478,6 +479,11 @@ async function migrateWhatsappMessageError() {
   await pool.query(
     `ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS error_message VARCHAR(500) DEFAULT ''`
   );
+}
+
+async function migrateWhatsappMessageReaction() {
+  if (!(await tableExists('whatsapp_messages'))) return;
+  await pool.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS reaction VARCHAR(32) DEFAULT ''`);
 }
 
 async function migrateWhatsappWebhookLogs() {

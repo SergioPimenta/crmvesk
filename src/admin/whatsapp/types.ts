@@ -40,6 +40,8 @@ export type WaMessage = {
   fromMe: boolean;
   status?: WaMsgStatus;
   errorMessage?: string;
+  /** Emoji com que o contato reagiu a esta mensagem. */
+  reaction?: string;
   media?: WaMediaPayload | null;
   /** 'message' (padrão), 'note' (nota interna) ou 'event' (assumida, transferida, finalizada...). */
   kind?: 'message' | 'note' | 'event';

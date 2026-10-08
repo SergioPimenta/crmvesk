@@ -36,6 +36,8 @@ type WaTimelineMessage = {
   messageAt: string;
   status?: WaMsgStatus;
   errorMessage?: string;
+  /** Emoji com que o contato reagiu a esta mensagem. */
+  reaction?: string;
   /** 'message' (padrão), 'note' (nota interna) ou 'event' (assumida, transferida, finalizada...). */
   kind?: 'message' | 'note' | 'event';
   authorName?: string;

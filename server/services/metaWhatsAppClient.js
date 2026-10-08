@@ -283,10 +283,15 @@ export function parseWebhookMessages(payload) {
       for (const message of value.messages || []) {
         if (!message.from) continue;
         const from = digitsOnly(message.from);
+        const isReaction = message.type === 'reaction' && message.reaction;
         items.push({
           from,
           waMessageId: message.id,
-          text: extractMessageText(message),
+          text: isReaction ? '' : extractMessageText(message),
+          // Reação a uma mensagem existente (emoji vazio = reação removida); não vira mensagem nova.
+          reaction: isReaction
+            ? { targetWaMessageId: message.reaction.message_id, emoji: message.reaction.emoji || '' }
+            : null,
           media: extractMediaRef(message),
           contactName: contactsByWaId[from] || '',
           messageAt: message.timestamp

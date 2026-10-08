@@ -2801,6 +2801,22 @@ body.vesk-app {
   position: relative;
 }
 
+.wa-bubble:has(.wa-reaction) {
+  margin-bottom: 12px;
+}
+
+.wa-reaction {
+  position: absolute;
+  bottom: -12px;
+  right: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1.3;
+  background: var(--vesk-surface, #1c1c1e);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .wa-bubble p {
   margin: 0;
   white-space: pre-wrap;
