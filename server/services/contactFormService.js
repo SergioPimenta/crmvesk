@@ -321,26 +321,39 @@ export async function recordFormPing(monitorCode, event = 'view') {
   return true;
 }
 
-function pickField(body, key) {
-  return String(body?.[key] || '').trim();
+function pickField(body, key, max = 0) {
+  const value = String(body?.[key] || '').trim();
+  return max ? value.slice(0, max) : value;
+}
+
+// Remove query/hash (utm, fbclid, igshid do Instagram) para a URL caber nas colunas VARCHAR
+function cleanPageUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    return (u.origin + u.pathname).slice(0, 200);
+  } catch {
+    return raw.split(/[?#]/)[0].slice(0, 200);
+  }
 }
 
 export async function submitFormLead(monitorCode, body = {}) {
   const widget = await getFormWidgetByMonitorCode(monitorCode);
   if (!widget) throw new Error('Rastreador não encontrado ou inativo');
 
-  const nome = pickField(body, 'nome');
-  const email = pickField(body, 'email');
-  const telefone = digitsOnly(pickField(body, 'telefone'));
-  const mensagem = pickField(body, 'mensagem');
-  const empresa = pickField(body, 'empresa');
-  const pageUrl = pickField(body, 'pageUrl');
+  const nome = pickField(body, 'nome', 160);
+  const email = pickField(body, 'email', 160);
+  const telefone = digitsOnly(pickField(body, 'telefone')).slice(0, 80);
+  const mensagem = pickField(body, 'mensagem', 2000);
+  const empresa = pickField(body, 'empresa', 120);
+  const pageUrl = cleanPageUrl(body?.pageUrl);
 
   if (!nome && !email && telefone.length < 10) {
     throw new Error('Informe ao menos nome, e-mail ou telefone');
   }
 
-  const contactName = nome || email.split('@')[0] || `Lead ${telefone.slice(-4)}`;
+  const contactName = (nome || email.split('@')[0] || `Lead ${telefone.slice(-4)}`).slice(0, 160);
   const userId = Number(widget.userId);
   if (!Number.isFinite(userId)) throw new Error('Rastreador sem proprietário válido');
 
@@ -358,7 +371,7 @@ export async function submitFormLead(monitorCode, body = {}) {
   const [contactIns] = await pool.query(
     `INSERT INTO contacts (user_id, created_by, nome, email, telefone, tipo, etapa, ultima_interacao, precisa_followup)
      VALUES (?, ?, ?, ?, ?, 'Lead', ?, ?, TRUE)`,
-    [userId, ownerId, contactName, email, telefone, pipeline.stageTitle || 'Prospecção', ultimaInteracao]
+    [userId, ownerId, contactName, email, telefone, pipeline.stageTitle || 'Prospecção', ultimaInteracao.slice(0, 255)]
   );
   const contactId = contactIns.insertId;
 
@@ -369,8 +382,8 @@ export async function submitFormLead(monitorCode, body = {}) {
   );
 
   const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  const assunto = `Formulário de contato · ${siteLabel}`;
-  const fromLabel = email ? `${contactName} <${email}>` : contactName;
+  const assunto = `Formulário de contato · ${siteLabel}`.slice(0, 200);
+  const fromLabel = (email ? `${contactName} <${email}>` : contactName).slice(0, 160);
   const previewParts = [];
   if (mensagem) previewParts.push(mensagem);
   if (telefone) previewParts.push(`Telefone: ${telefone}`);

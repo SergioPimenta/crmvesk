@@ -77,7 +77,16 @@ router.post('/:code/submit', submitLimit, async (req, res) => {
   }
 
   try {
-    const result = await submitFormLead(code, req.body ?? {});
+    let body = req.body ?? {};
+    if (Buffer.isBuffer(body)) body = body.toString('utf8');
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = {};
+      }
+    }
+    const result = await submitFormLead(code, body);
     res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message || 'Erro ao registrar envio' });
