@@ -75,6 +75,9 @@ export async function createApp() {
     return target.includes('/whatsapp/webhook/');
   };
 
+  // Formulário do site envia JSON como text/plain (sem preflight CORS, compatível com WebView do Instagram)
+  app.use('/api/form', express.json({ type: ['application/json', 'text/plain'], limit: '100kb' }));
+
   app.use(express.json({
     limit: '12mb',
     verify: (req, _res, buf) => {

@@ -450,15 +450,38 @@ export function buildFormTrackingScript(widget) {
     return payload;
   }
 
+  // text/plain evita preflight CORS (WebViews como a do Instagram falham com keepalive + preflight).
   function sendLead() {
+    var url = API + '/api/form/' + CODE + '/submit';
+    var body = JSON.stringify(collectPayload());
+    var sent = false;
+
     try {
-      fetch(API + '/api/form/' + CODE + '/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(collectPayload()),
-        keepalive: true
-      }).catch(function(){});
+      if (navigator.sendBeacon) {
+        sent = navigator.sendBeacon(url, new Blob([body], { type: 'text/plain;charset=UTF-8' }));
+      }
     } catch (e) {}
+    if (sent) return;
+
+    try {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: body,
+        keepalive: true
+      }).catch(xhrFallback);
+    } catch (e) {
+      xhrFallback();
+    }
+
+    function xhrFallback() {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+        xhr.send(body);
+      } catch (e) {}
+    }
   }
 
   function attachForm(form) {
