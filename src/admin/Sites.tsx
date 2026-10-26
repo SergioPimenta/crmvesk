@@ -347,6 +347,7 @@ const Sites = () => {
                   <div className="crm-card-header">
                     <i className="ti ti-map-pin sa-card-icon" aria-hidden="true" />
                     <div className="crm-card-title">Estados</div>
+                    <span className="pipeline-badge">aproximado</span>
                   </div>
                   {brRegions.length ? <BrazilTileMap regions={data.regions} /> : <div className="sa-empty">Sem localização no período.</div>}
                   {foreign || unknownGeo ? (
@@ -355,6 +356,14 @@ const Sites = () => {
                       {unknownGeo ? `${fmtNum(unknownGeo)} sem localização.` : ''}
                     </div>
                   ) : null}
+                  <div className="sa-geo-note">
+                    <i className="ti ti-info-circle" aria-hidden="true" />
+                    <span>
+                      Localização aproximada pela conexão de internet do visitante. Muitos provedores registram seus IPs
+                      em São Paulo, então SP tende a aparecer acima do real e outros estados abaixo — use o mapa como
+                      tendência, não como número exato.
+                    </span>
+                  </div>
                 </div>
                 <div className="crm-card">
                   <div className="crm-card-header">
@@ -378,6 +387,7 @@ const Sites = () => {
                   <div className="crm-card-header">
                     <i className="ti ti-building-community sa-card-icon" aria-hidden="true" />
                     <div className="crm-card-title">Cidades</div>
+                    <span className="pipeline-badge">aproximado</span>
                   </div>
                   <BarList
                     valueHeader="Visitas"
