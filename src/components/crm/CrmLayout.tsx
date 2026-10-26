@@ -140,6 +140,10 @@ const CrmLayout = ({ children }: CrmLayoutProps) => {
                   <i className="ti ti-plug-connected" aria-hidden="true" />
                   <span className="crm-nav-text">Integrações</span>
                 </NavLink>
+                <NavLink to="/admin/sites" className={({ isActive }) => `crm-nav-item${isActive ? ' active' : ''}`} title="Sites">
+                  <i className="ti ti-world" aria-hidden="true" />
+                  <span className="crm-nav-text">Sites</span>
+                </NavLink>
               </div>
               <div className="crm-nav-section">
                 <div className="crm-nav-label">Administração</div>

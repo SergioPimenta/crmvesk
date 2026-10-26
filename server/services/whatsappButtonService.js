@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
 import { normalizeOwnerSetting, resolveLeadOwner } from './leadOwnerService.js';
+import { buildAnalyticsLoader } from './siteTrackerScript.js';
 
 const publicBase = () =>
   process.env.WHATSAPP_WEBHOOK_PUBLIC_URL ||
@@ -364,12 +365,22 @@ export function buildWidgetScript(widget) {
   var WA_URL = '${escapeJsString(waDirect)}';
   var PFX = 'vesk-wa-' + CODE;
 
+  // vesk_preview=1: página aberta no mapa de calor do CRM — não conta visualização.
+  var PREVIEW = /[?&]vesk_preview=1/.test(location.search);
+
   function ping(event) {
+    if (PREVIEW) return;
     try {
       var img = new Image();
       img.src = API + '/api/widget/' + CODE + '/ping?event=' + event + '&t=' + Date.now();
     } catch (e) {}
   }
+
+  // Monitoramento do site (Sites no CRM): eventos entram na fila até o script carregar.
+  function track(type) {
+    try { (window.__veskAQ = window.__veskAQ || []).push([type]); } catch (e) {}
+  }
+  ${buildAnalyticsLoader(base, code)}
 
   function maskPhone(v) {
     var d = String(v || '').replace(/\\D/g, '').slice(0, 11);
@@ -462,9 +473,11 @@ export function buildWidgetScript(widget) {
   btn.addEventListener('click', function() {
     if (!USE_FORM) {
       ping('click');
+      track('whatsapp_click');
       window.open(WA_URL, '_blank', 'noopener,noreferrer');
       return;
     }
+    track('whatsapp_open');
     openPanel();
   });
 
@@ -495,6 +508,7 @@ export function buildWidgetScript(widget) {
       })
       .then(function(data) {
         closePanel();
+        track('whatsapp_lead');
         if (data.waUrl) window.open(data.waUrl, '_blank', 'noopener,noreferrer');
       })
       .catch(function(err) {

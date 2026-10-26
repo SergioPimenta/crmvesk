@@ -19,6 +19,8 @@ import automationRoutes from './routes/automation.js';
 import healthRoutes from './routes/health.js';
 import cronRoutes from './routes/cron.js';
 import googleRoutes from './routes/google.js';
+import siteAnalyticsRoutes from './routes/siteAnalytics.js';
+import siteAnalyticsPublicRoutes from './routes/siteAnalyticsPublic.js';
 import { logger, newRequestId } from './utils/logger.js';
 
 dotenv.config();
@@ -46,9 +48,11 @@ export async function createApp() {
     next();
   });
 
-  // Widget embed: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
+  // Widget embed e monitoramento de sites: sites externos precisam de CORS aberto (antes do cors restrito do CRM)
+  const isPublicEmbed = (req) =>
+    req.path.startsWith('/api/widget') || req.path.startsWith('/api/form') || req.path.startsWith('/api/t/');
   app.use((req, res, next) => {
-    if (!req.path.startsWith('/api/widget') && !req.path.startsWith('/api/form')) return next();
+    if (!isPublicEmbed(req)) return next();
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -62,7 +66,7 @@ export async function createApp() {
 
   const corsOrigin = process.env.FRONTEND_URL;
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/widget') || req.path.startsWith('/api/form')) return next();
+    if (isPublicEmbed(req)) return next();
     if (!corsOrigin) return next();
     return cors({
       origin: corsOrigin.split(',').map((o) => o.trim()),
@@ -77,6 +81,7 @@ export async function createApp() {
 
   // Formulário do site envia JSON como text/plain (sem preflight CORS, compatível com WebView do Instagram)
   app.use('/api/form', express.json({ type: ['application/json', 'text/plain'], limit: '100kb' }));
+  app.use('/api/t', express.json({ type: ['application/json', 'text/plain'], limit: '64kb' }));
 
   app.use(express.json({
     limit: '12mb',
@@ -98,6 +103,8 @@ export async function createApp() {
   app.use('/api/form', formPublicRoutes);
   app.use('/api/whatsapp-button', whatsappButtonRoutes);
   app.use('/api/contact-form', contactFormRoutes);
+  app.use('/api/t', siteAnalyticsPublicRoutes);
+  app.use('/api/site-analytics', siteAnalyticsRoutes);
   app.use('/api/scraping', scrapingRoutes);
   app.use('/api/users', usersRoutes);
   app.use('/api/invites', invitesRoutes);
