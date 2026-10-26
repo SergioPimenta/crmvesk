@@ -638,6 +638,26 @@
   gap: 2px;
 }
 
+.sa-geo-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--vesk-border);
+  border-radius: 8px;
+  background: var(--vesk-surface2);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--vesk-muted);
+}
+
+.sa-geo-note .ti {
+  font-size: 15px;
+  color: var(--sa-tip);
+  margin-top: 1px;
+}
+
 /* ---------- dia × hora */
 
 .sa-weekhour-grid {
