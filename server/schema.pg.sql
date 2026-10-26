@@ -277,3 +277,15 @@ CREATE TABLE IF NOT EXISTS contact_form_widgets (
 
 CREATE INDEX IF NOT EXISTS idx_contact_form_user ON contact_form_widgets(user_id);
 CREATE INDEX IF NOT EXISTS idx_contact_form_code ON contact_form_widgets(monitor_code);
+
+CREATE TABLE IF NOT EXISTS contact_form_failed_submissions (
+  id SERIAL PRIMARY KEY,
+  monitor_code VARCHAR(64) NOT NULL,
+  payload TEXT,
+  error_message TEXT,
+  user_agent VARCHAR(512) DEFAULT '',
+  referer VARCHAR(512) DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_form_failed_code ON contact_form_failed_submissions(monitor_code);

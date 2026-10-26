@@ -157,6 +157,7 @@ async function runAllMigrations() {
   await migrateWhatsappButtonWidgets();
   await migrateWhatsappWidgetPipeline();
   await migrateContactFormWidgets();
+  await migrateContactFormFailedSubmissions();
   await migrateDealsContactId();
   await migrateContactsSite();
   await migrateUsersActive();
@@ -660,6 +661,24 @@ async function migrateContactFormWidgets() {
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_user ON contact_form_widgets(user_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_contact_form_code ON contact_form_widgets(monitor_code)');
+}
+
+// Envios do formulário do site que falharam: guarda o corpo original para o lead não se perder.
+async function migrateContactFormFailedSubmissions() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_form_failed_submissions (
+      id SERIAL PRIMARY KEY,
+      monitor_code VARCHAR(64) NOT NULL,
+      payload TEXT,
+      error_message TEXT,
+      user_agent VARCHAR(512) DEFAULT '',
+      referer VARCHAR(512) DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_contact_form_failed_code ON contact_form_failed_submissions(monitor_code)'
+  );
 }
 
 async function migrateContactsSite() {
