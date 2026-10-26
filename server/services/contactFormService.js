@@ -3,6 +3,7 @@ import pool from '../db.js';
 import { normalizeRow } from '../utils/rows.js';
 import { normalizeOwnerSetting, resolveLeadOwner } from './leadOwnerService.js';
 import { getPublicApiBase } from './whatsappButtonService.js';
+import { buildAnalyticsLoader } from './siteTrackerScript.js';
 
 export const DEFAULT_FIELD_MAPPINGS = [
   { crmField: 'nome', selector: "input[name='nome'], input[name='name']", required: true, label: 'Nome' },
@@ -429,12 +430,19 @@ export function buildFormTrackingScript(widget) {
   var FORM_SEL = '${formSelector}';
   var FIELDS = ${fieldsJson};
 
+  // vesk_preview=1: página aberta no mapa de calor do CRM — não conta visualização.
+  var PREVIEW = /[?&]vesk_preview=1/.test(location.search);
+
   function ping(event) {
+    if (PREVIEW) return;
     try {
       var img = new Image();
       img.src = API + '/api/form/' + CODE + '/ping?event=' + event + '&t=' + Date.now();
     } catch (e) {}
   }
+
+  // Monitoramento do site (Sites no CRM); início e envio do formulário são detectados por ele.
+  ${buildAnalyticsLoader(base, code)}
 
   function extractValue(selector) {
     if (!selector) return '';
