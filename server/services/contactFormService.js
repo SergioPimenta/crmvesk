@@ -339,6 +339,25 @@ function cleanPageUrl(url) {
   }
 }
 
+// Guarda o envio que falhou (com o corpo original) para o lead não se perder.
+export async function recordFailedSubmission(monitorCode, body, err, req = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO contact_form_failed_submissions (monitor_code, payload, error_message, user_agent, referer)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        String(monitorCode || '').slice(0, 64),
+        JSON.stringify(body ?? {}).slice(0, 20000),
+        String(err?.message || err || '').slice(0, 2000),
+        String(req.headers?.['user-agent'] || '').slice(0, 512),
+        String(req.headers?.referer || '').slice(0, 512),
+      ]
+    );
+  } catch (logErr) {
+    console.error('[form] falha ao registrar envio com erro:', logErr?.message);
+  }
+}
+
 export async function submitFormLead(monitorCode, body = {}) {
   const widget = await getFormWidgetByMonitorCode(monitorCode);
   if (!widget) throw new Error('Rastreador não encontrado ou inativo');

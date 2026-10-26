@@ -148,6 +148,8 @@ caminhos até o contato (formulário, WhatsApp, telefone) e uma análise automá
 - Webhook da Meta exige assinatura `X-Hub-Signature-256` (veja `WHATSAPP_SIGNATURE_MODE` no `.env.example`).
 - Exclusões de contatos, negócios e e-mails ficam copiadas em `deleted_records` (180 dias) para recuperação manual.
 - Logs de webhook do WhatsApp são apagados após 30 dias.
+- Envios do formulário do site que falham ficam em `contact_form_failed_submissions` (com o corpo original, para
+  recuperar o lead) e são apagados após 90 dias.
 - `GET /api/health` verifica o servidor e o banco (use em monitoramento de disponibilidade).
 - Erros do navegador são enviados para `POST /api/client-errors` e aparecem nos logs do servidor.
 

@@ -2,6 +2,7 @@ import express from 'express';
 import {
   buildFormTrackingScript,
   getFormWidgetByMonitorCode,
+  recordFailedSubmission,
   recordFormPing,
   submitFormLead,
 } from '../services/contactFormService.js';
@@ -76,8 +77,8 @@ router.post('/:code/submit', submitLimit, async (req, res) => {
     return res.status(404).json({ message: 'Código inválido' });
   }
 
+  let body = req.body ?? {};
   try {
-    let body = req.body ?? {};
     if (Buffer.isBuffer(body)) body = body.toString('utf8');
     if (typeof body === 'string') {
       try {
@@ -89,6 +90,7 @@ router.post('/:code/submit', submitLimit, async (req, res) => {
     const result = await submitFormLead(code, body);
     res.json(result);
   } catch (err) {
+    await recordFailedSubmission(code, body, err, req);
     res.status(400).json({ message: err.message || 'Erro ao registrar envio' });
   }
 });

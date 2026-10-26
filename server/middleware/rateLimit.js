@@ -13,12 +13,15 @@ export function clientIp(req) {
 let lastCleanup = 0;
 
 // Retenção: contadores do limitador (1 dia), logs de webhook com conteúdo de mensagens (30 dias),
-// cópias de registros excluídos (180 dias) e dados do monitoramento de sites.
+// envios do formulário com falha (90 dias), cópias de registros excluídos (180 dias) e dados do monitoramento
+// de sites.
 async function housekeeping(nowSec) {
   const jobs = [
     pool.query('DELETE FROM rate_limits WHERE window_start < ?', [nowSec - 86400]),
     pool.query("DELETE FROM whatsapp_webhook_logs WHERE created_at < NOW() - INTERVAL '30 days'"),
     pool.query("DELETE FROM deleted_records WHERE deleted_at < NOW() - INTERVAL '180 days'"),
+    // Envios do formulário com falha contêm dados do lead (nome, telefone): ficam 90 dias.
+    pool.query("DELETE FROM contact_form_failed_submissions WHERE created_at < NOW() - INTERVAL '90 days'"),
     // Monitoramento de sites: eventos detalhados (cliques, rolagem) 180 dias; visitas 400 dias.
     pool.query("DELETE FROM site_events WHERE created_at < NOW() - INTERVAL '180 days'"),
     pool.query("DELETE FROM site_sessions WHERE started_at < NOW() - INTERVAL '400 days'"),
