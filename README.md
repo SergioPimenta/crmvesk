@@ -124,6 +124,21 @@ atividade com data e hora:
 
 Os tokens ficam criptografados (AES-256-GCM) e só o escopo de eventos do calendário é solicitado.
 
+## Monitoramento de sites
+
+Menu **Sites** (administradores): acessos por período (hoje, 7, 30 e 90 dias), origem (Instagram, Google, direto,
+UTMs), estados e cidades, dispositivos, páginas, links e botões clicados, mapa de calor de cliques e rolagem, funil e
+caminhos até o contato (formulário, WhatsApp, telefone) e uma análise automática do que melhorar.
+
+- **Instalação:** sites com o botão de WhatsApp ou o formulário do CRM já são monitorados (os scripts deles carregam
+  `/api/t/<código>.js`). Para outros sites, **Sites → Instalar** mostra o script.
+- **Coleta:** `POST /api/t/<código>/collect` (público, CORS aberto, limite por IP). Sem cookies; não guarda IP nem o
+  que o visitante digita. Estado e cidade vêm dos cabeçalhos de geolocalização da Vercel (`x-vercel-ip-*`) — fora da
+  Vercel ficam vazios.
+- **Mapa de calor:** a página é exibida dentro do CRM com `?vesk_preview=1` (não conta como visita). Sites que enviam
+  `X-Frame-Options`/`frame-ancestors` aparecem só com os pontos.
+- **Retenção:** eventos detalhados 180 dias, visitas 400 dias.
+
 ## Segurança e operação
 
 - Sessão JWT de 4 h, renovada automaticamente enquanto há uso; perfil e status do usuário são lidos do banco

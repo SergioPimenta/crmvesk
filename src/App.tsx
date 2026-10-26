@@ -8,6 +8,7 @@ import Pipeline from './admin/Pipeline';
 import Agenda from './admin/Agenda';
 import Emails from './admin/Emails';
 import Relatorios from './admin/Relatorios';
+import Sites from './admin/Sites';
 import Propostas from './admin/Propostas';
 import Integracoes from './admin/Integracoes';
 import WhatsApp from './admin/WhatsApp';
@@ -38,6 +39,7 @@ function App() {
         <Route path="whatsapp" element={<WhatsApp />} />
         <Route path="botao-whatsapp" element={<BotaoWhatsApp />} />
         <Route path="relatorios" element={<Relatorios />} />
+        <Route path="sites" element={<Sites />} />
         <Route path="propostas" element={<Propostas />} />
         <Route path="scraping" element={<Scraping />} />
         <Route path="integracoes" element={<Integracoes />} />

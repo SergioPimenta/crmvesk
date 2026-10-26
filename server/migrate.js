@@ -177,6 +177,7 @@ async function runAllMigrations() {
   await migrateInvites();
   await migrateWhatsappChatAssignee();
   await migrateAutomationSettings();
+  await migrateSiteAnalytics();
   await seedAdminIfNeeded();
   console.log('Migration concluída.');
 }
@@ -679,6 +680,81 @@ async function migrateContactFormFailedSubmissions() {
   await pool.query(
     'CREATE INDEX IF NOT EXISTS idx_contact_form_failed_code ON contact_form_failed_submissions(monitor_code)'
   );
+}
+
+// Monitoramento dos sites: um registro por site (host) da conta, uma linha por visita (sessão) e os eventos
+// de cada visita (páginas, cliques com posição para o mapa de calor, rolagem, formulários e contatos).
+async function migrateSiteAnalytics() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_analytics_sites (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      host VARCHAR(255) NOT NULL,
+      site_url VARCHAR(512) NOT NULL,
+      site_name VARCHAR(160) DEFAULT '',
+      monitor_code VARCHAR(64) UNIQUE NOT NULL,
+      active BOOLEAN DEFAULT TRUE,
+      last_seen_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, host)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_sessions (
+      id BIGSERIAL PRIMARY KEY,
+      site_id INT NOT NULL REFERENCES site_analytics_sites(id) ON DELETE CASCADE,
+      session_key VARCHAR(40) NOT NULL,
+      visitor_key VARCHAR(40) NOT NULL,
+      is_new_visitor BOOLEAN DEFAULT FALSE,
+      started_at TIMESTAMPTZ DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+      landing_path VARCHAR(300) DEFAULT '',
+      exit_path VARCHAR(300) DEFAULT '',
+      referrer_host VARCHAR(255) DEFAULT '',
+      source VARCHAR(80) DEFAULT '',
+      medium VARCHAR(24) DEFAULT '',
+      campaign VARCHAR(120) DEFAULT '',
+      device VARCHAR(12) DEFAULT '',
+      browser VARCHAR(40) DEFAULT '',
+      os VARCHAR(24) DEFAULT '',
+      country VARCHAR(2) DEFAULT '',
+      region VARCHAR(8) DEFAULT '',
+      city VARCHAR(80) DEFAULT '',
+      pageviews INT DEFAULT 0,
+      events INT DEFAULT 0,
+      duration_sec INT DEFAULT 0,
+      max_scroll INT DEFAULT 0,
+      form_started BOOLEAN DEFAULT FALSE,
+      whatsapp_opened BOOLEAN DEFAULT FALSE,
+      converted_form BOOLEAN DEFAULT FALSE,
+      converted_whatsapp BOOLEAN DEFAULT FALSE,
+      converted_phone BOOLEAN DEFAULT FALSE,
+      converted_at TIMESTAMPTZ,
+      UNIQUE (site_id, session_key)
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_site_sessions_site_start ON site_sessions(site_id, started_at)');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_events (
+      id BIGSERIAL PRIMARY KEY,
+      site_id INT NOT NULL REFERENCES site_analytics_sites(id) ON DELETE CASCADE,
+      session_id BIGINT NOT NULL REFERENCES site_sessions(id) ON DELETE CASCADE,
+      type VARCHAR(24) NOT NULL,
+      path VARCHAR(300) DEFAULT '',
+      label VARCHAR(160) DEFAULT '',
+      href VARCHAR(400) DEFAULT '',
+      kind VARCHAR(12) DEFAULT '',
+      x REAL,
+      y INT,
+      page_h INT,
+      vw INT,
+      scroll_pct INT,
+      time_ms INT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_site_events_site_type_time ON site_events(site_id, type, created_at)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_site_events_session ON site_events(session_id)');
 }
 
 async function migrateContactsSite() {
