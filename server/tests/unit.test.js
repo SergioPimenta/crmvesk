@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { passwordPolicyError, MIN_PASSWORD_LENGTH } from '../utils/passwordPolicy.js';
 import { normalizeRow } from '../utils/rows.js';
 import { canonicalWhatsAppPhone, phonesMatch, phoneToCanonicalJid } from '../utils/whatsappPhone.js';
-import { normalizeMetaMime, assertMetaMimeSupported, detectMediaKind } from '../utils/waMessageBody.js';
+import { normalizeMetaMime, assertMetaMimeSupported, detectMediaKind, safeMediaFilename } from '../utils/waMessageBody.js';
 import { verifySignature } from '../services/metaWhatsAppClient.js';
 
 test('senha curta ou vazia é recusada; o tamanho mínimo é aceito', () => {
@@ -42,6 +42,23 @@ test('normalizeMetaMime remove parâmetros de codec e usa a extensão quando o t
   assert.equal(normalizeMetaMime('a.mp3', 'audio/mpeg; codecs=x', Buffer.from('abcd')), 'audio/mpeg');
   assert.equal(normalizeMetaMime('voz.ogg', 'application/octet-stream', Buffer.from('abcd')), 'audio/ogg');
   assert.equal(normalizeMetaMime('f.jpg', 'image/jpg', Buffer.from('abcd')), 'image/jpeg');
+});
+
+test('HTML vai para a Meta como documento de texto e mantém o nome .html', () => {
+  const html = Buffer.from('<!doctype html><html><body>Proposta</body></html>');
+  for (const [name, type] of [
+    ['proposta.html', 'text/html'],
+    ['proposta.htm', 'text/html; charset=utf-8'],
+    ['proposta.html', 'application/octet-stream'],
+    ['proposta.html', ''],
+    ['proposta.xhtml', 'application/xhtml+xml'],
+  ]) {
+    const mime = normalizeMetaMime(name, type, html);
+    assert.equal(mime, 'text/plain', `${name} (${type || 'sem tipo'})`);
+    assert.doesNotThrow(() => assertMetaMimeSupported(mime));
+    assert.equal(detectMediaKind(mime), 'document');
+  }
+  assert.equal(safeMediaFilename('construtora-infinity-ecommerce.html', 'text/plain'), 'construtora-infinity-ecommerce.html');
 });
 
 test('WebM não é aceito pela Meta; MP3 e OGG são', () => {

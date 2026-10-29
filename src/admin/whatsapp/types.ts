@@ -26,6 +26,16 @@ export function mediaKindFromMime(mimeType: string): keyof typeof MEDIA_BYTES_LI
   return 'document';
 }
 
+// A Meta não aceita HTML como documento: o arquivo vai como texto (text/plain) e mantém o nome .html, então quem
+// recebe abre normalmente. Também evita guardar HTML executável no Blob público.
+export function whatsappUploadMime(file: File): string {
+  const mime = (file.type || 'application/octet-stream').split(';')[0].trim();
+  if (mime === 'text/html' || mime === 'application/xhtml+xml' || /\.x?html?$/i.test(file.name || '')) {
+    return 'text/plain';
+  }
+  return mime;
+}
+
 export const templateKey = (t: MetaApprovedTemplate) => `${t.id}-${t.language}`;
 
 export const templateOptionLabel = (t: MetaApprovedTemplate) => {

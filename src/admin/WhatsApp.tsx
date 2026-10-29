@@ -22,6 +22,7 @@ import TransferModal from './whatsapp/TransferModal';
 import {
   MEDIA_BYTES_LIMITS,
   mediaKindFromMime,
+  whatsappUploadMime,
   type ListTab,
   type QuickReply,
   type TeamMember,
@@ -249,8 +250,8 @@ const WhatsApp = () => {
   const sendMediaFile = async (file: File, opts?: { caption?: string }): Promise<boolean> => {
     if (!active || isClosed || sending) return false;
     setSendError('');
-    // O Blob e a API da Meta não aceitam parâmetros de codec (ex.: "audio/webm;codecs=opus").
-    const mimeType = (file.type || 'application/octet-stream').split(';')[0].trim();
+    // O Blob e a API da Meta não aceitam parâmetros de codec (ex.: "audio/webm;codecs=opus") nem HTML.
+    const mimeType = whatsappUploadMime(file);
     const limit = MEDIA_BYTES_LIMITS[mediaKindFromMime(mimeType)];
     if (file.size > limit) {
       setSendError(`Arquivo muito grande. O limite é ${Math.floor(limit / 1024 / 1024)} MB.`);
