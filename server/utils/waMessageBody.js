@@ -43,10 +43,13 @@ export function parseMessageBody(body) {
   return { text: body, media: null };
 }
 
+// HTML não é aceito pela Meta como documento: segue como texto e o nome do arquivo mantém a extensão .html.
 const MIME_ALIASES = {
   'image/jpg': 'image/jpeg',
   'image/pjpeg': 'image/jpeg',
   'image/x-png': 'image/png',
+  'text/html': 'text/plain',
+  'application/xhtml+xml': 'text/plain',
 };
 
 const EXT_TO_MIME = {
@@ -71,6 +74,8 @@ const EXT_TO_MIME = {
   ppt: 'application/vnd.ms-powerpoint',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   txt: 'text/plain',
+  html: 'text/plain',
+  htm: 'text/plain',
 };
 
 export const META_SUPPORTED_MIMES = new Set([

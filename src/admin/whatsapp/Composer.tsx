@@ -158,7 +158,7 @@ const Composer = ({
             <input
               ref={documentInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,application/*"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.html,.htm,.zip,.rar,application/*"
               multiple
               hidden
               onChange={onFileSelected}
